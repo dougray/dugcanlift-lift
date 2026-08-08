@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.DayTotals
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
+import com.dugcanlift.macrocalc.data.FoodSearchResult
 import com.dugcanlift.macrocalc.data.forDate
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
@@ -73,7 +74,8 @@ fun TodayScreen(
             .take(10)
     }
 
-    var showForm by remember { mutableStateOf(false) }
+    var panel by remember { mutableStateOf(Panel.NONE) }
+    var prefill by remember { mutableStateOf<FoodEntry?>(null) }
 
     Column(
         modifier = modifier
@@ -100,21 +102,45 @@ fun TodayScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        if (showForm) {
+        if (panel == Panel.FORM) {
             AddFoodForm(
                 onAdd = { entry ->
                     scope.launch { repo.add(entry) }
-                    showForm = false
+                    panel = Panel.NONE
+                    prefill = null
                 },
-                onCancel = { showForm = false },
-                date = selectedDate
+                onCancel = {
+                    panel = Panel.NONE
+                    prefill = null
+                },
+                date = selectedDate,
+                initial = prefill
+            )
+        } else if (panel == Panel.SEARCH) {
+            FoodSearchPanel(
+                onPick = { result ->
+                    prefill = result.toFoodEntry(selectedDate)
+                    panel = Panel.FORM
+                },
+                onCancel = { panel = Panel.NONE }
             )
         } else {
-            Button(
-                onClick = { showForm = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Add food")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = {
+                        prefill = null
+                        panel = Panel.FORM
+                    },
+                    modifier = Modifier.fillMaxWidth(0.5f)
+                ) {
+                    Text("Add food")
+                }
+                OutlinedButton(
+                    onClick = { panel = Panel.SEARCH },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Search")
+                }
             }
 
             if (recent.isNotEmpty()) {
@@ -290,15 +316,18 @@ private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
 private fun AddFoodForm(
     onAdd: (FoodEntry) -> Unit,
     onCancel: () -> Unit,
-    date: String
+    date: String,
+    initial: FoodEntry? = null
 ) {
-    var name by remember { mutableStateOf("") }
-    var servings by remember { mutableStateOf("1") }
-    var calories by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
-    var fiber by remember { mutableStateOf("") }
+    // Keyed on the prefill so picking a different search result refills the
+    // fields rather than keeping the previous one's numbers.
+    var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
+    var servings by remember(initial) { mutableStateOf("1") }
+    var calories by remember(initial) { mutableStateOf(initial?.calories?.toString() ?: "") }
+    var protein by remember(initial) { mutableStateOf(initial?.proteinG?.toString() ?: "") }
+    var fat by remember(initial) { mutableStateOf(initial?.fatG?.toString() ?: "") }
+    var carbs by remember(initial) { mutableStateOf(initial?.carbsG?.toString() ?: "") }
+    var fiber by remember(initial) { mutableStateOf(initial?.fiberG?.toString() ?: "") }
 
     val valid = name.isNotBlank() && calories.toIntOrNull() != null
 
@@ -361,6 +390,8 @@ private fun AddFoodForm(
         }
     }
 }
+
+private enum class Panel { NONE, FORM, SEARCH }
 
 /* ---------- date helpers ---------- */
 
