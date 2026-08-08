@@ -32,12 +32,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.dugcanlift.macrocalc.data.DayTotals
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.forDate
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -52,8 +57,9 @@ fun TodayScreen(
     LaunchedEffect(Unit) { repo.load() }
 
     val allEntries by repo.entries.collectAsState()
-    val today = remember { todayKey() }
-    val entries = allEntries.forDate(today)
+
+    var selectedDate by remember { mutableStateOf(todayKey()) }
+    val entries = allEntries.forDate(selectedDate)
     val eaten = entries.totals()
 
     var showForm by remember { mutableStateOf(false) }
@@ -64,7 +70,11 @@ fun TodayScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Text(text = "Today", style = MaterialTheme.typography.headlineMedium)
+        DateNavigator(
+            date = selectedDate,
+            onPrevious = { selectedDate = shiftDate(selectedDate, -1) },
+            onNext = { selectedDate = shiftDate(selectedDate, 1) }
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -85,7 +95,8 @@ fun TodayScreen(
                     scope.launch { repo.add(entry) }
                     showForm = false
                 },
-                onCancel = { showForm = false }
+                onCancel = { showForm = false },
+                date = selectedDate
             )
         } else {
             Button(
@@ -100,7 +111,7 @@ fun TodayScreen(
 
         if (entries.isEmpty()) {
             Text(
-                text = "Nothing logged yet today.",
+                text = "Nothing logged on this day.",
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {
@@ -117,7 +128,32 @@ fun TodayScreen(
 }
 
 @Composable
-private fun SummaryCard(goal: MacroResult, eaten: com.dugcanlift.macrocalc.data.DayTotals) {
+private fun DateNavigator(
+    date: String,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+    val isToday = date == todayKey()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        TextButton(onClick = onPrevious) { Text("Previous") }
+
+        Text(
+            text = dateLabel(date),
+            style = MaterialTheme.typography.headlineSmall
+        )
+
+        // No paging into the future — there's nothing logged there.
+        TextButton(onClick = onNext, enabled = !isToday) { Text("Next") }
+    }
+}
+
+@Composable
+private fun SummaryCard(goal: MacroResult, eaten: DayTotals) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             val remaining = goal.calories - eaten.calories
@@ -163,8 +199,6 @@ private fun MacroProgress(name: String, eaten: Int, goal: Int) {
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Hand-drawn bar rather than LinearProgressIndicator: its signature
-        // changed across Material3 versions and this can't drift.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -194,13 +228,13 @@ private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
         Column(modifier = Modifier.fillMaxWidth(0.75f)) {
             Text(
                 text = if (entry.servings == 1.0) entry.name
-                else "${entry.name} ×${formatServings(entry.servings)}",
+                else "${entry.name} x${formatServings(entry.servings)}",
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
-                text = "${entry.totalCalories} kcal · " +
-                    "P ${entry.totalProteinG} · F ${entry.totalFatG} · " +
-                    "C ${entry.totalCarbsG} · Fib ${entry.totalFiberG}",
+                text = "${entry.totalCalories} kcal - " +
+                    "P ${entry.totalProteinG} - F ${entry.totalFatG} - " +
+                    "C ${entry.totalCarbsG} - Fib ${entry.totalFiberG}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -213,7 +247,8 @@ private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
 @Composable
 private fun AddFoodForm(
     onAdd: (FoodEntry) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    date: String
 ) {
     var name by remember { mutableStateOf("") }
     var servings by remember { mutableStateOf("1") }
@@ -270,7 +305,8 @@ private fun AddFoodForm(
                                 proteinG = protein.toIntOrNull() ?: 0,
                                 fatG = fat.toIntOrNull() ?: 0,
                                 carbsG = carbs.toIntOrNull() ?: 0,
-                                fiberG = fiber.toIntOrNull() ?: 0
+                                fiberG = fiber.toIntOrNull() ?: 0,
+                                date = date
                             )
                         )
                     },
@@ -280,6 +316,36 @@ private fun AddFoodForm(
                 }
                 OutlinedButton(onClick = onCancel) { Text("Cancel") }
             }
+        }
+    }
+}
+
+/* ---------- date helpers ---------- */
+
+private fun formatter() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+private fun shiftDate(key: String, days: Int): String {
+    val fmt = formatter()
+    val calendar = Calendar.getInstance()
+    calendar.time = try {
+        fmt.parse(key) ?: Date()
+    } catch (e: Exception) {
+        Date()
+    }
+    calendar.add(Calendar.DAY_OF_YEAR, days)
+    return fmt.format(calendar.time)
+}
+
+private fun dateLabel(key: String): String {
+    val today = todayKey()
+    return when (key) {
+        today -> "Today"
+        shiftDate(today, -1) -> "Yesterday"
+        else -> try {
+            val parsed = formatter().parse(key)
+            if (parsed != null) SimpleDateFormat("EEE, MMM d", Locale.US).format(parsed) else key
+        } catch (e: Exception) {
+            key
         }
     }
 }
