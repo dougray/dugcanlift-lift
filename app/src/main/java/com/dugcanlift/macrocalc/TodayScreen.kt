@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +64,15 @@ fun TodayScreen(
     val entries = allEntries.forDate(selectedDate)
     val eaten = entries.totals()
 
+    // Most people eat the same handful of things. Anything logged before can be
+    // re-logged in one tap, which removes most of the manual entry pain.
+    val recent = remember(allEntries) {
+        allEntries
+            .sortedByDescending { it.loggedAt }
+            .distinctBy { it.name.trim().lowercase(Locale.US) }
+            .take(10)
+    }
+
     var showForm by remember { mutableStateOf(false) }
 
     Column(
@@ -105,6 +116,38 @@ fun TodayScreen(
             ) {
                 Text("Add food")
             }
+
+            if (recent.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(text = "Recent", style = MaterialTheme.typography.labelLarge)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    recent.forEach { item ->
+                        AssistChip(
+                            onClick = {
+                                scope.launch {
+                                    repo.add(
+                                        item.copy(
+                                            id = java.util.UUID.randomUUID().toString(),
+                                            date = selectedDate,
+                                            loggedAt = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+                            },
+                            label = { Text(item.name) }
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -147,7 +190,6 @@ private fun DateNavigator(
             style = MaterialTheme.typography.headlineSmall
         )
 
-        // No paging into the future — there's nothing logged there.
         TextButton(onClick = onNext, enabled = !isToday) { Text("Next") }
     }
 }
