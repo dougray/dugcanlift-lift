@@ -87,4 +87,17 @@ fun MacroRow(name: String, grams: Int) {
         Text(text = name, style = MaterialTheme.typography.bodyLarge)
         Text(text = "$grams g", style = MaterialTheme.typography.bodyLarge)
     }
+}@Composable
+fun NameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
 }

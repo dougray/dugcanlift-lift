@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,7 +23,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun MacroCalculatorScreen(modifier: Modifier = Modifier) {
+fun MacroCalculatorScreen(modifier: Modifier = Modifier, onSaveGoal: (MacroResult) -> Unit = {}) {
     var sex by remember { mutableStateOf(Sex.MALE) }
     var age by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
@@ -110,6 +111,8 @@ fun MacroCalculatorScreen(modifier: Modifier = Modifier) {
 
         if (result != null) {
             ResultCard(result)
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = { onSaveGoal(result) }, modifier = Modifier.fillMaxWidth()) { Text("Save as my goal") }
         } else {
             Text(
                 text = "Enter age, weight, and height to see your numbers.",
