@@ -93,7 +93,7 @@ fun TodayScreen(
 
         if (goal == null) {
             Text(
-                text = "Set a goal on the Calculator tab and it'll show up here.",
+                text = "Set a goal on the Calculate tab and it'll show up here.",
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {

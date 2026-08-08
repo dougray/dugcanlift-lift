@@ -30,20 +30,30 @@ object FoodSearch {
         data class Failure(val message: String) : Outcome()
     }
 
+    /**
+     * Full-text search via Search-a-licious.
+     *
+     * Open Food Facts' old /cgi/search.pl endpoint returns HTTP 503 and is
+     * deprecated; full-text search is not in their v2 API at all. This is the
+     * supported replacement.
+     *
+     * Note results here only carry per-100g figures — no serving sizes — so
+     * entries from search get labelled "per 100 g". Barcode lookups, which use
+     * a different endpoint, do return per-serving data.
+     */
     suspend fun searchByName(query: String): Outcome = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext Outcome.Success(emptyList())
         val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-        val url = "https://world.openfoodfacts.org/cgi/search.pl" +
-            "?search_terms=$encoded&search_simple=1&action=process&json=1" +
-            "&page_size=20&fields=$FIELDS"
+        val url = "https://search.openfoodfacts.org/search" +
+            "?q=$encoded&page_size=20&fields=$FIELDS"
 
         try {
             val body = fetch(url)
-            val products = JSONObject(body).optJSONArray("products")
+            val hits = JSONObject(body).optJSONArray("hits")
                 ?: return@withContext Outcome.Success(emptyList())
 
-            val results = (0 until products.length())
-                .mapNotNull { parseProduct(products.getJSONObject(it)) }
+            val results = (0 until hits.length())
+                .mapNotNull { parseProduct(hits.getJSONObject(it)) }
 
             Outcome.Success(results)
         } catch (e: Exception) {
@@ -104,11 +114,20 @@ object FoodSearch {
         return FoodSearchResult(
             code = product.optString("code", ""),
             name = name,
-            brand = product.optString("brands", "").trim(),
+            brand = readBrand(product),
             servingSize = product.optString("serving_size", "").trim(),
             per100g = per100g,
             perServing = perServing
         )
+    }
+
+    /** Search returns brands as an array; the barcode endpoint as a string. */
+    private fun readBrand(product: JSONObject): String {
+        product.optJSONArray("brands")?.let { array ->
+            if (array.length() == 0) return ""
+            return array.optString(0, "").trim()
+        }
+        return product.optString("brands", "").trim()
     }
 
     /**
@@ -137,7 +156,9 @@ object FoodSearch {
     private fun friendlyError(e: Exception): String = when (e) {
         is java.net.UnknownHostException -> "No internet connection."
         is java.net.SocketTimeoutException -> "Open Food Facts took too long to respond."
-        else -> "Couldn't reach Open Food Facts."
+        // Include the detail — a bare "couldn't reach" hides whether it's a
+        // server error, a bad response, or something else entirely.
+        else -> "Couldn't reach Open Food Facts (${e.message ?: e.javaClass.simpleName})."
     }
 }
 

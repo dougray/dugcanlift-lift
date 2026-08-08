@@ -49,7 +49,7 @@ private fun AppTabs(modifier: Modifier = Modifier) {
     var goal by remember { mutableStateOf(goalStore.get()) }
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val titles = listOf("Calculator", "Today")
+    val titles = listOf("Calculate", "Log")
 
     Column(modifier = modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedTab) {
