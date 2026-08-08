@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,7 +48,7 @@ private fun AppTabs(modifier: Modifier = Modifier) {
     // The goal lives here so saving it on the Calculator tab immediately
     // updates the Today tab, without either screen reaching into the other.
     var goal by remember { mutableStateOf(goalStore.get()) }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     val titles = listOf("Calculate", "Log")
 

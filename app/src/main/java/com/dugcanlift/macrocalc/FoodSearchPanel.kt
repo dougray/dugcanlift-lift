@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.FoodSearch
 import com.dugcanlift.macrocalc.data.FoodSearchResult
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 
 /**
@@ -43,23 +46,44 @@ fun FoodSearchPanel(
     var message by remember { mutableStateOf<String?>(null) }
     var hasSearched by remember { mutableStateOf(false) }
 
+    // Shared by both the text search and the barcode scanner.
+    fun consume(outcome: FoodSearch.Outcome, emptyMessage: String) {
+        when (outcome) {
+            is FoodSearch.Outcome.Success -> {
+                results = outcome.results
+                if (outcome.results.isEmpty()) message = emptyMessage
+            }
+            is FoodSearch.Outcome.Failure -> {
+                results = emptyList()
+                message = outcome.message
+            }
+        }
+        searching = false
+        hasSearched = true
+    }
+
+    // ZXing asks for the camera permission itself when the scanner opens, so
+    // there's no separate permission dance here.
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { scan ->
+        val code = scan.contents
+        if (code != null) {
+            searching = true
+            message = null
+            scope.launch {
+                consume(
+                    FoodSearch.lookupBarcode(code),
+                    "No product found for that barcode."
+                )
+            }
+        }
+    }
+
     fun runSearch() {
         if (query.isBlank() || searching) return
         searching = true
         message = null
         scope.launch {
-            when (val outcome = FoodSearch.searchByName(query)) {
-                is FoodSearch.Outcome.Success -> {
-                    results = outcome.results
-                    if (outcome.results.isEmpty()) message = "Nothing found for that."
-                }
-                is FoodSearch.Outcome.Failure -> {
-                    results = emptyList()
-                    message = outcome.message
-                }
-            }
-            searching = false
-            hasSearched = true
+            consume(FoodSearch.searchByName(query), "Nothing found for that.")
         }
     }
 
@@ -70,7 +94,7 @@ fun FoodSearchPanel(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Looks up Open Food Facts. Only your search term is sent.",
+                text = "Searches Open Food Facts. Only your search term or barcode is sent.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -88,6 +112,20 @@ fun FoodSearchPanel(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { runSearch() }, enabled = query.isNotBlank() && !searching) {
                     Text(if (searching) "Searching..." else "Search")
+                }
+                OutlinedButton(
+                    onClick = {
+                        scanLauncher.launch(
+                            ScanOptions()
+                                .setDesiredBarcodeFormats(ScanOptions.PRODUCT_CODE_TYPES)
+                                .setPrompt("Point the camera at a barcode")
+                                .setBeepEnabled(false)
+                                .setOrientationLocked(true)
+                        )
+                    },
+                    enabled = !searching
+                ) {
+                    Text("Scan")
                 }
                 OutlinedButton(onClick = onCancel) { Text("Cancel") }
             }

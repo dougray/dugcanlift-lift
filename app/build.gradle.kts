@@ -38,7 +38,7 @@ android {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
