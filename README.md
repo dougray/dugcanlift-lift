@@ -14,8 +14,14 @@ carbs fill the remainder, and fiber is calculated at 14 g per 1000 kcal.
 
 ## Privacy
 
-Everything is computed on your device. The app has no network permission,
-no analytics, no ads, and no accounts. Nothing you enter leaves your phone.
+Your goal, your food log, and everything you enter stay on your device.
+There are no accounts, no analytics, and no ads.
+
+The one exception is food search: when you look up a food, your search term
+is sent to [Open Food Facts](https://world.openfoodfacts.org), a free and
+open food database. Nothing you have logged is ever sent anywhere, and food
+search is entirely optional -- you can enter foods by hand and the app never
+touches the network.
 
 ## Building
 
