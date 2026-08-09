@@ -31,15 +31,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.LoggedExercise
+import com.dugcanlift.macrocalc.data.Routine
+import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.TrainingFocus
 import com.dugcanlift.macrocalc.data.WorkoutRepository
 import com.dugcanlift.macrocalc.data.WorkoutSession
 import com.dugcanlift.macrocalc.data.WorkoutSet
+import com.dugcanlift.macrocalc.data.byFolder
+import com.dugcanlift.macrocalc.data.knownEquipment
 import com.dugcanlift.macrocalc.data.knownExercises
 import com.dugcanlift.macrocalc.data.lastPerformed
 import com.dugcanlift.macrocalc.data.sessionsForDate
+import com.dugcanlift.macrocalc.data.toRoutine
+import com.dugcanlift.macrocalc.data.toSession
 import com.dugcanlift.macrocalc.data.todayKey
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -51,21 +58,26 @@ import kotlin.math.roundToInt
 @Composable
 fun WorkoutScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val repo = remember { WorkoutRepository.get(context) }
+    val workouts = remember { WorkoutRepository.get(context) }
+    val routineRepo = remember { RoutineRepository.get(context) }
     val settings = remember { SettingsStore.get(context) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { repo.load() }
+    LaunchedEffect(Unit) {
+        workouts.load()
+        routineRepo.load()
+    }
 
-    val sessions by repo.sessions.collectAsState()
+    val sessions by workouts.sessions.collectAsState()
+    val routines by routineRepo.routines.collectAsState()
+
     var selectedDate by remember { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
 
     val daysSessions = sessions.sessionsForDate(selectedDate)
     val known = remember(sessions) { sessions.knownExercises() }
-
-    fun persist(session: WorkoutSession) {
-        scope.launch { repo.save(session) }
+    val equipmentOptions = remember(sessions) {
+        (sessions.knownEquipment() + COMMON_EQUIPMENT).distinctBy { it.lowercase(Locale.US) }
     }
 
     Column(
@@ -86,9 +98,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.height(8.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
         ) {
             TrainingFocus.entries.forEach { option ->
                 FilterChip(
@@ -104,23 +114,53 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        if (routines.isNotEmpty()) {
+            Text(text = "Routines", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            routines.byFolder().forEach { (folder, list) ->
+                Text(
+                    text = "$folder (${list.size})",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                list.forEach { routine ->
+                    RoutineCard(
+                        routine = routine,
+                        onStart = {
+                            scope.launch { workouts.save(routine.toSession(selectedDate)) }
+                        },
+                        onDelete = { scope.launch { routineRepo.delete(routine.id) } }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
         daysSessions.forEach { session ->
             SessionCard(
                 session = session,
                 focus = focus,
                 known = known,
-                lastFor = { name -> sessions.lastPerformed(name) },
-                onChange = { persist(it) },
-                onDelete = { scope.launch { repo.delete(session.id) } }
+                equipmentOptions = equipmentOptions,
+                lastFor = { name, equipment -> sessions.lastPerformed(name, equipment) },
+                onChange = { scope.launch { workouts.save(it) } },
+                onDelete = { scope.launch { workouts.delete(session.id) } },
+                onSaveAsRoutine = { name, folder ->
+                    scope.launch { routineRepo.save(session.toRoutine(name, folder)) }
+                }
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
 
         Button(
-            onClick = { persist(WorkoutSession(date = selectedDate)) },
+            onClick = { scope.launch { workouts.save(WorkoutSession(date = selectedDate)) } },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (daysSessions.isEmpty()) "Start workout" else "Add another workout")
+            Text(if (daysSessions.isEmpty()) "Start empty workout" else "Add another workout")
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -128,16 +168,49 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun RoutineCard(
+    routine: Routine,
+    onStart: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
+            if (routine.preview.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = routine.preview,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onStart) { Text("Start routine") }
+                TextButton(onClick = onDelete) { Text("Delete") }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SessionCard(
     session: WorkoutSession,
     focus: TrainingFocus,
-    known: List<String>,
-    lastFor: (String) -> LoggedExercise?,
+    known: List<LoggedExercise>,
+    equipmentOptions: List<String>,
+    lastFor: (String, String) -> LoggedExercise?,
     onChange: (WorkoutSession) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onSaveAsRoutine: (String, String) -> Unit
 ) {
     var addingExercise by remember(session.id) { mutableStateOf(false) }
-    var newExerciseName by remember(session.id) { mutableStateOf("") }
+    var newName by remember(session.id) { mutableStateOf("") }
+    var newEquipment by remember(session.id) { mutableStateOf("") }
+
+    var savingRoutine by remember(session.id) { mutableStateOf(false) }
+    var routineName by remember(session.id) { mutableStateOf("") }
+    var routineFolder by remember(session.id) { mutableStateOf("") }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -163,7 +236,8 @@ private fun SessionCard(
                 ExerciseBlock(
                     exercise = exercise,
                     focus = focus,
-                    previous = lastFor(exercise.name).takeIf { it?.id != exercise.id },
+                    previous = lastFor(exercise.name, exercise.equipment)
+                        .takeIf { it?.id != exercise.id },
                     onChange = { updated ->
                         onChange(
                             session.copy(
@@ -185,26 +259,45 @@ private fun SessionCard(
             }
 
             if (addingExercise) {
-                NameField(
-                    value = newExerciseName,
-                    onValueChange = { newExerciseName = it },
-                    label = "Exercise"
-                )
+                NameField(value = newName, onValueChange = { newName = it }, label = "Exercise")
 
                 if (known.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                     ) {
-                        known.forEach { name ->
+                        known.forEach { item ->
                             AssistChip(
-                                onClick = { newExerciseName = name },
-                                label = { Text(name) }
+                                onClick = {
+                                    newName = item.name
+                                    newEquipment = item.equipment
+                                },
+                                label = { Text(item.displayName) }
                             )
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                NameField(
+                    value = newEquipment,
+                    onValueChange = { newEquipment = it },
+                    label = "Equipment (optional)"
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                ) {
+                    equipmentOptions.forEach { option ->
+                        AssistChip(
+                            onClick = { newEquipment = option },
+                            label = { Text(option) }
+                        )
                     }
                 }
 
@@ -215,31 +308,69 @@ private fun SessionCard(
                         onClick = {
                             onChange(
                                 session.copy(
-                                    exercises = session.exercises +
-                                        LoggedExercise(name = newExerciseName.trim())
+                                    exercises = session.exercises + LoggedExercise(
+                                        name = newName.trim(),
+                                        equipment = newEquipment.trim()
+                                    )
                                 )
                             )
-                            newExerciseName = ""
+                            newName = ""
+                            newEquipment = ""
                             addingExercise = false
                         },
-                        enabled = newExerciseName.isNotBlank()
+                        enabled = newName.isNotBlank()
                     ) {
                         Text("Add")
                     }
                     OutlinedButton(onClick = {
-                        newExerciseName = ""
+                        newName = ""
+                        newEquipment = ""
                         addingExercise = false
                     }) {
                         Text("Cancel")
                     }
                 }
+            } else if (savingRoutine) {
+                NameField(
+                    value = routineName,
+                    onValueChange = { routineName = it },
+                    label = "Routine name"
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                NameField(
+                    value = routineFolder,
+                    onValueChange = { routineFolder = it },
+                    label = "Folder (optional)"
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = {
+                            onSaveAsRoutine(routineName.trim(), routineFolder.trim())
+                            routineName = ""
+                            routineFolder = ""
+                            savingRoutine = false
+                        },
+                        enabled = routineName.isNotBlank() && session.exercises.isNotEmpty()
+                    ) {
+                        Text("Save routine")
+                    }
+                    OutlinedButton(onClick = { savingRoutine = false }) { Text("Cancel") }
+                }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { addingExercise = true }) {
-                        Text("Add exercise")
+                    OutlinedButton(onClick = { addingExercise = true }) { Text("Add exercise") }
+                    if (session.exercises.isNotEmpty()) {
+                        OutlinedButton(onClick = {
+                            routineName = session.name
+                            savingRoutine = true
+                        }) {
+                            Text("Save as routine")
+                        }
                     }
-                    TextButton(onClick = onDelete) { Text("Delete workout") }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                TextButton(onClick = onDelete) { Text("Delete workout") }
             }
         }
     }
@@ -261,12 +392,10 @@ private fun ExerciseBlock(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = exercise.name, style = MaterialTheme.typography.titleMedium)
+            Text(text = exercise.displayName, style = MaterialTheme.typography.titleMedium)
             TextButton(onClick = onRemove) { Text("Remove") }
         }
 
-        // Showing last time's numbers is the single most useful thing when
-        // you're standing at the rack deciding what to load.
         previous?.let { last ->
             if (last.sets.isNotEmpty()) {
                 Text(
@@ -281,9 +410,7 @@ private fun ExerciseBlock(
 
         exercise.sets.forEachIndexed { index, set ->
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -322,7 +449,6 @@ private fun SetForm(
     onAdd: (WorkoutSet) -> Unit,
     onCancel: () -> Unit
 ) {
-    // Prefilled from the previous set, since most sets repeat the one before.
     var weight by remember { mutableStateOf(previousSet?.weightLb?.trimZero() ?: "") }
     var reps by remember { mutableStateOf(previousSet?.reps?.toString() ?: "") }
     var rpe by remember { mutableStateOf("") }
@@ -389,7 +515,6 @@ private fun formatDuration(seconds: Int): String =
     if (seconds >= 60) "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
     else "${seconds}s"
 
-/** Accepts "12:30" or plain seconds, so both a sled push and a 5k feel natural. */
 private fun parseDuration(input: String): Int? {
     val text = input.trim()
     if (text.isEmpty()) return null
@@ -404,8 +529,6 @@ private fun parseDuration(input: String): Int? {
 
 private fun Double.trimZero(): String =
     if (this == this.roundToInt().toDouble()) this.roundToInt().toString() else this.toString()
-
-private fun Int.toStringOrEmpty(): String = this.toString()
 
 /* ---------- date helpers ---------- */
 

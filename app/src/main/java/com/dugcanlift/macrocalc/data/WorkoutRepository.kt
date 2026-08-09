@@ -89,21 +89,31 @@ fun List<WorkoutSession>.sessionsForDate(date: String): List<WorkoutSession> =
     filter { it.date == date }.sortedByDescending { it.startedAt }
 
 /**
- * Exercise names the person has used before, most recent first. Feeds
- * autocomplete so nobody types "Bench Press" from scratch every week.
+ * Exercises used before, most recent first, as name+equipment pairs. Feeds
+ * autocomplete so nobody retypes "Bench Press / Barbell" every week.
  */
-fun List<WorkoutSession>.knownExercises(limit: Int = 30): List<String> =
+fun List<WorkoutSession>.knownExercises(limit: Int = 30): List<LoggedExercise> =
     sortedByDescending { it.startedAt }
         .flatMap { it.exercises }
-        .map { it.name.trim() }
-        .filter { it.isNotEmpty() }
-        .distinctBy { it.lowercase(Locale.US) }
+        .filter { it.name.isNotBlank() }
+        .distinctBy { it.matchKey }
         .take(limit)
 
-/** The last time this exercise was performed, for showing previous numbers. */
-fun List<WorkoutSession>.lastPerformed(exerciseName: String): LoggedExercise? {
-    val target = exerciseName.trim().lowercase(Locale.US)
+/** Equipment the person has actually used, so their own vocabulary comes first. */
+fun List<WorkoutSession>.knownEquipment(): List<String> =
+    sortedByDescending { it.startedAt }
+        .flatMap { it.exercises }
+        .map { it.equipment.trim() }
+        .filter { it.isNotEmpty() }
+        .distinctBy { it.lowercase(Locale.US) }
+
+/**
+ * The last time this exercise was performed, for showing previous numbers.
+ * Matches on name AND equipment — a cable pulldown isn't a machine pulldown.
+ */
+fun List<WorkoutSession>.lastPerformed(name: String, equipment: String = ""): LoggedExercise? {
+    val target = "${name.trim()}|${equipment.trim()}".lowercase(Locale.US)
     return sortedByDescending { it.startedAt }
         .flatMap { it.exercises }
-        .firstOrNull { it.name.trim().lowercase(Locale.US) == target }
+        .firstOrNull { it.matchKey == target }
 }

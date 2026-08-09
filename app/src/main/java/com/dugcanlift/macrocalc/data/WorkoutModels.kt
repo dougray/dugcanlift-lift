@@ -49,14 +49,37 @@ data class WorkoutSet(
             durationSec == null && distanceMeters == null
 }
 
+/**
+ * Equipment is a separate field rather than part of the name, because
+ * "Lat Pulldown (Cable)" and "Lat Pulldown (Machine)" are different lifts with
+ * different numbers — and keeping them apart means history matches correctly.
+ *
+ * Stored as free text rather than an enum: the UI suggests the common ones,
+ * but Hyrox and CrossFit need Sled, Ski Erg, Wall Ball and the rest, which a
+ * closed list would flatten into "Other".
+ */
 data class LoggedExercise(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
+    val equipment: String = "",
     val sets: List<WorkoutSet> = emptyList(),
     val note: String = ""
 ) {
     val volumeLb: Double get() = sets.sumOf { it.volumeLb }
+
+    val displayName: String
+        get() = if (equipment.isBlank()) name else "$name ($equipment)"
+
+    /** What history lookups match on. */
+    val matchKey: String
+        get() = "${name.trim()}|${equipment.trim()}".lowercase(java.util.Locale.US)
 }
+
+val COMMON_EQUIPMENT = listOf(
+    "Barbell", "Dumbbell", "Machine", "Cable", "Smith Machine",
+    "Kettlebell", "Bodyweight", "Band", "Sled", "Rower",
+    "Ski Erg", "Assault Bike", "Wall Ball", "Sandbag"
+)
 
 data class WorkoutSession(
     val id: String = UUID.randomUUID().toString(),
@@ -93,6 +116,7 @@ internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
 internal fun LoggedExercise.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("name", name)
+    put("equipment", equipment)
     put("note", note)
     put("sets", JSONArray().also { array -> sets.forEach { array.put(it.toJson()) } })
 }
@@ -104,6 +128,7 @@ internal fun loggedExerciseFromJson(o: JSONObject): LoggedExercise {
     return LoggedExercise(
         id = o.optString("id", UUID.randomUUID().toString()),
         name = o.optString("name", ""),
+        equipment = o.optString("equipment", ""),
         sets = sets,
         note = o.optString("note", "")
     )
