@@ -50,7 +50,7 @@ private fun AppTabs(modifier: Modifier = Modifier) {
     var goal by remember { mutableStateOf(goalStore.get()) }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
-    val titles = listOf("Calculate", "Log")
+    val titles = listOf("Calculate", "Log", "Train")
 
     Column(modifier = modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedTab) {
@@ -73,7 +73,8 @@ private fun AppTabs(modifier: Modifier = Modifier) {
                     selectedTab = 1
                 }
             )
-            else -> TodayScreen(goal = goal)
+            1 -> TodayScreen(goal = goal)
+            else -> WorkoutScreen()
         }
     }
 }
