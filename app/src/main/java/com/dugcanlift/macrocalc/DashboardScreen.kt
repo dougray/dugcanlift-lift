@@ -99,7 +99,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "Today", style = MaterialTheme.typography.titleMedium)
+        Text(text = "Today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -146,7 +146,7 @@ fun DashboardScreen(
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "Training", style = MaterialTheme.typography.titleMedium)
+                Text(text = "Training", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
                 if (todaysSessions.isEmpty()) {
                     Text(
@@ -177,7 +177,7 @@ fun DashboardScreen(
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "Fuel so far today", style = MaterialTheme.typography.titleMedium)
+                Text(text = "Fuel so far today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
                 StatRow("Calories", "${eaten.calories} kcal")
                 StatRow("Protein", "${eaten.proteinG} g")
@@ -189,7 +189,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(text = "Last 7 days workouts", style = MaterialTheme.typography.titleMedium)
+        Text(text = "Last 7 days workouts", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -229,7 +229,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium)
+        Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -307,7 +307,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(text = "Last 7 days fueling", style = MaterialTheme.typography.titleMedium)
+        Text(text = "Last 7 days fueling", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
         Spacer(modifier = Modifier.height(12.dp))
 
