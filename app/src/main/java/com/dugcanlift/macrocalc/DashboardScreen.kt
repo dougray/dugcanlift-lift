@@ -26,8 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.WorkoutRepository
+import com.dugcanlift.macrocalc.data.WorkoutSession
 import com.dugcanlift.macrocalc.data.forDate
 import com.dugcanlift.macrocalc.data.sessionsForDate
 import com.dugcanlift.macrocalc.data.todayKey
@@ -38,11 +40,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/**
- * Home screen. Pulls together the two halves of the app — what went in and
- * what got done — so the daily question ("where am I?") is answered without
- * visiting two tabs.
- */
 @Composable
 fun DashboardScreen(
     goal: MacroResult?,
@@ -65,7 +62,10 @@ fun DashboardScreen(
     val eaten = allEntries.forDate(today).totals()
     val todaysSessions = allSessions.sessionsForDate(today)
 
-    val week = remember { lastSevenDays() }
+    // Oldest first, so the charts read left to right like a calendar.
+    val week = remember { lastSevenDays().reversed() }
+    val shortLabels = remember(week) { week.map { shortLabel(it) } }
+
     val weekEntries = allEntries.filter { it.date in week }
     val weekSessions = allSessions.filter { it.date in week }
     val daysLogged = weekEntries.map { it.date }.distinct().size
@@ -85,10 +85,7 @@ fun DashboardScreen(
         if (goal == null) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "No goal set yet.",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Text(text = "No goal set yet.", style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Work out your daily calories and macros to start tracking against them.",
@@ -155,9 +152,63 @@ fun DashboardScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(text = "Fuel so far today", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                StatRow("Calories", "${eaten.calories} kcal")
+                StatRow("Protein", "${eaten.proteinG} g")
+                StatRow("Carbs", "${eaten.carbsG} g")
+                StatRow("Fat", "${eaten.fatG} g")
+                StatRow("Fiber", "${eaten.fiberG} g")
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(text = "Last 7 days", style = MaterialTheme.typography.titleMedium)
+        Text(text = "Last 7 days workouts", style = MaterialTheme.typography.titleMedium)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                StatRow("Workouts", "${weekSessions.size}")
+                StatRow(
+                    "Total volume",
+                    if (weekVolume > 0) "${weekVolume.roundToInt()} lb" else "-"
+                )
+                StatRow("Total sets", "${weekSessions.sumOf { it.setCount }}")
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LineChart(
+                    series = listOf(
+                        ChartSeries(
+                            "Top weight",
+                            ChartColors.Weight,
+                            week.map { day -> topWeight(allSessions, day) }
+                        ),
+                        ChartSeries(
+                            "Reps",
+                            ChartColors.Reps,
+                            week.map { day -> totalReps(allSessions, day) }
+                        ),
+                        ChartSeries(
+                            "Sets",
+                            ChartColors.Sets,
+                            week.map { day -> totalSets(allSessions, day) }
+                        )
+                    ),
+                    labels = shortLabels
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(text = "Last 7 days fueling", style = MaterialTheme.typography.titleMedium)
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -170,10 +221,60 @@ fun DashboardScreen(
                     "Average calories",
                     if (daysLogged == 0) "-" else "${weekCalories / daysLogged} kcal"
                 )
-                StatRow("Workouts", "${weekSessions.size}")
-                StatRow(
-                    "Total volume",
-                    if (weekVolume > 0) "${weekVolume.roundToInt()} lb" else "-"
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Calories",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LineChart(
+                    series = listOf(
+                        ChartSeries(
+                            "Calories",
+                            ChartColors.Calories,
+                            week.map { day -> dayValue(allEntries, day) { it.calories.toFloat() } }
+                        )
+                    ),
+                    labels = shortLabels
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Macros get their own chart: on a shared axis with calories,
+                // fibre would sit flat on the floor and tell you nothing.
+                Text(
+                    text = "Macros (g)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LineChart(
+                    series = listOf(
+                        ChartSeries(
+                            "Protein",
+                            ChartColors.Protein,
+                            week.map { day -> dayValue(allEntries, day) { it.proteinG.toFloat() } }
+                        ),
+                        ChartSeries(
+                            "Carbs",
+                            ChartColors.Carbs,
+                            week.map { day -> dayValue(allEntries, day) { it.carbsG.toFloat() } }
+                        ),
+                        ChartSeries(
+                            "Fat",
+                            ChartColors.Fat,
+                            week.map { day -> dayValue(allEntries, day) { it.fatG.toFloat() } }
+                        ),
+                        ChartSeries(
+                            "Fiber",
+                            ChartColors.Fiber,
+                            week.map { day -> dayValue(allEntries, day) { it.fiberG.toFloat() } }
+                        )
+                    ),
+                    labels = shortLabels
                 )
             }
         }
@@ -191,6 +292,41 @@ fun DashboardScreen(
         Spacer(modifier = Modifier.height(32.dp))
     }
 }
+
+/* ---------- series builders ---------- */
+
+/** Null when nothing was logged, so the chart shows a gap rather than a zero. */
+private fun dayValue(
+    entries: List<FoodEntry>,
+    day: String,
+    pick: (com.dugcanlift.macrocalc.data.DayTotals) -> Float
+): Float? {
+    val forDay = entries.forDate(day)
+    if (forDay.isEmpty()) return null
+    return pick(forDay.totals())
+}
+
+private fun topWeight(sessions: List<WorkoutSession>, day: String): Float? {
+    val forDay = sessions.sessionsForDate(day)
+    if (forDay.isEmpty()) return null
+    return forDay.flatMap { it.exercises }.flatMap { it.sets }
+        .mapNotNull { it.weightLb }.maxOrNull()?.toFloat() ?: 0f
+}
+
+private fun totalReps(sessions: List<WorkoutSession>, day: String): Float? {
+    val forDay = sessions.sessionsForDate(day)
+    if (forDay.isEmpty()) return null
+    return forDay.flatMap { it.exercises }.flatMap { it.sets }
+        .sumOf { it.reps ?: 0 }.toFloat()
+}
+
+private fun totalSets(sessions: List<WorkoutSession>, day: String): Float? {
+    val forDay = sessions.sessionsForDate(day)
+    if (forDay.isEmpty()) return null
+    return forDay.sumOf { it.setCount }.toFloat()
+}
+
+/* ---------- small pieces ---------- */
 
 @Composable
 private fun DashboardBar(name: String, eaten: Int, goal: Int) {
@@ -243,7 +379,8 @@ private fun StatRow(label: String, value: String) {
     }
 }
 
-/** Today plus the previous six days, as date keys. */
+/* ---------- dates ---------- */
+
 private fun lastSevenDays(): List<String> {
     val format = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     val calendar = Calendar.getInstance()
@@ -253,4 +390,11 @@ private fun lastSevenDays(): List<String> {
         calendar.add(Calendar.DAY_OF_YEAR, -1)
         key
     }
+}
+
+private fun shortLabel(key: String): String = try {
+    val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(key)
+    if (parsed != null) SimpleDateFormat("MMM d", Locale.US).format(parsed) else key
+} catch (e: Exception) {
+    key
 }
