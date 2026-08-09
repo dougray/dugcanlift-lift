@@ -77,4 +77,4 @@ will be updated in the same commit as the change, and the date above revised.
 
 ## Contact
 
-Questions: <https://www.dugcanlift.com>
+Questions: privacy@dugcanlift.com
