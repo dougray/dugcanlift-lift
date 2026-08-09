@@ -2,6 +2,7 @@ package com.dugcanlift.macrocalc
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
@@ -45,12 +46,28 @@ private fun AppTabs(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val goalStore = remember { GoalStore.get(context) }
 
-    // The goal lives here so saving it on the Calculator tab immediately
-    // updates the Today tab, without either screen reaching into the other.
     var goal by remember { mutableStateOf(goalStore.get()) }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
-    val titles = listOf("Calculate", "Log", "Train")
+    // The calculator is a set-it-once screen, so it lives behind the dashboard
+    // rather than taking a permanent slot in the navigation.
+    var showCalculator by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = showCalculator) { showCalculator = false }
+
+    if (showCalculator) {
+        MacroCalculatorScreen(
+            modifier = modifier,
+            onSaveGoal = { result ->
+                goalStore.save(result)
+                goal = result
+                showCalculator = false
+            }
+        )
+        return
+    }
+
+    val titles = listOf("Home", "Food", "Train")
 
     Column(modifier = modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedTab) {
@@ -66,12 +83,9 @@ private fun AppTabs(modifier: Modifier = Modifier) {
         }
 
         when (selectedTab) {
-            0 -> MacroCalculatorScreen(
-                onSaveGoal = { result ->
-                    goalStore.save(result)
-                    goal = result
-                    selectedTab = 1
-                }
+            0 -> DashboardScreen(
+                goal = goal,
+                onOpenCalculator = { showCalculator = true }
             )
             1 -> TodayScreen(goal = goal)
             else -> WorkoutScreen()
