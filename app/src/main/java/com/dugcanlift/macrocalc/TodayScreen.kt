@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +41,8 @@ import com.dugcanlift.macrocalc.data.DayTotals
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.FoodSearchResult
+import com.dugcanlift.macrocalc.data.Meal
+import com.dugcanlift.macrocalc.data.mealForHour
 import com.dugcanlift.macrocalc.data.forDate
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
@@ -93,7 +98,7 @@ fun TodayScreen(
 
         if (goal == null) {
             Text(
-                text = "Set a goal on the Calculate tab and it'll show up here.",
+                text = "Set a goal on the Calculator tab and it'll show up here.",
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {
@@ -184,11 +189,40 @@ fun TodayScreen(
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {
-            entries.forEach { entry ->
-                EntryRow(
-                    entry = entry,
-                    onDelete = { scope.launch { repo.delete(entry.id) } }
-                )
+            // Grouped by meal, in the order you'd eat them rather than the
+            // order they happened to be entered.
+            Meal.entries.forEach { meal ->
+                val forMeal = entries.filter { it.mealOrDefault == meal }
+                if (forMeal.isEmpty()) return@forEach
+
+                val mealCalories = forMeal.sumOf { it.totalCalories }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = meal.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "$mealCalories kcal",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+
+                forMeal.sortedBy { it.loggedAt }.forEach { entry ->
+                    EntryRow(
+                        entry = entry,
+                        onDelete = { scope.launch { repo.delete(entry.id) } }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
 
@@ -290,10 +324,13 @@ private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.fillMaxWidth(0.75f)) {
+        // weight(1f) lets the text take the space that's left instead of a
+        // fixed fraction, which was squeezing the button into one letter
+        // per line.
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (entry.servings == 1.0) entry.name
                 else "${entry.name} x${formatServings(entry.servings)}",
@@ -307,8 +344,12 @@ private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Spacer(modifier = Modifier.fillMaxWidth(0.6f))
-        TextButton(onClick = onDelete) { Text("Remove") }
+        TextButton(
+            onClick = onDelete,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(text = "x", style = MaterialTheme.typography.bodyLarge)
+        }
     }
 }
 
@@ -329,6 +370,16 @@ private fun AddFoodForm(
     var carbs by remember(initial) { mutableStateOf(initial?.carbsG?.toString() ?: "") }
     var fiber by remember(initial) { mutableStateOf(initial?.fiberG?.toString() ?: "") }
 
+    // Defaults to whatever meal it currently is, so most of the time nobody
+    // has to touch this.
+    var meal by remember(initial) {
+        mutableStateOf(
+            mealForHour(
+                java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+            )
+        )
+    }
+
     val valid = name.isNotBlank() && calories.toIntOrNull() != null
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -338,6 +389,18 @@ private fun AddFoodForm(
             Spacer(modifier = Modifier.height(12.dp))
 
             NameField(value = name, onValueChange = { name = it }, label = "Name")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Meal.entries.forEach { option ->
+                    FilterChip(
+                        selected = option == meal,
+                        onClick = { meal = option },
+                        label = { Text(option.label) }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -377,7 +440,8 @@ private fun AddFoodForm(
                                 fatG = fat.toIntOrNull() ?: 0,
                                 carbsG = carbs.toIntOrNull() ?: 0,
                                 fiberG = fiber.toIntOrNull() ?: 0,
-                                date = date
+                                date = date,
+                                meal = meal.name
                             )
                         )
                     },

@@ -117,3 +117,38 @@ fun List<WorkoutSession>.lastPerformed(name: String, equipment: String = ""): Lo
         .flatMap { it.exercises }
         .firstOrNull { it.matchKey == target }
 }
+
+
+/**
+ * Every time this exercise was performed, oldest first, paired with its date.
+ *
+ * Progression is plotted per occurrence rather than per calendar day: an
+ * exercise trained twice a week would otherwise be five-sevenths empty space.
+ */
+fun List<WorkoutSession>.historyFor(
+    name: String,
+    equipment: String = ""
+): List<Pair<String, LoggedExercise>> {
+    val target = "${name.trim()}|${equipment.trim()}".lowercase(Locale.US)
+    return sortedBy { it.startedAt }
+        .flatMap { session -> session.exercises.map { session.date to it } }
+        .filter { it.second.matchKey == target }
+        .filter { it.second.sets.isNotEmpty() }
+}
+
+/** Heaviest set performed. */
+fun LoggedExercise.topWeightLb(): Double? = sets.mapNotNull { it.weightLb }.maxOrNull()
+
+/**
+ * Estimated one-rep max via the Epley formula, taking the best set.
+ *
+ * It's an estimate, and it drifts at high rep counts — but it's the standard
+ * way to compare 185x5 against 195x3, which raw top weight can't do.
+ */
+fun LoggedExercise.estimatedOneRepMax(): Double? = sets
+    .mapNotNull { set ->
+        val weight = set.weightLb ?: return@mapNotNull null
+        val reps = set.reps ?: return@mapNotNull null
+        if (reps <= 0) null else weight * (1.0 + reps / 30.0)
+    }
+    .maxOrNull()

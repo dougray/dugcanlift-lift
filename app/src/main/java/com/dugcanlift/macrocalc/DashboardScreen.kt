@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -21,6 +23,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,7 +34,11 @@ import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.WorkoutRepository
 import com.dugcanlift.macrocalc.data.WorkoutSession
+import com.dugcanlift.macrocalc.data.estimatedOneRepMax
 import com.dugcanlift.macrocalc.data.forDate
+import com.dugcanlift.macrocalc.data.historyFor
+import com.dugcanlift.macrocalc.data.knownExercises
+import com.dugcanlift.macrocalc.data.topWeightLb
 import com.dugcanlift.macrocalc.data.sessionsForDate
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
@@ -66,6 +74,11 @@ fun DashboardScreen(
     val week = remember { lastSevenDays().reversed() }
     val shortLabels = remember(week) { week.map { shortLabel(it) } }
 
+    val exerciseOptions = remember(allSessions) { allSessions.knownExercises(limit = 20) }
+    var selectedExercise by remember(exerciseOptions) {
+        mutableStateOf(exerciseOptions.firstOrNull()?.matchKey)
+    }
+
     val weekEntries = allEntries.filter { it.date in week }
     val weekSessions = allSessions.filter { it.date in week }
     val daysLogged = weekEntries.map { it.date }.distinct().size
@@ -78,7 +91,15 @@ fun DashboardScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Text(text = "Today", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "LIFT",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(text = "Today", style = MaterialTheme.typography.titleMedium)
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -203,6 +224,84 @@ fun DashboardScreen(
                     ),
                     labels = shortLabels
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (exerciseOptions.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Log a workout and your lifts will chart here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                exerciseOptions.forEach { option ->
+                    FilterChip(
+                        selected = option.matchKey == selectedExercise,
+                        onClick = { selectedExercise = option.matchKey },
+                        label = { Text(option.displayName) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val chosen = exerciseOptions.firstOrNull { it.matchKey == selectedExercise }
+            if (chosen != null) {
+                val history = allSessions.historyFor(chosen.name, chosen.equipment).takeLast(10)
+
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = chosen.displayName,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val best = history.mapNotNull { it.second.topWeightLb() }.maxOrNull()
+                        val latest = history.lastOrNull()?.second?.topWeightLb()
+                        val bestE1rm = history.mapNotNull { it.second.estimatedOneRepMax() }.maxOrNull()
+
+                        StatRow("Sessions", "${history.size}")
+                        StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
+                        StatRow("Most recent", latest?.let { "${it.roundToInt()} lb" } ?: "-")
+                        StatRow("Best est. 1RM", bestE1rm?.let { "${it.roundToInt()} lb" } ?: "-")
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Plotted per session, not per calendar day — an exercise
+                        // trained twice a week would otherwise be mostly gaps.
+                        LineChart(
+                            series = listOf(
+                                ChartSeries(
+                                    "Top weight",
+                                    ChartColors.Weight,
+                                    history.map { it.second.topWeightLb()?.toFloat() }
+                                ),
+                                ChartSeries(
+                                    "Est. 1RM",
+                                    ChartColors.Carbs,
+                                    history.map { it.second.estimatedOneRepMax()?.toFloat() }
+                                )
+                            ),
+                            labels = history.map { shortLabel(it.first) }
+                        )
+                    }
+                }
             }
         }
 

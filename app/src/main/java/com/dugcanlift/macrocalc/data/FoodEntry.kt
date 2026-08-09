@@ -14,6 +14,21 @@ import kotlin.math.roundToInt
  * `date` is a plain "yyyy-MM-dd" string rather than java.time.LocalDate,
  * because LocalDate needs API 26 and minSdk here is 24.
  */
+enum class Meal(val label: String) {
+    BREAKFAST("Breakfast"),
+    LUNCH("Lunch"),
+    DINNER("Dinner"),
+    SNACK("Snack")
+}
+
+/** Best guess at which meal a given time of day belongs to. */
+fun mealForHour(hour: Int): Meal = when {
+    hour < 11 -> Meal.BREAKFAST
+    hour < 15 -> Meal.LUNCH
+    hour < 21 -> Meal.DINNER
+    else -> Meal.SNACK
+}
+
 data class FoodEntry(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
@@ -24,8 +39,23 @@ data class FoodEntry(
     val carbsG: Int,
     val fiberG: Int = 0,
     val date: String = todayKey(),
-    val loggedAt: Long = System.currentTimeMillis()
+    val loggedAt: Long = System.currentTimeMillis(),
+    val meal: String = ""
 ) {
+    /**
+     * The meal this belongs to. Falls back to the time it was logged, so
+     * entries saved before meals existed still sort sensibly.
+     */
+    val mealOrDefault: Meal
+        get() = Meal.entries.firstOrNull { it.name == meal } ?: run {
+            if (loggedAt <= 0L) Meal.SNACK
+            else {
+                val calendar = java.util.Calendar.getInstance()
+                calendar.timeInMillis = loggedAt
+                mealForHour(calendar.get(java.util.Calendar.HOUR_OF_DAY))
+            }
+        }
+
     val totalCalories: Int get() = (calories * servings).roundToInt()
     val totalProteinG: Int get() = (proteinG * servings).roundToInt()
     val totalFatG: Int get() = (fatG * servings).roundToInt()
@@ -70,6 +100,7 @@ internal fun FoodEntry.toJson(): JSONObject = JSONObject().apply {
     put("fiberG", fiberG)
     put("date", date)
     put("loggedAt", loggedAt)
+    put("meal", meal)
 }
 
 /**
@@ -86,5 +117,6 @@ internal fun foodEntryFromJson(o: JSONObject): FoodEntry = FoodEntry(
     carbsG = o.optInt("carbsG", 0),
     fiberG = o.optInt("fiberG", 0),
     date = o.optString("date", todayKey()),
-    loggedAt = o.optLong("loggedAt", 0L)
+    loggedAt = o.optLong("loggedAt", 0L),
+    meal = o.optString("meal", "")
 )
