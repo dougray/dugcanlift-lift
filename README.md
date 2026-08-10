@@ -17,6 +17,8 @@ Opens on today: calories and macros against your goal, what you've eaten so far,
 and what you trained. Below that, a week of stats and charts.
 
 - Calories and macros remaining, with progress bars per macro
+- Today's steps against a daily goal (10,000 recommended, editable), read
+  live from Health Connect
 - Today's training summary — exercises, sets, volume
 - Last 7 days: days logged, average calories, workouts, total volume
 - Line charts for calories and macros across the week
@@ -86,7 +88,8 @@ Requires Android Studio and JDK 17+.
 
     ./gradlew installDebug
 
-Minimum Android version: 7.0 (API 24).
+Minimum Android version: 8.0 (API 26) — raised from 7.0 for Health Connect,
+whose client library requires it.
 
 Storage is plain JSON in the app's private directory — no database, no
 annotation processing. On a debug build you can inspect it:
@@ -96,6 +99,8 @@ annotation processing. On a debug build you can inspect it:
 ## Built with
 
 - [Jetpack Compose](https://developer.android.com/compose) — UI
+- [Health Connect](https://developer.android.com/health-and-fitness/guides/health-connect)
+  — read-only access to today's step count
 - [Open Food Facts](https://world.openfoodfacts.org) — food and barcode data,
   an open database maintained by volunteers
 - [ZXing Android Embedded](https://github.com/journeyapps/zxing-android-embedded)

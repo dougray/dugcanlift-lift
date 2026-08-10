@@ -11,7 +11,9 @@ android {
 
     defaultConfig {
         applicationId = "com.dugcanlift.macrocalc"
-        minSdk = 24
+        // 26 is required by androidx.health.connect:connect-client. API 24/25
+        // share is negligible in 2026, so this isn't a meaningful trade-off.
+        minSdk = 26
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
@@ -46,6 +48,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.health.connect.client)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

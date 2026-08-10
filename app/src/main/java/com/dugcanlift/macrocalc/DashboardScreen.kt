@@ -14,24 +14,32 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.PermissionController
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
+import com.dugcanlift.macrocalc.data.HealthConnectManager
+import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.WorkoutRepository
 import com.dugcanlift.macrocalc.data.WorkoutSession
 import com.dugcanlift.macrocalc.data.estimatedOneRepMax
@@ -42,6 +50,7 @@ import com.dugcanlift.macrocalc.data.topWeightLb
 import com.dugcanlift.macrocalc.data.sessionsForDate
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -57,10 +66,33 @@ fun DashboardScreen(
     val context = LocalContext.current
     val foods = remember { FoodRepository.get(context) }
     val workouts = remember { WorkoutRepository.get(context) }
+    val settings = remember { SettingsStore.get(context) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         foods.load()
         workouts.load()
+    }
+
+    var todaySteps by remember { mutableStateOf(0L) }
+    var stepGoal by remember { mutableStateOf(settings.stepGoal) }
+    var showingStepGoalEditor by remember { mutableStateOf(false) }
+
+    val stepsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        if (granted.containsAll(HealthConnectManager.permissions)) {
+            scope.launch { todaySteps = HealthConnectManager.todaysStepCount(context) }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!HealthConnectManager.isAvailable(context)) return@LaunchedEffect
+        if (HealthConnectManager.hasPermission(context)) {
+            todaySteps = HealthConnectManager.todaysStepCount(context)
+        } else {
+            stepsPermissionLauncher.launch(HealthConnectManager.permissions)
+        }
     }
 
     val allEntries by foods.entries.collectAsState()
@@ -140,6 +172,30 @@ fun DashboardScreen(
                     DashboardBar("Fiber", eaten.fiberG, goal.fiberG)
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(text = "Steps", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                DashboardBar("Today", todaySteps.toInt(), stepGoal, unit = "steps")
+                Spacer(modifier = Modifier.height(4.dp))
+                TextButton(onClick = { showingStepGoalEditor = true }) { Text("Edit goal") }
+            }
+        }
+
+        if (showingStepGoalEditor) {
+            StepGoalDialog(
+                initial = stepGoal,
+                onSave = { value ->
+                    stepGoal = value
+                    settings.stepGoal = value
+                    showingStepGoalEditor = false
+                },
+                onDismiss = { showingStepGoalEditor = false }
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -428,7 +484,7 @@ private fun totalSets(sessions: List<WorkoutSession>, day: String): Float? {
 /* ---------- small pieces ---------- */
 
 @Composable
-private fun DashboardBar(name: String, eaten: Int, goal: Int) {
+private fun DashboardBar(name: String, eaten: Int, goal: Int, unit: String = "g") {
     val fraction = if (goal <= 0) 0f else (eaten.toFloat() / goal).coerceIn(0f, 1f)
     val over = goal > 0 && eaten > goal
     val barColor =
@@ -441,7 +497,7 @@ private fun DashboardBar(name: String, eaten: Int, goal: Int) {
         ) {
             Text(text = name, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = "$eaten / $goal g",
+                text = "$eaten / $goal $unit",
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (over) barColor else MaterialTheme.colorScheme.onSurface
             )
@@ -463,6 +519,33 @@ private fun DashboardBar(name: String, eaten: Int, goal: Int) {
             )
         }
     }
+}
+
+@Composable
+private fun StepGoalDialog(initial: Int, onSave: (Int) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(initial.toString()) }
+    val value = text.toIntOrNull()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Step Goal") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Steps per day") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { value?.let(onSave) }, enabled = value != null && value > 0) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
