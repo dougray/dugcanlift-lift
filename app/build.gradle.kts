@@ -1,6 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+// Absent for anyone who clones this repo without the release key — including
+// F-Droid's build server, which signs the APK with its own key regardless.
+// Release builds are simply left unsigned rather than failing the build.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val hasSigningConfig = keystorePropertiesFile.exists()
+val keystoreProperties = Properties().apply {
+    if (hasSigningConfig) load(keystorePropertiesFile.inputStream())
 }
 
 android {
@@ -21,10 +32,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
+            }
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
