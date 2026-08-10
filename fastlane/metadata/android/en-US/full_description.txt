@@ -1,0 +1,21 @@
+LIFT is a nutrition and training tracker that works offline and keeps every bit of your data on your device. No accounts, no ads, no analytics, no cloud sync.
+
+DASHBOARD
+Opens on today: calories and macros against your goal, steps against a daily goal, what you've trained, and what you've eaten so far. Below that, a rolling week of stats and charts, including per-exercise progression so you can see your top weight and estimated one-rep max over your last ten sessions of any lift.
+
+MACRO CALCULATOR
+Uses the Mifflin-St Jeor formula to estimate your daily calories and macros from your sex, age, weight, height, and activity level. Choose a goal - lose, maintain, or gain - and a protein and fat target, then save the result as your goal. Everything else on the dashboard tracks against it.
+
+STEP TRACKING
+Today's steps against a daily goal, read from Health Connect. The app never writes to Health Connect and never sends step data anywhere - it's read live each time you open the dashboard and isn't stored by the app.
+
+FOOD LOG
+Entries grouped by meal with per-meal calorie subtotals. Search a food database or scan a barcode to pull nutrition straight off the packet, or enter anything by hand. One tap re-logs anything you've eaten before. Browse back through previous days.
+
+WORKOUT LOG
+Sessions contain exercises, exercises contain sets. Each set records weight, reps, RPE, time, and distance, all optional. A training focus - bodybuilding, powerlifting, CrossFit, Hyrox, endurance, or everything - decides which fields you see, but nothing is ever discarded when you switch focus. Shows what you lifted last time right under the exercise name, and new sets prefill from the previous one. Save any workout as a reusable routine.
+
+PRIVACY
+Your goal, your food log, your workouts, and everything else you enter stays on your phone. The only thing that ever leaves your device is a food search term or barcode, sent to Open Food Facts, and only when you use that feature - enter foods manually and the app makes no network requests at all. Full privacy policy in the app and at dugcanlift.com/app/privacy.
+
+Built with Jetpack Compose. Licensed under the GNU Affero General Public License v3.0.

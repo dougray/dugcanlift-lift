@@ -1,0 +1,3 @@
+Initial release.
+
+Dashboard with weekly charts and exercise progression, macro calculator, step tracking via Health Connect, food log with barcode scanning, and workout log with routines.

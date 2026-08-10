@@ -1,0 +1,38 @@
+# DRAFT F-Droid build recipe — NOT consumed by this repo's own build.
+#
+# F-Droid doesn't build from metadata living in your app's repo. To submit:
+#   1. Fork https://gitlab.com/fdroid/fdroiddata
+#   2. Save this file's content as metadata/com.dugcanlift.macrocalc.yml in that fork
+#   3. Before submitting: create and push the git tag referenced below (see
+#      "commit:" — currently a placeholder, not a real tag yet)
+#   4. Open a merge request against fdroiddata; F-Droid's CI does a test build
+#      before a human reviews it
+#
+# Reference: https://f-droid.org/docs/Submitting_to_F-Droid_Quick_Start_Guide/
+
+Categories:
+  - Sports & Health
+License: AGPL-3.0-only
+AuthorName: dougray
+SourceCode: https://github.com/dougray/dugcanlift-lift
+IssueTracker: https://github.com/dougray/dugcanlift-lift/issues
+Changelog: https://github.com/dougray/dugcanlift-lift/blob/main/fastlane/metadata/android/en-US/changelogs/%v.txt
+
+RepoType: git
+Repo: https://github.com/dougray/dugcanlift-lift.git
+
+Builds:
+  - versionName: '1.0'
+    versionCode: 1
+    # TODO: replace with the real release tag once cut (see scripts/setup-signing.sh
+    # and README "Building" section — this must point at a commit where
+    # assembleRelease succeeds unsigned, which is already verified as of the
+    # "Wire up release signing config" commit).
+    commit: v1.0.0
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: '1.0'
+CurrentVersionCode: 1
