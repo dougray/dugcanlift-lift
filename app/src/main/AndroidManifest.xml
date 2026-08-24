@@ -16,8 +16,13 @@
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
 
+    <!-- allowBackup is off deliberately. Android's Auto Backup would copy the
+         food and workout logs to the user's Google Drive, which contradicts
+         what this app promises and what its privacy policy says. Backing up is
+         something the user does on purpose, from Settings, to a file they
+         choose. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
