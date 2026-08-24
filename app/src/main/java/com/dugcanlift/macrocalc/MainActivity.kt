@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.dugcanlift.macrocalc.data.CoachStore
 import com.dugcanlift.macrocalc.data.GoalStore
 import com.dugcanlift.macrocalc.ui.theme.DugCanLiftCalcTheme
 
@@ -45,6 +46,7 @@ class MainActivity : ComponentActivity() {
 private fun AppTabs(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val goalStore = remember { GoalStore.get(context) }
+    val coachStore = remember { CoachStore.get(context) }
 
     var goal by remember { mutableStateOf(goalStore.get()) }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
@@ -62,6 +64,10 @@ private fun AppTabs(modifier: Modifier = Modifier) {
                 goalStore.save(result)
                 goal = result
                 showCalculator = false
+            },
+            onSaveProfile = { profile, weightLb ->
+                coachStore.profile = profile
+                coachStore.recordBodyweight(weightLb)
             }
         )
         return

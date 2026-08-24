@@ -21,9 +21,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.dugcanlift.macrocalc.data.LifterProfile
 
 @Composable
-fun MacroCalculatorScreen(modifier: Modifier = Modifier, onSaveGoal: (MacroResult) -> Unit = {}) {
+fun MacroCalculatorScreen(
+    modifier: Modifier = Modifier,
+    onSaveGoal: (MacroResult) -> Unit = {},
+    /**
+     * The inputs behind the goal, so a coach reading a 2,400 kcal target knows
+     * whose it is, and so the weight typed here becomes a dated reading rather
+     * than a number that vanishes into the maths.
+     */
+    onSaveProfile: (LifterProfile, Double) -> Unit = { _, _ -> }
+) {
     var sex by remember { mutableStateOf(Sex.MALE) }
     var age by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
@@ -112,7 +122,26 @@ fun MacroCalculatorScreen(modifier: Modifier = Modifier, onSaveGoal: (MacroResul
         if (result != null) {
             ResultCard(result)
             Spacer(modifier = Modifier.height(12.dp))
-            Button(onClick = { onSaveGoal(result) }, modifier = Modifier.fillMaxWidth()) { Text("Save as my goal") }
+            Button(
+                onClick = {
+                    onSaveGoal(result)
+                    val enteredAge = age.toIntOrNull()
+                    val enteredWeight = weight.toDoubleOrNull()
+                    val feet = heightFt.toDoubleOrNull()
+                    if (enteredAge != null && enteredWeight != null && feet != null) {
+                        val inches = feet * 12 + (heightIn.toDoubleOrNull() ?: 0.0)
+                        onSaveProfile(
+                            LifterProfile(
+                                sex = sex.name.lowercase(),
+                                age = enteredAge,
+                                heightIn = inches
+                            ),
+                            enteredWeight
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Save as my goal") }
         } else {
             Text(
                 text = "Enter age, weight, and height to see your numbers.",

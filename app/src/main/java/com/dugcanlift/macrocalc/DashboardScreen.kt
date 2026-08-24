@@ -91,7 +91,7 @@ fun DashboardScreen(
         if (HealthConnectManager.hasPermission(context)) {
             todaySteps = HealthConnectManager.todaysStepCount(context)
         } else {
-            stepsPermissionLauncher.launch(HealthConnectManager.permissions)
+            stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
         }
     }
 
@@ -433,6 +433,10 @@ fun DashboardScreen(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        CoachCard(goal = goal, sessions = allSessions, entries = allEntries)
 
         if (goal != null) {
             Spacer(modifier = Modifier.height(24.dp))

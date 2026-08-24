@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Read-only: the app displays today's step count but never writes to Health Connect. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <!-- Health Connect hands out only the last 30 days without this. A coach
+         asking for a 12-week block would otherwise get a step history that
+         stops dead a month back for no visible reason. Optional: refusing it
+         costs the older steps and nothing else. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
