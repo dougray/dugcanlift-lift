@@ -23,11 +23,13 @@ jobs:
 
       - uses: android-actions/setup-android@v4
 
-      # compileSdk/targetSdk 37 is newer than the runner image ships with, so
-      # ask for it explicitly rather than relying on what happens to be there.
-      # Bump these alongside app/build.gradle.kts.
+      # compileSdk 37 is newer than the runner image ships with, so ask for it
+      # explicitly rather than relying on what happens to be there. Note the
+      # package id is "android-37.0", not "android-37", and that build-tools
+      # is still on 36 — sdkmanager fails the build outright on a name it does
+      # not recognise. Bump these alongside app/build.gradle.kts.
       - name: Install the SDK this app compiles against
-        run: sdkmanager --install "platforms;android-37" "build-tools;37.0.0"
+        run: sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0"
 
       # Caches ~/.gradle between runs, which is the one real thing a self-hosted
       # runner would have given us.
