@@ -1,0 +1,57 @@
+name: Bug report
+description: Something is broken or behaving oddly in LIFT for Android
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing. One thing first, and it matters:
+
+        **Never paste a "Send to Coach" link into an issue.** Your whole log
+        travels inside that link, so posting one here publishes your training
+        and eating to anyone who reads this repo. Describe what happened
+        instead.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings, at the bottom — or the version you downloaded.
+      placeholder: "1.1"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and Android version
+      placeholder: Pixel 7, Android 15
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do just before it happened?
+      description: Rough steps are fine. "Scanned a barcode, tapped Add, the screen went white."
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Downloaded the APK from dugcanlift.com
+        - Downloaded the APK from GitHub Releases
+        - Built it myself
+        - F-Droid
+        - Google Play
+    validations:
+      required: true
+  - type: checkboxes
+    id: health
+    attributes:
+      label: Does it involve Health Connect or steps?
+      options:
+        - label: Yes, steps or Health Connect are part of the problem
