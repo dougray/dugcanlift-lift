@@ -1,0 +1,37 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    # GitHub's own runners, not a machine of ours. Actions minutes are free and
+    # uncapped on public repositories, so self-hosting would cost hardware and
+    # upkeep to save nothing. A build here never touches user data — it only
+    # ever compiles this public source.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v4
+
+      # compileSdk/targetSdk 37 is newer than the runner image ships with, so
+      # ask for it explicitly rather than relying on what happens to be there.
+      # Bump these alongside app/build.gradle.kts.
+      - name: Install the SDK this app compiles against
+        run: sdkmanager --install "platforms;android-37" "build-tools;37.0.0"
+
+      # Caches ~/.gradle between runs, which is the one real thing a self-hosted
+      # runner would have given us.
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build and test
+        run: ./gradlew assembleDebug test
