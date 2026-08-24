@@ -52,6 +52,24 @@ class FoodRepository private constructor(context: Context) {
         _entries.value = emptyList()
     }
 
+    /**
+     * Adds only entries this device has never seen, matched on id, and returns
+     * how many landed. Never overwrites an entry already here: a restore is
+     * meant to fill gaps, not to rewind the device to the day the file was
+     * written.
+     */
+    fun restoreMissing(incoming: List<FoodEntry>): Int {
+        val existing = read()
+        val known = existing.map { it.id }.toSet()
+        val fresh = incoming.filter { it.id !in known }
+        if (fresh.isEmpty()) return 0
+        val updated = existing + fresh
+        write(updated)
+        _entries.value = updated
+        return fresh.size
+    }
+
+
     /* ---------- file access ---------- */
 
     @Synchronized

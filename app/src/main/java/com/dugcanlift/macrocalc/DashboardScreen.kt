@@ -438,6 +438,10 @@ fun DashboardScreen(
 
         CoachCard(goal = goal, sessions = allSessions, entries = allEntries)
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        BackupCard()
+
         if (goal != null) {
             Spacer(modifier = Modifier.height(24.dp))
             OutlinedButton(

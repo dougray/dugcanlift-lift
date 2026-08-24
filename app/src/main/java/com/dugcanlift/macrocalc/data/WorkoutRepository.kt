@@ -48,6 +48,23 @@ class WorkoutRepository private constructor(context: Context) {
         _sessions.value = emptyList()
     }
 
+    /**
+     * Adds only sessions this device has never seen, matched on id, and returns
+     * how many landed. Never overwrites a session already here — see the note
+     * on FoodRepository.restoreMissing.
+     */
+    fun restoreMissing(incoming: List<WorkoutSession>): Int {
+        val existing = read()
+        val known = existing.map { it.id }.toSet()
+        val fresh = incoming.filter { it.id !in known }
+        if (fresh.isEmpty()) return 0
+        val updated = existing + fresh
+        write(updated)
+        _sessions.value = updated
+        return fresh.size
+    }
+
+
     /* ---------- file access ---------- */
 
     @Synchronized

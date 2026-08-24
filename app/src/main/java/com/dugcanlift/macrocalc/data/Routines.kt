@@ -54,7 +54,7 @@ data class Routine(
 
 /* ---------- JSON ---------- */
 
-private fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
+internal fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("name", name)
     put("equipment", equipment)
@@ -64,7 +64,7 @@ private fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
     put("note", note)
 }
 
-private fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
+internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
     id = o.optString("id", UUID.randomUUID().toString()),
     name = o.optString("name", ""),
     equipment = o.optString("equipment", ""),
@@ -75,7 +75,7 @@ private fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
     note = o.optString("note", "")
 )
 
-private fun Routine.toJson(): JSONObject = JSONObject().apply {
+internal fun Routine.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("name", name)
     put("folder", folder)
@@ -83,7 +83,7 @@ private fun Routine.toJson(): JSONObject = JSONObject().apply {
     put("exercises", JSONArray().also { array -> exercises.forEach { array.put(it.toJson()) } })
 }
 
-private fun routineFromJson(o: JSONObject): Routine {
+internal fun routineFromJson(o: JSONObject): Routine {
     val array = o.optJSONArray("exercises")
     val exercises = if (array == null) emptyList() else
         (0 until array.length()).map { routineExerciseFromJson(array.getJSONObject(it)) }
@@ -171,6 +171,21 @@ class RoutineRepository private constructor(context: Context) {
     }
 
     @Synchronized
+    /**
+     * Adds only routines this device has never seen, matched on id, and
+     * returns how many landed. Never overwrites one already here.
+     */
+    fun restoreMissing(incoming: List<Routine>): Int {
+        val existing = read()
+        val known = existing.map { it.id }.toSet()
+        val fresh = incoming.filter { it.id !in known }
+        if (fresh.isEmpty()) return 0
+        val updated = existing + fresh
+        write(updated)
+        _routines.value = updated
+        return fresh.size
+    }
+
     private fun read(): List<Routine> {
         if (!file.exists()) return emptyList()
         return try {

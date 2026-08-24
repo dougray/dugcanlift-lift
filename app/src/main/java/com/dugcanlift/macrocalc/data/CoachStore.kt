@@ -43,6 +43,18 @@ class CoachStore private constructor(context: Context) {
             return fresh
         }
 
+    /**
+     * Only ever sets the id if this device has not already got one. Restoring a
+     * backup should carry the lifter's identity across so their coach sees the
+     * same person, but it must never renumber someone who is already logging
+     * here — that would split their history in the coach's roster.
+     */
+    fun restoreLifterId(id: String) {
+        if (prefs.getString(KEY_ID, null) == null) {
+            prefs.edit().putString(KEY_ID, id).apply()
+        }
+    }
+
     var weeks: Int
         get() = prefs.getInt(KEY_WEEKS, 8)
         set(value) = prefs.edit().putInt(KEY_WEEKS, value).apply()
