@@ -78,12 +78,18 @@ object BackupStore {
         // they are needed rather than stored, so this app has nothing of its
         // own to hand over — Health Connect keeps its own history.
 
-        return JSONObject()
+        val root = JSONObject()
             .put("v", VERSION)
             .put("app", APP)
             .put("saved", todayKey())
             .put("data", data)
-            .toString(1)
+
+        // Hand back whatever another platform recorded that this one has no
+        // field for. Dropping it would mean an iPhone's backup came through
+        // here and lost its warmup flags on the way out.
+        foreignExt(context)?.let { root.put("ext", it) }
+
+        return root.toString(1)
     }
 
     fun restore(context: Context, text: String): RestoreResult {
@@ -159,6 +165,24 @@ object BackupStore {
             }
         }
 
+        // Keep the parts of the file this app cannot read, so saving again
+        // returns them intact. See coach/BACKUP-FORMAT.md in the site repo.
+        root.optJSONObject("ext")?.let { ext ->
+            if (ext.length() > 0) {
+                prefs(context).edit().putString(KEY_FOREIGN_EXT, ext.toString()).apply()
+            }
+        }
+
         return RestoreResult(added, true)
     }
+
+    private fun prefs(context: Context) = context.applicationContext
+        .getSharedPreferences("dcl_backup", Context.MODE_PRIVATE)
+
+    private fun foreignExt(context: Context): JSONObject? {
+        val raw = prefs(context).getString(KEY_FOREIGN_EXT, null) ?: return null
+        return runCatching { JSONObject(raw) }.getOrNull()?.takeIf { it.length() > 0 }
+    }
+
+    private const val KEY_FOREIGN_EXT = "foreign_ext"
 }
