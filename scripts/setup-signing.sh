@@ -11,7 +11,12 @@ if [[ -f keystore.properties ]]; then
     [[ "$confirm" == "y" || "$confirm" == "Y" ]] || { echo "Aborted."; exit 1; }
 fi
 
-default_store="$HOME/Desktop/dugcanlift-calculator/dugcanlift.jks"
+# Not the Desktop: macOS blocks Terminal from reading ~/Desktop unless you
+# grant it Files and Folders access, and a denied read is reported as "file
+# does not exist", which is a confusing hour to lose.
+# dugcanlift.jks is the original key, whose password was lost on 2026-08-24.
+# It is kept in case the password ever turns up. This is the live one.
+default_store="$HOME/keystores/dugcanlift-release.jks"
 read -r -p "Path to your .jks keystore [$default_store]: " store_file
 store_file="${store_file:-$default_store}"
 
