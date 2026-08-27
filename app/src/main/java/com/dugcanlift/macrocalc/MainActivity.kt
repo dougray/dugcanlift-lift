@@ -73,7 +73,7 @@ private fun AppTabs(modifier: Modifier = Modifier) {
         return
     }
 
-    val titles = listOf("Home", "Food", "Train")
+    val titles = listOf("Home", "Food", "Cook", "Train")
 
     Column(modifier = modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = selectedTab) {
@@ -94,6 +94,7 @@ private fun AppTabs(modifier: Modifier = Modifier) {
                 onOpenCalculator = { showCalculator = true }
             )
             1 -> TodayScreen(goal = goal)
+            2 -> CookScreen()
             else -> WorkoutScreen()
         }
     }
