@@ -66,7 +66,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
-    implementation("org.json:json:20240303")
+    testImplementation("org.json:json:20240303")
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
