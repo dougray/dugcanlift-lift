@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -60,10 +59,10 @@ import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.RoutePoint
 import com.dugcanlift.macrocalc.data.formattedDistanceMiles
 import com.dugcanlift.macrocalc.data.formattedDuration
+import com.dugcanlift.macrocalc.data.formattedElevationGainFeet
 import com.dugcanlift.macrocalc.data.formattedPace
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.max
 
@@ -111,7 +110,12 @@ fun OutdoorRecordingScreen(
     val scope = rememberCoroutineScope()
 
     var selectedActivityType by remember { mutableStateOf(activityType) }
-    var startedAtEpochMs by remember { mutableStateOf<Long?>(null) }
+    // Source of truth for "is a recording live" lives on the tracker, not
+    // here — see LocationTracker's doc comment. That's what lets a recording
+    // survive this screen being recreated while GPS keeps running.
+    val startedAtEpochMs by tracker.startedAtEpochMs.collectAsState()
+    val trackerActivityType by tracker.activityType.collectAsState()
+    val providerDisabled by tracker.providerDisabled.collectAsState()
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusNeedsSettings by remember { mutableStateOf(false) }
@@ -124,21 +128,30 @@ fun OutdoorRecordingScreen(
     fun refreshPermissions() {
         hasFineLocation = hasFineLocationPermission(context)
         hasBackgroundLocation = hasBackgroundLocationPermission(context)
+        // The Settings-page grant flow (see requestBackgroundLocation) has no
+        // result callback, so this is the only place that finds out the user
+        // came back with background location now granted. Without clearing
+        // the prompt here, a user who does exactly what was asked is stuck on
+        // the same "Allow / Continue without it" card with no Start button.
+        if (hasBackgroundLocation) showBackgroundPrompt = false
     }
 
     // Settings-page grants for background location have no result callback,
     // so pick the change up whenever this screen resumes.
     rememberLocationPermissionRefresher { refreshPermissions() }
 
-    val isActive = startedAtEpochMs != null
+    val isRecordingActive = startedAtEpochMs != null
+    // While a recording is active, the tracker's own activity type (set at
+    // the moment start() actually succeeded) is canonical; selectedActivityType
+    // is only meaningful for the pre-start chip selection.
+    val activeActivityType = trackerActivityType ?: selectedActivityType
     val routePoints by tracker.routePoints.collectAsState()
 
     fun startTracking() {
         showBackgroundPrompt = false
-        val started = tracker.start()
+        val started = tracker.start(selectedActivityType)
         statusNeedsSettings = false
         statusMessage = if (started) {
-            startedAtEpochMs = System.currentTimeMillis()
             null
         } else {
             "Couldn't start recording — make sure Location/GPS is turned on for this device."
@@ -167,8 +180,12 @@ fun OutdoorRecordingScreen(
                 statusNeedsSettings = true
             }
             else -> {
+                // Fully denied — commonly means Android has latched "don't
+                // ask again", so the in-app request dialog won't come back;
+                // Settings is the only remaining way out, same as the
+                // COARSE-only branch above.
                 statusMessage = "Location permission is required to record a route."
-                statusNeedsSettings = false
+                statusNeedsSettings = true
             }
         }
     }
@@ -189,16 +206,16 @@ fun OutdoorRecordingScreen(
         }
     }
 
-    LaunchedEffect(isActive) {
-        while (isActive) {
+    LaunchedEffect(isRecordingActive) {
+        while (isRecordingActive) {
             nowMs = System.currentTimeMillis()
             delay(1_000L)
         }
     }
 
-    val liveActivity = if (isActive) {
+    val liveActivity = if (isRecordingActive) {
         OutdoorActivity(
-            activityType = selectedActivityType,
+            activityType = activeActivityType,
             startedAtEpochMs = startedAtEpochMs!!,
             endedAtEpochMs = nowMs,
             distanceMeters = OutdoorActivityMath.totalDistanceMeters(routePoints),
@@ -215,7 +232,7 @@ fun OutdoorRecordingScreen(
         Text(text = "Record a route", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (!isActive) {
+        if (!isRecordingActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutdoorActivityType.entries.forEach { option ->
                     FilterChip(
@@ -231,11 +248,11 @@ fun OutdoorRecordingScreen(
         RoutePolylineCanvas(routePoints = routePoints, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (isActive && liveActivity != null) {
-            StatRow(label = "Time", value = liveActivity.formattedDuration())
-            StatRow(label = "Distance", value = liveActivity.formattedDistanceMiles())
-            StatRow(label = "Pace", value = liveActivity.formattedPace())
-            StatRow(label = "Elevation", value = liveActivity.formattedElevationGainFeet())
+        if (isRecordingActive && liveActivity != null) {
+            OutdoorStatRow(label = "Time", value = liveActivity.formattedDuration())
+            OutdoorStatRow(label = "Distance", value = liveActivity.formattedDistanceMiles())
+            OutdoorStatRow(label = "Pace", value = liveActivity.formattedPace())
+            OutdoorStatRow(label = "Elevation", value = liveActivity.formattedElevationGainFeet())
             if (!hasBackgroundLocation) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -243,6 +260,14 @@ fun OutdoorRecordingScreen(
                         "your phone or switch apps.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (providerDisabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "GPS turned off — turn Location back on to keep recording this route.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
         }
@@ -297,12 +322,11 @@ fun OutdoorRecordingScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        if (isActive) {
+        if (isRecordingActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
                     onClick = {
                         tracker.stop()
-                        startedAtEpochMs = null
                         onDiscard()
                     },
                     modifier = Modifier.weight(1f)
@@ -311,11 +335,14 @@ fun OutdoorRecordingScreen(
                 }
                 Button(
                     onClick = {
-                        tracker.stop()
+                        // Capture the tracker's own start time/type before
+                        // stop() clears them.
                         val start = startedAtEpochMs
+                        val finishedActivityType = activeActivityType
+                        tracker.stop()
                         if (start != null) {
                             val finished = OutdoorActivity(
-                                activityType = selectedActivityType,
+                                activityType = finishedActivityType,
                                 startedAtEpochMs = start,
                                 endedAtEpochMs = System.currentTimeMillis(),
                                 distanceMeters = OutdoorActivityMath.totalDistanceMeters(routePoints),
@@ -324,7 +351,6 @@ fun OutdoorRecordingScreen(
                             )
                             scope.launch {
                                 repository.save(finished)
-                                startedAtEpochMs = null
                                 onFinished(finished)
                             }
                         }
@@ -342,8 +368,9 @@ fun OutdoorRecordingScreen(
     }
 }
 
+/** Shared by [OutdoorRecordingScreen] (live) and `OutdoorReviewScreen` (finished route). */
 @Composable
-private fun StatRow(label: String, value: String) {
+internal fun OutdoorStatRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -413,7 +440,7 @@ internal fun RoutePolylineCanvas(
  * a non-square aspect). A minimum span guards against a division blow-up
  * when every fix so far is nearly the same point (e.g. right after Start).
  */
-private fun projectRoutePoints(points: List<RoutePoint>, drawableDimension: Float): List<Offset> {
+internal fun projectRoutePoints(points: List<RoutePoint>, drawableDimension: Float): List<Offset> {
     val avgLatRadians = Math.toRadians(points.map { it.latitude }.average())
     val lonScale = cos(avgLatRadians)
 
@@ -433,8 +460,8 @@ private fun projectRoutePoints(points: List<RoutePoint>, drawableDimension: Floa
     val drawable = drawableDimension - (padding * 2f)
 
     return points.map { point ->
-        val nx = ((point.longitude * lonScale - minX) - (span - spanX) / 2) / span
-        val ny = ((point.latitude - minY) - (span - spanY) / 2) / span
+        val nx = ((point.longitude * lonScale - minX) + (span - spanX) / 2) / span
+        val ny = ((point.latitude - minY) + (span - spanY) / 2) / span
         Offset(
             x = padding + (nx * drawable).toFloat(),
             // Screen Y grows downward; latitude grows northward, so flip.
@@ -445,13 +472,6 @@ private fun projectRoutePoints(points: List<RoutePoint>, drawableDimension: Floa
 
 /** ~11m at the equator — keeps a nearly-stationary route from a wild zoom. */
 private const val MIN_SPAN_DEGREES = 0.0001
-
-internal fun OutdoorActivity.formattedElevationGainFeet(): String {
-    val feet = elevationGainMeters * METERS_TO_FEET
-    return String.format(Locale.US, "%.0f ft gain", feet)
-}
-
-private const val METERS_TO_FEET = 3.280839895
 
 /* ---------- permission plumbing ---------- */
 

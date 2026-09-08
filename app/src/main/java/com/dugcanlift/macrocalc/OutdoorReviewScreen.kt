@@ -29,6 +29,7 @@ import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.formattedDistanceMiles
 import com.dugcanlift.macrocalc.data.formattedDuration
+import com.dugcanlift.macrocalc.data.formattedElevationGainFeet
 import com.dugcanlift.macrocalc.data.formattedPace
 import kotlinx.coroutines.launch
 
@@ -99,10 +100,10 @@ fun OutdoorReviewScreen(
         RoutePolylineCanvas(routePoints = currentActivity.routePoints, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(16.dp))
 
-        StatRow(label = "Time", value = currentActivity.formattedDuration())
-        StatRow(label = "Distance", value = currentActivity.formattedDistanceMiles())
-        StatRow(label = "Pace", value = currentActivity.formattedPace())
-        StatRow(label = "Elevation", value = currentActivity.formattedElevationGainFeet())
+        OutdoorStatRow(label = "Time", value = currentActivity.formattedDuration())
+        OutdoorStatRow(label = "Distance", value = currentActivity.formattedDistanceMiles())
+        OutdoorStatRow(label = "Pace", value = currentActivity.formattedPace())
+        OutdoorStatRow(label = "Elevation", value = currentActivity.formattedElevationGainFeet())
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -158,16 +159,4 @@ fun OutdoorReviewScreen(
             }
         }
     }
-}
-
-@Composable
-private fun StatRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label, style = MaterialTheme.typography.bodyLarge)
-        Text(text = value, style = MaterialTheme.typography.bodyLarge)
-    }
-    Spacer(modifier = Modifier.height(4.dp))
 }

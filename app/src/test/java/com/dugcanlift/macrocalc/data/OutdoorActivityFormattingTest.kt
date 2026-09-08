@@ -8,12 +8,14 @@ class OutdoorActivityFormattingTest {
     private fun activity(
         distanceMeters: Double = 0.0,
         startedAtEpochMs: Long = 0L,
-        endedAtEpochMs: Long? = null
+        endedAtEpochMs: Long? = null,
+        elevationGainMeters: Double = 0.0
     ) = OutdoorActivity(
         activityType = OutdoorActivityType.RUN,
         startedAtEpochMs = startedAtEpochMs,
         endedAtEpochMs = endedAtEpochMs,
-        distanceMeters = distanceMeters
+        distanceMeters = distanceMeters,
+        elevationGainMeters = elevationGainMeters
     )
 
     // formattedDuration()
@@ -90,5 +92,20 @@ class OutdoorActivityFormattingTest {
     fun `formattedDistanceMiles formats zero distance as a real value not a placeholder`() {
         val a = activity(distanceMeters = 0.0)
         assertEquals("0.00 mi", a.formattedDistanceMiles())
+    }
+
+    // formattedElevationGainFeet()
+
+    @Test
+    fun `formattedElevationGainFeet converts meters to feet and rounds to a whole number`() {
+        // 100m * 3.280839895 ft/m = 328.0839895 ft
+        val a = activity(elevationGainMeters = 100.0)
+        assertEquals("328 ft gain", a.formattedElevationGainFeet())
+    }
+
+    @Test
+    fun `formattedElevationGainFeet formats zero gain as a real value not a placeholder`() {
+        val a = activity(elevationGainMeters = 0.0)
+        assertEquals("0 ft gain", a.formattedElevationGainFeet())
     }
 }

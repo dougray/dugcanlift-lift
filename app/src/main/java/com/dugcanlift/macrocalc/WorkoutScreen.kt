@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +74,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val routineRepo = remember { RoutineRepository.get(context) }
     val settings = remember { SettingsStore.get(context) }
     val outdoorRepo = remember { OutdoorActivityRepository.get(context) }
+    val tracker = remember { LocationTracker.get(context) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -89,23 +92,70 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
     // Full-screen takeovers for recording/reviewing a Run or Hike, following the
     // same state-based screen-swap pattern MainActivity uses for showCalculator
-    // (no NavController anywhere in this app).
-    var recordingActivityType by remember { mutableStateOf<OutdoorActivityType?>(null) }
-    var reviewingActivity by remember { mutableStateOf<OutdoorActivity?>(null) }
-    var showAllOutdoorHistory by remember { mutableStateOf(false) }
+    // (no NavController anywhere in this app). rememberSaveable (not plain
+    // remember) so this state — and therefore which full-screen takeover is
+    // showing — survives a bottom-tab switch (WorkoutScreen is one branch of
+    // MainActivity's `when(selectedTab)` and gets fully disposed by the
+    // others) or a process restart, instead of silently resetting to the
+    // normal Train tab while GPS keeps recording underneath with no UI
+    // showing it (see C-2 in the final-review fix wave).
+    var recordingActivityType by rememberSaveable { mutableStateOf<OutdoorActivityType?>(null) }
+    var reviewingActivityId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAllOutdoorHistory by rememberSaveable { mutableStateOf(false) }
+    var showDiscardRecordingConfirmation by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = recordingActivityType != null || reviewingActivity != null) {
-        if (reviewingActivity != null) reviewingActivity = null else recordingActivityType = null
+    val reviewingActivity = outdoorActivities.find { it.id == reviewingActivityId }
+
+    // Belt-and-braces on top of the rememberSaveable fix above: the tracker's
+    // own isRecording/activityType are the ultimate source of truth for "is
+    // there a live recording", so even if recordingActivityType were ever
+    // lost some other way, GPS-active still implies the recording screen
+    // stays visible instead of orphaning the foreground service.
+    val isTrackerRecording by tracker.isRecording.collectAsState()
+    val trackerActivityType by tracker.activityType.collectAsState()
+    val effectiveRecordingType = recordingActivityType
+        ?: trackerActivityType.takeIf { isTrackerRecording }
+
+    BackHandler(enabled = effectiveRecordingType != null || reviewingActivity != null) {
+        when {
+            reviewingActivity != null -> reviewingActivityId = null
+            isTrackerRecording -> showDiscardRecordingConfirmation = true
+            else -> recordingActivityType = null
+        }
     }
 
-    if (recordingActivityType != null) {
+    if (showDiscardRecordingConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardRecordingConfirmation = false },
+            title = { Text("Discard this run?") },
+            text = {
+                Text("Recording is still in progress. Going back will stop it and discard the route.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    tracker.stop()
+                    recordingActivityType = null
+                    showDiscardRecordingConfirmation = false
+                }) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardRecordingConfirmation = false }) {
+                    Text("Keep recording")
+                }
+            }
+        )
+    }
+
+    if (effectiveRecordingType != null) {
         OutdoorRecordingScreen(
-            activityType = recordingActivityType!!,
+            activityType = effectiveRecordingType,
             modifier = modifier,
             onDiscard = { recordingActivityType = null },
             onFinished = { finished ->
                 recordingActivityType = null
-                reviewingActivity = finished
+                reviewingActivityId = finished.id
             }
         )
         return
@@ -115,8 +165,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         OutdoorReviewScreen(
             activity = activity,
             modifier = modifier,
-            onDiscard = { reviewingActivity = null },
-            onDone = { reviewingActivity = null }
+            onDiscard = { reviewingActivityId = null },
+            onDone = { reviewingActivityId = null }
         )
         return
     }
@@ -191,7 +241,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
             visibleOutdoorActivities.forEach { activity ->
                 OutdoorActivityRow(
                     activity = activity,
-                    onClick = { reviewingActivity = activity }
+                    onClick = { reviewingActivityId = activity.id }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
