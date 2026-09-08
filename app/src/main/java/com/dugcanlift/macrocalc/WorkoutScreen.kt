@@ -1,5 +1,7 @@
 package com.dugcanlift.macrocalc
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.LoggedExercise
+import com.dugcanlift.macrocalc.data.OutdoorActivity
+import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
+import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.Routine
 import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.SettingsStore
@@ -41,6 +46,8 @@ import com.dugcanlift.macrocalc.data.WorkoutRepository
 import com.dugcanlift.macrocalc.data.WorkoutSession
 import com.dugcanlift.macrocalc.data.WorkoutSet
 import com.dugcanlift.macrocalc.data.byFolder
+import com.dugcanlift.macrocalc.data.formattedDistanceMiles
+import com.dugcanlift.macrocalc.data.formattedDuration
 import com.dugcanlift.macrocalc.data.knownEquipment
 import com.dugcanlift.macrocalc.data.knownExercises
 import com.dugcanlift.macrocalc.data.lastPerformed
@@ -55,29 +62,71 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
+/** How many recent outdoor activities show before "See all" is needed. */
+private const val OUTDOOR_HISTORY_PREVIEW_COUNT = 3
+
 @Composable
 fun WorkoutScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val workouts = remember { WorkoutRepository.get(context) }
     val routineRepo = remember { RoutineRepository.get(context) }
     val settings = remember { SettingsStore.get(context) }
+    val outdoorRepo = remember { OutdoorActivityRepository.get(context) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         workouts.load()
         routineRepo.load()
+        outdoorRepo.load()
     }
 
     val sessions by workouts.sessions.collectAsState()
     val routines by routineRepo.routines.collectAsState()
+    val outdoorActivities by outdoorRepo.activities.collectAsState()
 
     var selectedDate by remember { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
+
+    // Full-screen takeovers for recording/reviewing a Run or Hike, following the
+    // same state-based screen-swap pattern MainActivity uses for showCalculator
+    // (no NavController anywhere in this app).
+    var recordingActivityType by remember { mutableStateOf<OutdoorActivityType?>(null) }
+    var reviewingActivity by remember { mutableStateOf<OutdoorActivity?>(null) }
+    var showAllOutdoorHistory by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = recordingActivityType != null || reviewingActivity != null) {
+        if (reviewingActivity != null) reviewingActivity = null else recordingActivityType = null
+    }
+
+    if (recordingActivityType != null) {
+        OutdoorRecordingScreen(
+            modifier = modifier,
+            onDiscard = { recordingActivityType = null },
+            onFinished = { finished ->
+                recordingActivityType = null
+                reviewingActivity = finished
+            }
+        )
+        return
+    }
+
+    reviewingActivity?.let { activity ->
+        OutdoorReviewScreen(
+            activity = activity,
+            modifier = modifier,
+            onDiscard = { reviewingActivity = null },
+            onDone = { reviewingActivity = null }
+        )
+        return
+    }
 
     val daysSessions = sessions.sessionsForDate(selectedDate)
     val known = remember(sessions) { sessions.knownExercises() }
     val equipmentOptions = remember(sessions) {
         (sessions.knownEquipment() + COMMON_EQUIPMENT).distinctBy { it.lowercase(Locale.US) }
+    }
+    val sortedOutdoorActivities = remember(outdoorActivities) {
+        outdoorActivities.sortedByDescending { it.startedAtEpochMs }
     }
 
     Column(
@@ -109,6 +158,52 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                     },
                     label = { Text(option.label) }
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(text = "Outdoor", style = MaterialTheme.typography.labelLarge)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = { recordingActivityType = OutdoorActivityType.RUN },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Start Run")
+            }
+            Button(
+                onClick = { recordingActivityType = OutdoorActivityType.HIKE },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Start Hike")
+            }
+        }
+
+        if (sortedOutdoorActivities.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            val visibleOutdoorActivities = if (showAllOutdoorHistory) {
+                sortedOutdoorActivities
+            } else {
+                sortedOutdoorActivities.take(OUTDOOR_HISTORY_PREVIEW_COUNT)
+            }
+            visibleOutdoorActivities.forEach { activity ->
+                OutdoorActivityRow(
+                    activity = activity,
+                    onClick = { reviewingActivity = activity }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            if (sortedOutdoorActivities.size > OUTDOOR_HISTORY_PREVIEW_COUNT) {
+                TextButton(onClick = { showAllOutdoorHistory = !showAllOutdoorHistory }) {
+                    Text(
+                        if (showAllOutdoorHistory) {
+                            "Show less"
+                        } else {
+                            "See all (${sortedOutdoorActivities.size})"
+                        }
+                    )
+                }
             }
         }
 
@@ -192,6 +287,46 @@ private fun RoutineCard(
         }
     }
 }
+
+@Composable
+private fun OutdoorActivityRow(
+    activity: OutdoorActivity,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = activity.activityType.displayName, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = outdoorActivityDateLabel(activity.startedAtEpochMs),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(text = activity.formattedDistanceMiles(), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = activity.formattedDuration(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun outdoorActivityDateLabel(startedAtEpochMs: Long): String =
+    SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(startedAtEpochMs))
 
 @Composable
 private fun SessionCard(
