@@ -1,6 +1,8 @@
 package com.dugcanlift.macrocalc.data
 
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
 
@@ -29,12 +31,20 @@ object PlanImporter {
         return if (parts.isEmpty()) "Nothing to import" else parts.joinToString(", ")
     }
 
+    /** A validated (recipeIndex-resolved) meal, ready to write with no further I/O or lookups. */
+    private data class ValidMeal(val recipe: Recipe, val date: String, val meal: Meal, val servings: Double)
+
+    /** A validated (workoutIndex-resolved) session, ready to write with no further I/O or lookups. */
+    private data class ValidSession(val routine: Routine, val workoutName: String, val date: String)
+
     suspend fun accept(payload: PlanPayload, context: Context): PlanImportResult {
         val hash = sha256(payload.rawJson)
         val importedStore = ImportedPlanStore.get(context)
         if (importedStore.contains(hash)) return PlanImportResult.AlreadyImported
 
-        // Build every record first — no partial accept if something here throws.
+        // --- Pass 1: build and validate everything in memory. No repository writes here —
+        // if anything throws, nothing has been persisted yet ("no partial accept"). ---
+
         val recipes = payload.recipes.map { pr ->
             Recipe(
                 name = pr.name,
@@ -45,23 +55,15 @@ object PlanImporter {
             )
         }
 
-        val recipeRepo = RecipeRepository.get(context)
-        val routineRepo = RoutineRepository.get(context)
-        val sessionRepo = ScheduledSessionRepository.get(context)
-
-        recipes.forEach { recipeRepo.addRecipe(it) }
-
-        var mealCount = 0
-        payload.meals.forEach { pm ->
-            payload.recipes.getOrNull(pm.recipeIndex) ?: return@forEach
-            val savedRecipe = recipes.getOrNull(pm.recipeIndex) ?: return@forEach
-            recipeRepo.plan(
+        val validMeals = payload.meals.mapNotNull { pm ->
+            payload.recipes.getOrNull(pm.recipeIndex) ?: return@mapNotNull null
+            val savedRecipe = recipes.getOrNull(pm.recipeIndex) ?: return@mapNotNull null
+            ValidMeal(
                 recipe = savedRecipe,
                 date = pm.date,
                 meal = mealSlotToMeal(pm.mealSlot),
                 servings = pm.servings
             )
-            mealCount++
         }
 
         val routines = payload.workouts.map { pw ->
@@ -70,23 +72,34 @@ object PlanImporter {
                 exercises = pw.exercises.map { pe -> toRoutineExercise(pe) }
             )
         }
-        routines.forEach { routineRepo.save(it) }
 
-        var sessionCount = 0
-        payload.sessions.forEach { ps ->
-            val workout = payload.workouts.getOrNull(ps.workoutIndex) ?: return@forEach
-            val routine = routines.getOrNull(ps.workoutIndex) ?: return@forEach
-            sessionRepo.add(ScheduledSession(routineId = routine.id, routineName = workout.name, date = ps.date))
-            sessionCount++
+        val validSessions = payload.sessions.mapNotNull { ps ->
+            val workout = payload.workouts.getOrNull(ps.workoutIndex) ?: return@mapNotNull null
+            val routine = routines.getOrNull(ps.workoutIndex) ?: return@mapNotNull null
+            ValidSession(routine = routine, workoutName = workout.name, date = ps.date)
         }
 
+        // --- Pass 2: everything above built successfully — now write it all. ---
+
+        val recipeRepo = RecipeRepository.get(context)
+        val routineRepo = RoutineRepository.get(context)
+        val sessionRepo = ScheduledSessionRepository.get(context)
+
+        recipes.forEach { recipeRepo.addRecipe(it) }
+        validMeals.forEach { vm ->
+            recipeRepo.plan(recipe = vm.recipe, date = vm.date, meal = vm.meal, servings = vm.servings)
+        }
+        routines.forEach { routineRepo.save(it) }
+        validSessions.forEach { vs ->
+            sessionRepo.add(ScheduledSession(routineId = vs.routine.id, routineName = vs.workoutName, date = vs.date))
+        }
         importedStore.add(hash)
 
         return PlanImportResult.Imported(
             recipeCount = recipes.size,
-            mealCount = mealCount,
+            mealCount = validMeals.size,
             routineCount = routines.size,
-            sessionCount = sessionCount
+            sessionCount = validSessions.size
         )
     }
 
@@ -123,12 +136,19 @@ object PlanImporter {
 class ImportedPlanStore private constructor(context: Context) {
     private val file = File(context.applicationContext.filesDir, "imported_plans.json")
 
-    fun contains(hash: String): Boolean = read().contains(hash)
+    suspend fun contains(hash: String): Boolean = withContext(Dispatchers.IO) {
+        read().contains(hash)
+    }
 
-    fun add(hash: String) {
+    suspend fun add(hash: String) = withContext(Dispatchers.IO) {
         val updated = read() + hash
+        write(updated)
+    }
+
+    @Synchronized
+    private fun write(hashes: Set<String>) {
         val temp = File(file.parentFile, "imported_plans.json.tmp")
-        temp.writeText(org.json.JSONArray(updated.toList()).toString())
+        temp.writeText(org.json.JSONArray(hashes.toList()).toString())
         temp.renameTo(file)
     }
 

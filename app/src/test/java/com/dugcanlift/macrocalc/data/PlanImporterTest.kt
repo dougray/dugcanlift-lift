@@ -77,5 +77,46 @@ class PlanImporterTest {
         val second = PlanImporter.accept(payload, context)
         assertEquals(PlanImportResult.AlreadyImported, second)
         assertEquals(1, RoutineRepository.get(context).routines.value.size)
+        assertEquals(1, RecipeRepository.get(context).recipes.value.size)
+        assertEquals(1, RecipeRepository.get(context).plan.value.size)
+        assertEquals(1, ScheduledSessionRepository.get(context).sessions.value.size)
+    }
+
+    @Test
+    fun `mostCommon breaks a genuine tie by first occurrence`() = runTest {
+        // Four sets, two distinct weights each appearing exactly twice: 100 first, then 110,
+        // then 100 again, then 110 again — a genuine tie (2 vs 2). Per the plan's global
+        // constraint, ties are broken by first occurrence, so the expected target is 100.
+        val payload = PlanPayload(
+            coachName = "Doug",
+            recipes = emptyList(),
+            meals = emptyList(),
+            workouts = listOf(
+                PlanWorkout(
+                    name = "Tie Day",
+                    exercises = listOf(
+                        PlanWorkoutExercise(
+                            name = "Bench Press",
+                            sets = listOf(
+                                PlanSet(weightLb = 100.0, reps = 5),
+                                PlanSet(weightLb = 110.0, reps = 5),
+                                PlanSet(weightLb = 100.0, reps = 5),
+                                PlanSet(weightLb = 110.0, reps = 5)
+                            )
+                        )
+                    )
+                )
+            ),
+            sessions = emptyList(),
+            rawJson = """{"v":1,"t":"plan","l":"x","n":"Doug","test":"tie-payload-1"}"""
+        )
+
+        val result = PlanImporter.accept(payload, context)
+        assertTrue(result is PlanImportResult.Imported)
+
+        val routine = RoutineRepository.get(context).routines.value.first()
+        val exercise = routine.exercises.first()
+        assertEquals(4, exercise.targetSets)
+        assertEquals(100.0, exercise.targetWeightLb) // tie between 100 and 110 (2 each) -> first occurrence wins
     }
 }
