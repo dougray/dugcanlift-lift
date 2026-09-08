@@ -1,6 +1,8 @@
 package com.dugcanlift.macrocalc.data
 
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseRouteResult
 import androidx.health.connect.client.records.ExerciseSessionRecord
@@ -38,31 +40,45 @@ class HealthConnectManagerTest {
         type: OutdoorActivityType = OutdoorActivityType.RUN,
         start: Long = 1_000L,
         end: Long? = 10_000L,
-        points: List<RoutePoint> = emptyList()
+        points: List<RoutePoint> = emptyList(),
+        distanceMeters: Double = 0.0,
+        elevationGainMeters: Double = 0.0,
+        healthConnectRecordId: String? = null
     ) = OutdoorActivity(
         activityType = type,
         startedAtEpochMs = start,
         endedAtEpochMs = end,
-        routePoints = points
+        routePoints = points,
+        distanceMeters = distanceMeters,
+        elevationGainMeters = elevationGainMeters,
+        healthConnectRecordId = healthConnectRecordId
     )
 
     @Test
-    fun `write permissions cover exercise session and exercise route separately`() {
+    fun `write permissions cover exercise session, route, distance, and elevation gain separately`() {
         assertEquals(
             setOf(
                 HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-                HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE
+                HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE,
+                HealthPermission.getWritePermission(DistanceRecord::class),
+                HealthPermission.getWritePermission(ElevationGainedRecord::class)
             ),
             HealthConnectManager.writePermissions
         )
     }
 
     @Test
-    fun `permissions to request bundle read, write, and history permissions`() {
+    fun `permissions to request bundle read and history permissions but not write permissions`() {
+        // I-6 (final-review fix wave): permissionsToRequest backs
+        // DashboardScreen's unconditional first-launch prompt, so it must
+        // never include write-exercise-route consent — that has to stay an
+        // on-demand request at OutdoorReviewScreen's actual point of use, not
+        // something a user is asked for before they have even tried the
+        // outdoor-recording feature.
         val requested = HealthConnectManager.permissionsToRequest
         assertTrue(requested.containsAll(HealthConnectManager.permissions))
-        assertTrue(requested.containsAll(HealthConnectManager.writePermissions))
         assertTrue(requested.contains(HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY))
+        assertTrue(requested.none { it in HealthConnectManager.writePermissions })
     }
 
     @Test
@@ -122,5 +138,47 @@ class HealthConnectManagerTest {
     fun `title is the activity type's display name`() {
         assertEquals("Run", buildExerciseSessionRecord(activity(type = OutdoorActivityType.RUN)).title)
         assertEquals("Hike", buildExerciseSessionRecord(activity(type = OutdoorActivityType.HIKE)).title)
+    }
+
+    // buildExerciseRecords() — I-5 in the final-review fix wave: distance and
+    // elevation gain get their own companion records alongside the session.
+
+    @Test
+    fun `exercise records batch puts the session record first`() {
+        val records = buildExerciseRecords(activity())
+        assertEquals(3, records.size)
+        assertTrue(records[0] is ExerciseSessionRecord)
+    }
+
+    @Test
+    fun `distance record carries the activity's total distance`() {
+        val records = buildExerciseRecords(activity(distanceMeters = 5_000.0))
+        val distance = records.filterIsInstance<DistanceRecord>().single()
+        assertEquals(5_000.0, distance.distance.inMeters, 0.001)
+    }
+
+    @Test
+    fun `elevation record carries the activity's elevation gain`() {
+        val records = buildExerciseRecords(activity(elevationGainMeters = 42.0))
+        val elevation = records.filterIsInstance<ElevationGainedRecord>().single()
+        assertEquals(42.0, elevation.elevation.inMeters, 0.001)
+    }
+
+    @Test
+    fun `companion records share the session record's exact time window`() {
+        // A route point landing on the session's own end time nudges the
+        // session's endTime forward (see the test above) — the companion
+        // records must follow that adjustment, not the raw activity times.
+        val points = listOf(point(t = 2_000L), point(t = 10_000L))
+        val records = buildExerciseRecords(activity(end = 10_000L, points = points))
+
+        val session = records.filterIsInstance<ExerciseSessionRecord>().single()
+        val distance = records.filterIsInstance<DistanceRecord>().single()
+        val elevation = records.filterIsInstance<ElevationGainedRecord>().single()
+
+        assertEquals(session.startTime, distance.startTime)
+        assertEquals(session.endTime, distance.endTime)
+        assertEquals(session.startTime, elevation.startTime)
+        assertEquals(session.endTime, elevation.endTime)
     }
 }

@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
@@ -39,25 +42,38 @@ object HealthConnectManager {
 
     /**
      * Write permissions needed to export an [OutdoorActivity] as an exercise
-     * session with its route attached. Route data requires its own grant
-     * (PERMISSION_WRITE_EXERCISE_ROUTE) on top of the exercise-session write
-     * permission — Health Connect treats "log a workout" and "log where the
-     * user was" as separate consents, and rejects the entire insert if the
-     * route permission is not granted.
+     * session with its route, distance, and elevation gain attached. Route
+     * data requires its own grant (PERMISSION_WRITE_EXERCISE_ROUTE) on top of
+     * the exercise-session write permission — Health Connect treats "log a
+     * workout" and "log where the user was" as separate consents, and
+     * rejects the entire insert if the route permission is not granted.
+     * Distance and elevation gain are likewise their own record types
+     * ([DistanceRecord], [ElevationGainedRecord]) with their own write
+     * permissions, since [ExerciseSessionRecord] itself carries neither
+     * field.
      */
     val writePermissions: Set<String> = setOf(
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-        HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE
+        HealthPermission.PERMISSION_WRITE_EXERCISE_ROUTE,
+        HealthPermission.getWritePermission(DistanceRecord::class),
+        HealthPermission.getWritePermission(ElevationGainedRecord::class)
     )
 
     /**
-     * What the grant sheet asks for. History is bundled in but deliberately
-     * kept out of [permissions]: it is what lets a step history reach further
-     * back than 30 days, and someone who declines it should still count as
-     * connected rather than being nagged forever.
+     * What the grant sheet asks for at the read-only step-count call site
+     * ([DashboardScreen]'s first-launch prompt). Deliberately does NOT
+     * include [writePermissions]: those cover write-exercise-route consent,
+     * which must only ever be requested at the point of use
+     * (`OutdoorReviewScreen`'s on-demand request), never on an unrelated
+     * first launch with no user gesture behind it (I-6 in the final-review
+     * fix wave — this was accidentally widened to include write permissions
+     * during Task 5). History is bundled in but deliberately kept out of
+     * [permissions]: it is what lets a step history reach further back than
+     * 30 days, and someone who declines it should still count as connected
+     * rather than being nagged forever.
      */
     val permissionsToRequest: Set<String> =
-        permissions + writePermissions + HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
+        permissions + HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 
     fun isAvailable(context: Context): Boolean =
         HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
@@ -76,8 +92,18 @@ object HealthConnectManager {
 
     /**
      * Exports a finished [OutdoorActivity] to Health Connect as an
-     * [ExerciseSessionRecord] with its GPS route attached, and returns the
-     * inserted record's id.
+     * [ExerciseSessionRecord] with its GPS route, distance, and elevation
+     * gain attached, and returns the session record's id.
+     *
+     * Distance and elevation gain have no home on [ExerciseSessionRecord]
+     * itself (that type carries neither field), so a companion
+     * [DistanceRecord] and [ElevationGainedRecord] covering the same
+     * start/end window are inserted in the same [HealthConnectClient.insertRecords]
+     * call — matching what iOS writes today. The session record is always
+     * first in that list, so its id is always `recordIdsList.first()`; the
+     * companion records' ids are not returned since nothing on
+     * [OutdoorActivity] tracks them (only the session id backs
+     * [OutdoorActivity.healthConnectRecordId]'s idempotency check).
      *
      * Returns null on any failure: Health Connect unavailable on this
      * device, [writePermissions] not granted, or the insert call itself
@@ -89,17 +115,20 @@ object HealthConnectManager {
      * site) — so a caller lacking the write grant should route the user
      * through that launcher first, then retry the export.
      *
-     * Callers must check [OutdoorActivity.healthConnectRecordId] is null
-     * before calling this — it always attempts a fresh insert.
+     * Guards [OutdoorActivity.healthConnectRecordId] internally rather than
+     * relying solely on the caller to check first (matching
+     * `HealthKitManager.swift`'s internal guard) — cheap defense in depth
+     * against a double-export.
      */
     suspend fun exportOutdoorActivity(context: Context, activity: OutdoorActivity): String? {
+        if (activity.healthConnectRecordId != null) return null
         if (activity.endedAtEpochMs == null) return null
         if (!isAvailable(context)) return null
         if (!hasWritePermission(context)) return null
 
         val client = HealthConnectClient.getOrCreate(context)
-        val record = try {
-            buildExerciseSessionRecord(activity)
+        val records = try {
+            buildExerciseRecords(activity)
         } catch (e: IllegalArgumentException) {
             // Malformed activity data (e.g. a start/end pair that can't form
             // a valid interval) must not crash the export flow.
@@ -107,7 +136,8 @@ object HealthConnectManager {
         }
 
         return try {
-            client.insertRecords(listOf(record)).recordIdsList.firstOrNull()
+            // records[0] is always the ExerciseSessionRecord — see buildExerciseRecords.
+            client.insertRecords(records).recordIdsList.firstOrNull()
         } catch (e: Exception) {
             // SecurityException (permission revoked between the check above
             // and the call), RemoteException, IOException, IllegalStateException
@@ -265,4 +295,42 @@ internal fun buildExerciseSessionRecord(activity: OutdoorActivity): ExerciseSess
         title = activity.activityType.displayName,
         exerciseRoute = route
     )
+}
+
+/**
+ * Builds every Health Connect record [HealthConnectManager.exportOutdoorActivity]
+ * inserts for [activity] in one batch: the [ExerciseSessionRecord] (always
+ * first — callers rely on that ordering to recover the session's own record
+ * id from `insertRecords(...).recordIdsList`), plus a companion
+ * [DistanceRecord] and [ElevationGainedRecord] (I-5 in the final-review fix
+ * wave — [ExerciseSessionRecord] itself has no distance/elevation fields).
+ *
+ * The companion records reuse the session record's own (possibly
+ * route-nudged) start/end instants and zone offsets rather than recomputing
+ * them, so all three records describe exactly the same time window and their
+ * `startTime.isBefore(endTime)` validation is automatically satisfied by
+ * [ExerciseSessionRecord]'s own identical requirement.
+ */
+internal fun buildExerciseRecords(activity: OutdoorActivity): List<Record> {
+    val session = buildExerciseSessionRecord(activity)
+    val metadata = Metadata.activelyRecorded(Device(type = Device.TYPE_PHONE))
+
+    val distance = DistanceRecord(
+        startTime = session.startTime,
+        startZoneOffset = session.startZoneOffset,
+        endTime = session.endTime,
+        endZoneOffset = session.endZoneOffset,
+        distance = activity.distanceMeters.meters,
+        metadata = metadata
+    )
+    val elevationGained = ElevationGainedRecord(
+        startTime = session.startTime,
+        startZoneOffset = session.startZoneOffset,
+        endTime = session.endTime,
+        endZoneOffset = session.endZoneOffset,
+        elevation = activity.elevationGainMeters.meters,
+        metadata = metadata
+    )
+
+    return listOf<Record>(session, distance, elevationGained)
 }
