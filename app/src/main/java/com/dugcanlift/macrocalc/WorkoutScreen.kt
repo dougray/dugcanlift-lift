@@ -119,7 +119,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        scheduledSessions.onDate(todayKey()).forEach { session ->
+        scheduledSessions.onDate(selectedDate).forEach { session ->
             val scheduledRoutine = routines.firstOrNull { it.id == session.routineId }
             Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Row(
