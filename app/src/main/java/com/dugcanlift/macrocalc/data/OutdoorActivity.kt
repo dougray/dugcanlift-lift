@@ -25,7 +25,7 @@ data class OutdoorActivity(
 ) {
     val durationMs: Long? get() = endedAtEpochMs?.minus(startedAtEpochMs)
 
-    /** Metres per second, or null while a duration isn't known yet. */
+    /** Seconds per metre, or null while a duration isn't known yet. */
     val averagePaceSecondsPerMeter: Double?
         get() {
             val duration = durationMs ?: return null

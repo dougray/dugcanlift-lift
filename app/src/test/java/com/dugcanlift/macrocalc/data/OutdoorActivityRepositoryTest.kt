@@ -1,8 +1,11 @@
 package com.dugcanlift.macrocalc.data
 
+import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.json.JSONArray
@@ -11,6 +14,16 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class OutdoorActivityRepositoryTest {
+
+    // Robolectric reuses its classloader's cached singleton `instance` field across test
+    // methods in this class, so leftover state from one test would otherwise leak into the
+    // next. Reset it before each test.
+    @Before
+    fun resetSingleton() {
+        val field = OutdoorActivityRepository::class.java.getDeclaredField("instance")
+        field.isAccessible = true
+        field.set(null, null)
+    }
 
     // Test 1: JSON round-trip with route points intact
     @Test
@@ -102,15 +115,22 @@ class OutdoorActivityRepositoryTest {
         assertEquals(0, restored.routePoints.size)
     }
 
-    // Test 3: Save logic - appends new and replaces existing (simulating repository behavior with JSON)
+    // Test 3: Save logic - appends new and replaces existing, exercised against the real repository
     @Test
-    fun `repository save logic appends on new id and replaces on existing id`() {
+    fun `repository save appends on new id and replaces on existing id`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val repo = OutdoorActivityRepository.get(context)
+
         val activity1 = OutdoorActivity(
             id = "activity-1",
             activityType = OutdoorActivityType.RUN,
             startedAtEpochMs = 1000L,
             distanceMeters = 1000.0
         )
+        repo.save(activity1)
+        assertEquals(1, repo.activities.value.size)
+        assertEquals("activity-1", repo.activities.value[0].id)
+        assertEquals(1000.0, repo.activities.value[0].distanceMeters, 0.001)
 
         val activity2 = OutdoorActivity(
             id = "activity-2",
@@ -118,89 +138,32 @@ class OutdoorActivityRepositoryTest {
             startedAtEpochMs = 2000L,
             distanceMeters = 2000.0
         )
+        repo.save(activity2)
+        assertEquals(2, repo.activities.value.size)
+        assertTrue(repo.activities.value.any { it.id == "activity-1" })
+        assertTrue(repo.activities.value.any { it.id == "activity-2" })
 
-        // Simulate initial list
-        var activities = emptyList<OutdoorActivity>()
-
-        // Simulate save(activity1) - new id, should append
-        activities = if (activities.any { it.id == activity1.id }) {
-            activities.map { if (it.id == activity1.id) activity1 else it }
-        } else {
-            activities + activity1
-        }
-        assertEquals(1, activities.size)
-        assertEquals("activity-1", activities[0].id)
-        assertEquals(1000.0, activities[0].distanceMeters, 0.001)
-
-        // Simulate save(activity2) - different id, should append
-        activities = if (activities.any { it.id == activity2.id }) {
-            activities.map { if (it.id == activity2.id) activity2 else it }
-        } else {
-            activities + activity2
-        }
-        assertEquals(2, activities.size)
-        assertTrue(activities.any { it.id == "activity-1" })
-        assertTrue(activities.any { it.id == "activity-2" })
-
-        // Simulate save(activity1Updated) - same id, should replace not duplicate
         val activity1Updated = activity1.copy(distanceMeters = 1500.0)
-        activities = if (activities.any { it.id == activity1Updated.id }) {
-            activities.map { if (it.id == activity1Updated.id) activity1Updated else it }
-        } else {
-            activities + activity1Updated
-        }
-        assertEquals(2, activities.size) // Still 2, not 3
-        val updated = activities.first { it.id == "activity-1" }
-        assertEquals(1500.0, updated.distanceMeters, 0.001)
-
-        // Verify JSON round-trip preserves the updated state
-        val json = JSONArray().apply {
-            activities.forEach { put(it.toJson()) }
-        }
-        val restored = (0 until json.length()).map { outdoorActivityFromJson(json.getJSONObject(it)) }
-        assertEquals(2, restored.size)
-        assertEquals(1500.0, restored.first { it.id == "activity-1" }.distanceMeters, 0.001)
+        repo.save(activity1Updated)
+        assertEquals(2, repo.activities.value.size) // still 2, not 3 — replaced, not duplicated
+        assertEquals(1500.0, repo.activities.value.first { it.id == "activity-1" }.distanceMeters, 0.001)
     }
 
-    // Test 4: Delete logic - removes matching activity (simulating repository behavior)
+    // Test 4: Delete logic - removes matching activity, exercised against the real repository
     @Test
-    fun `repository delete logic removes matching activity and leaves others untouched`() {
-        val activity1 = OutdoorActivity(
-            id = "del-activity-1",
-            activityType = OutdoorActivityType.RUN,
-            startedAtEpochMs = 1000L
-        )
+    fun `repository delete removes matching activity and leaves others untouched`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val repo = OutdoorActivityRepository.get(context)
 
-        val activity2 = OutdoorActivity(
-            id = "del-activity-2",
-            activityType = OutdoorActivityType.HIKE,
-            startedAtEpochMs = 2000L
-        )
+        repo.save(OutdoorActivity(id = "del-activity-1", activityType = OutdoorActivityType.RUN, startedAtEpochMs = 1000L))
+        repo.save(OutdoorActivity(id = "del-activity-2", activityType = OutdoorActivityType.HIKE, startedAtEpochMs = 2000L))
+        repo.save(OutdoorActivity(id = "del-activity-3", activityType = OutdoorActivityType.RUN, startedAtEpochMs = 3000L))
+        assertEquals(3, repo.activities.value.size)
 
-        val activity3 = OutdoorActivity(
-            id = "del-activity-3",
-            activityType = OutdoorActivityType.RUN,
-            startedAtEpochMs = 3000L
-        )
-
-        // Simulate initial list with all three
-        var activities = listOf(activity1, activity2, activity3)
-        assertEquals(3, activities.size)
-
-        // Simulate delete("del-activity-2")
-        activities = activities.filterNot { it.id == "del-activity-2" }
-        assertEquals(2, activities.size)
-        assertTrue(activities.any { it.id == "del-activity-1" })
-        assertTrue(activities.any { it.id == "del-activity-3" })
-        assertTrue(activities.none { it.id == "del-activity-2" })
-
-        // Verify JSON round-trip after delete
-        val json = JSONArray().apply {
-            activities.forEach { put(it.toJson()) }
-        }
-        val restored = (0 until json.length()).map { outdoorActivityFromJson(json.getJSONObject(it)) }
-        assertEquals(2, restored.size)
-        assertTrue(restored.any { it.id == "del-activity-1" })
-        assertTrue(restored.any { it.id == "del-activity-3" })
+        repo.delete("del-activity-2")
+        assertEquals(2, repo.activities.value.size)
+        assertTrue(repo.activities.value.any { it.id == "del-activity-1" })
+        assertTrue(repo.activities.value.any { it.id == "del-activity-3" })
+        assertTrue(repo.activities.value.none { it.id == "del-activity-2" })
     }
 }
