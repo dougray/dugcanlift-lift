@@ -37,3 +37,6 @@ secrets.properties
 
 # Generated captures
 captures/
+
+# Claude Code worktrees
+.claude/worktrees/
