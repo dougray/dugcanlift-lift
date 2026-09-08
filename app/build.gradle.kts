@@ -66,10 +66,6 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
-    testImplementation("org.json:json:20240303")
-    testImplementation("org.robolectric:robolectric:4.16.1")
-    testImplementation("androidx.test:core:1.6.1")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
@@ -77,8 +73,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    // Declared explicitly rather than relying on it resolving transitively —
+    // androidx.lifecycle.compose.LocalLifecycleOwner (used by
+    // OutdoorRecordingScreen's permission-refresh lifecycle observer) comes
+    // from this artifact, not lifecycle-runtime-ktx.
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.health.connect.client)
     testImplementation(libs.junit)
+    testImplementation(libs.json)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
