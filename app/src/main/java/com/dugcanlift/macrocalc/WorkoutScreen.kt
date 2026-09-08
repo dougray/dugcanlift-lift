@@ -35,6 +35,7 @@ import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.LoggedExercise
 import com.dugcanlift.macrocalc.data.Routine
 import com.dugcanlift.macrocalc.data.RoutineRepository
+import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.TrainingFocus
 import com.dugcanlift.macrocalc.data.WorkoutRepository
@@ -44,6 +45,7 @@ import com.dugcanlift.macrocalc.data.byFolder
 import com.dugcanlift.macrocalc.data.knownEquipment
 import com.dugcanlift.macrocalc.data.knownExercises
 import com.dugcanlift.macrocalc.data.lastPerformed
+import com.dugcanlift.macrocalc.data.onDate
 import com.dugcanlift.macrocalc.data.sessionsForDate
 import com.dugcanlift.macrocalc.data.toRoutine
 import com.dugcanlift.macrocalc.data.toSession
@@ -61,15 +63,18 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val workouts = remember { WorkoutRepository.get(context) }
     val routineRepo = remember { RoutineRepository.get(context) }
     val settings = remember { SettingsStore.get(context) }
+    val scheduledSessionRepo = remember { ScheduledSessionRepository.get(context) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         workouts.load()
         routineRepo.load()
+        scheduledSessionRepo.load()
     }
 
     val sessions by workouts.sessions.collectAsState()
     val routines by routineRepo.routines.collectAsState()
+    val scheduledSessions by scheduledSessionRepo.sessions.collectAsState()
 
     var selectedDate by remember { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
@@ -113,6 +118,27 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        scheduledSessions.onDate(selectedDate).forEach { session ->
+            val scheduledRoutine = routines.firstOrNull { it.id == session.routineId }
+            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Coach scheduled: ${session.routineName}", modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = {
+                            scheduledRoutine?.let { routine ->
+                                scope.launch { workouts.save(routine.toSession(selectedDate)) }
+                            }
+                        },
+                        enabled = scheduledRoutine != null
+                    ) { Text("Start") }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         if (routines.isNotEmpty()) {
             Text(text = "Routines", style = MaterialTheme.typography.labelLarge)

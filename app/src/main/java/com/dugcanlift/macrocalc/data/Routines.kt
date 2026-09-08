@@ -24,6 +24,9 @@ data class RoutineExercise(
     val targetSets: Int = 3,
     val targetReps: Int? = null,
     val targetWeightLb: Double? = null,
+    val targetRpe: Double? = null,
+    val targetDurationSec: Int? = null,
+    val targetDistanceMeters: Double? = null,
     val note: String = ""
 ) {
     val displayName: String
@@ -36,6 +39,9 @@ data class RoutineExercise(
             parts += "$targetSets sets"
             targetReps?.let { parts += "x $it" }
             targetWeightLb?.let { parts += "@ ${it.toInt()} lb" }
+            targetRpe?.let { parts += "RPE ${it}" }
+            targetDurationSec?.let { parts += "${it}s" }
+            targetDistanceMeters?.let { parts += "${it.toInt()}m" }
             return parts.joinToString(" ")
         }
 }
@@ -61,6 +67,9 @@ internal fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
     put("targetSets", targetSets)
     targetReps?.let { put("targetReps", it) }
     targetWeightLb?.let { put("targetWeightLb", it) }
+    targetRpe?.let { put("targetRpe", it) }
+    targetDurationSec?.let { put("targetDurationSec", it) }
+    targetDistanceMeters?.let { put("targetDistanceMeters", it) }
     put("note", note)
 }
 
@@ -72,6 +81,11 @@ internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
     targetReps = if (o.has("targetReps") && !o.isNull("targetReps")) o.optInt("targetReps") else null,
     targetWeightLb = if (o.has("targetWeightLb") && !o.isNull("targetWeightLb"))
         o.optDouble("targetWeightLb") else null,
+    targetRpe = if (o.has("targetRpe") && !o.isNull("targetRpe")) o.optDouble("targetRpe") else null,
+    targetDurationSec = if (o.has("targetDurationSec") && !o.isNull("targetDurationSec"))
+        o.optInt("targetDurationSec") else null,
+    targetDistanceMeters = if (o.has("targetDistanceMeters") && !o.isNull("targetDistanceMeters"))
+        o.optDouble("targetDistanceMeters") else null,
     note = o.optString("note", "")
 )
 
@@ -113,7 +127,10 @@ fun Routine.toSession(date: String): WorkoutSession = WorkoutSession(
             sets = List(template.targetSets.coerceAtLeast(1)) {
                 WorkoutSet(
                     weightLb = template.targetWeightLb,
-                    reps = template.targetReps
+                    reps = template.targetReps,
+                    rpe = template.targetRpe,
+                    durationSec = template.targetDurationSec,
+                    distanceMeters = template.targetDistanceMeters
                 )
             }
         )

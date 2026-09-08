@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -14,6 +15,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -25,25 +27,45 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.dugcanlift.macrocalc.data.CoachStore
 import com.dugcanlift.macrocalc.data.GoalStore
+import com.dugcanlift.macrocalc.data.PlanDecodeResult
+import com.dugcanlift.macrocalc.data.PlanLinkCodec
 import com.dugcanlift.macrocalc.ui.theme.DugCanLiftCalcTheme
 
 class MainActivity : ComponentActivity() {
+    private val pendingPlan = mutableStateOf<PlanDecodeResult?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handlePlanIntent(intent)
         setContent {
             DugCanLiftCalcTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    AppTabs(modifier = Modifier.padding(innerPadding))
+                    AppTabs(modifier = Modifier.padding(innerPadding), pendingPlan = pendingPlan)
                 }
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Keep getIntent()/this.intent current for any other code in this Activity that reads it —
+        // without this it would keep returning the intent the Activity was originally launched with.
+        setIntent(intent)
+        handlePlanIntent(intent)
+    }
+
+    private fun handlePlanIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        val fragment = uri.fragment ?: return
+        val lifterId = CoachStore.get(this).lifterId
+        pendingPlan.value = PlanLinkCodec.decode(fragment, lifterId)
+    }
 }
 
 @Composable
-private fun AppTabs(modifier: Modifier = Modifier) {
+private fun AppTabs(modifier: Modifier = Modifier, pendingPlan: MutableState<PlanDecodeResult?>) {
     val context = LocalContext.current
     val goalStore = remember { GoalStore.get(context) }
     val coachStore = remember { CoachStore.get(context) }
@@ -56,6 +78,10 @@ private fun AppTabs(modifier: Modifier = Modifier) {
     var showCalculator by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = showCalculator) { showCalculator = false }
+
+    pendingPlan.value?.let { result ->
+        PlanPreviewDialog(result = result, onDismiss = { pendingPlan.value = null })
+    }
 
     if (showCalculator) {
         MacroCalculatorScreen(

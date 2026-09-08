@@ -353,12 +353,12 @@ private fun JSONObject.optDoubleOrNull(key: String): Double? =
 private fun JSONObject.optIntOrNull(key: String): Int? =
     if (isNull(key)) null else if (has(key)) optInt(key) else null
 
-private fun <T> JSONArray?.mapObjects(transform: (JSONObject) -> T): List<T> {
+internal fun <T> JSONArray?.mapObjects(transform: (JSONObject) -> T): List<T> {
     if (this == null) return emptyList()
     return (0 until length()).mapNotNull { optJSONObject(it) }.map(transform)
 }
 
-private fun JSONArray?.mapStrings(): List<String> {
+internal fun JSONArray?.mapStrings(): List<String> {
     if (this == null) return emptyList()
     return (0 until length()).map { optString(it, "") }.filter { it.isNotBlank() }
 }
