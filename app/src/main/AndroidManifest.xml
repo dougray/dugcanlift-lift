@@ -4,6 +4,25 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Route recording (Run/Hike). ACCESS_COARSE_LOCATION is requested
+         alongside ACCESS_FINE_LOCATION per current Android guidance, even
+         though only the fine-accuracy fix is actually used. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Lets recording continue after the phone locks or the user switches
+         apps mid-run. Android 10+ requires this to be granted from system
+         settings as a separate step after foreground location is granted —
+         see LocationTracker.kt's doc comment; the UI task that requests it
+         still needs to be built. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- API 33+: without this, LocationRecordingService still runs and still
+         records, but its ongoing notification silently never shows. Not yet
+         requested at runtime anywhere — see task-4-report.md. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Read-only: the app displays today's step count but never writes to Health Connect. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <!-- Health Connect hands out only the last 30 days without this. A coach
@@ -70,5 +89,12 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Un-bound; holds the ongoing notification required for location
+             access once a Run/Hike recording is no longer in the foreground. -->
+        <service
+            android:name=".LocationRecordingService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
     </application>
 </manifest>
