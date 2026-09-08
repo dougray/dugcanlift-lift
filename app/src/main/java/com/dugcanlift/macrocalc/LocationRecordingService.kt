@@ -3,6 +3,7 @@ package com.dugcanlift.macrocalc
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -46,21 +47,43 @@ class LocationRecordingService : Service() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    // NOT_STICKY: a restart after process death would re-post this ongoing
+    // notification with no LocationManager registration behind it (that
+    // state lives in LocationTracker, in-process, and does not survive
+    // process death) — a permanent zombie notification recording nothing.
+    // Better to let the service simply not come back; the user has to start
+    // a new recording either way.
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
 
-    private fun buildNotification(): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun buildNotification(): Notification {
+        // Turns a stranded recording (the specific failure C-2 fixes, but
+        // defense in depth for anyone who ends up there anyway) from "stuck"
+        // into "recoverable": tapping the notification brings the user back
+        // to the Train tab where the live recording screen is showing.
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(MainActivity.EXTRA_OPEN_TAB, MainActivity.TRAIN_TAB_INDEX)
+            },
+            PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
-            // Static text for now — Task 6/7 wires the live recording screen;
-            // updating this notification's text with live distance as the
-            // route accumulates is a nice-to-have left for that task, not a
-            // requirement of this one.
+            // Static text for now — updating this notification's text with
+            // live distance as the route accumulates remains a nice-to-have,
+            // not a requirement.
             .setContentText("Recording your route")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setContentIntent(contentIntent)
             .build()
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

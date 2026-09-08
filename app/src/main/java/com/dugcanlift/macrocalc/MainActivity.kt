@@ -32,24 +32,37 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Lets the ongoing route-recording notification (LocationRecordingService)
+        // bring the user back to the Train tab instead of leaving a live
+        // recording with no way back into its UI — see M-22 in the
+        // final-review fix wave.
+        val initialTab = intent?.getIntExtra(EXTRA_OPEN_TAB, -1)?.takeIf { it >= 0 }
         setContent {
             DugCanLiftCalcTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    AppTabs(modifier = Modifier.padding(innerPadding))
+                    AppTabs(modifier = Modifier.padding(innerPadding), initialTab = initialTab)
                 }
             }
         }
     }
+
+    companion object {
+        /** Int extra naming the tab index [AppTabs] should open on launch. */
+        const val EXTRA_OPEN_TAB = "com.dugcanlift.macrocalc.EXTRA_OPEN_TAB"
+
+        /** Index of the Train tab within [AppTabs]'s tab order (`titles` there), for [EXTRA_OPEN_TAB] callers. */
+        const val TRAIN_TAB_INDEX = 3
+    }
 }
 
 @Composable
-private fun AppTabs(modifier: Modifier = Modifier) {
+private fun AppTabs(modifier: Modifier = Modifier, initialTab: Int? = null) {
     val context = LocalContext.current
     val goalStore = remember { GoalStore.get(context) }
     val coachStore = remember { CoachStore.get(context) }
 
     var goal by remember { mutableStateOf(goalStore.get()) }
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab ?: 0) }
 
     // The calculator is a set-it-once screen, so it lives behind the dashboard
     // rather than taking a permanent slot in the navigation.
