@@ -42,8 +42,8 @@ object HealthConnectManager {
      * session with its route attached. Route data requires its own grant
      * (PERMISSION_WRITE_EXERCISE_ROUTE) on top of the exercise-session write
      * permission — Health Connect treats "log a workout" and "log where the
-     * user was" as separate consents, and will silently drop the route (but
-     * still insert the session) if only the former is granted.
+     * user was" as separate consents, and rejects the entire insert if the
+     * route permission is not granted.
      */
     val writePermissions: Set<String> = setOf(
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
