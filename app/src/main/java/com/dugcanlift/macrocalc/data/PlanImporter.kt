@@ -20,16 +20,23 @@ object PlanImporter {
 
     fun summarize(payload: PlanPayload): String {
         val parts = mutableListOf<String>()
-        if (payload.recipes.isNotEmpty()) parts += "${payload.recipes.size} recipe${if (payload.recipes.size == 1) "" else "s"}"
+        if (payload.recipes.isNotEmpty()) parts += pluralize(payload.recipes.size, "recipe")
+        if (payload.meals.isNotEmpty()) parts += pluralize(payload.meals.size, "meal")
         if (payload.workouts.isNotEmpty()) {
             val dayCount = payload.sessions.map { it.date }.distinct().size
             parts += if (dayCount > 0)
-                "${payload.workouts.size} workout${if (payload.workouts.size == 1) "" else "s"} scheduled for $dayCount day${if (dayCount == 1) "" else "s"} this week"
+                "${pluralize(payload.workouts.size, "workout")} scheduled across ${pluralize(dayCount, "day")}"
             else
-                "${payload.workouts.size} workout${if (payload.workouts.size == 1) "" else "s"}"
+                pluralize(payload.workouts.size, "workout")
+        } else if (payload.sessions.isNotEmpty()) {
+            // Defensive: sessions with no workout templates shouldn't be silently dropped either.
+            val dayCount = payload.sessions.map { it.date }.distinct().size
+            parts += "sessions scheduled across ${pluralize(dayCount, "day")}"
         }
         return if (parts.isEmpty()) "Nothing to import" else parts.joinToString(", ")
     }
+
+    private fun pluralize(count: Int, noun: String): String = "$count $noun${if (count == 1) "" else "s"}"
 
     /** A validated (recipeIndex-resolved) meal, ready to write with no further I/O or lookups. */
     private data class ValidMeal(val recipe: Recipe, val date: String, val meal: Meal, val servings: Double)
@@ -49,7 +56,7 @@ object PlanImporter {
             Recipe(
                 name = pr.name,
                 servings = pr.servings,
-                ingredients = pr.ingredients.map { RecipeIngredient(rawText = it) },
+                ingredients = pr.ingredients.map { IngredientParser.parse(it) },
                 steps = pr.steps,
                 nutritionPerServing = pr.nutritionPerServing
             )
@@ -110,7 +117,14 @@ object PlanImporter {
         else -> Meal.DINNER
     }
 
-    /** Reduces a possibly-ramping set list to Android's single-target shape — see plan Global Constraints. */
+    /**
+     * Reduces a possibly-ramping set list to Android's single-target shape — see plan Global Constraints.
+     *
+     * Deliberately uses most-common (not [WorkoutSession.toRoutine]'s `maxOrNull()`-for-weight) for
+     * every field: this is a *prescription*, not a record of a workout actually performed, so it
+     * should reflect what the coach literally wrote as a set rather than synthesizing an untested
+     * weight/rep combination from the extremes.
+     */
     private fun toRoutineExercise(pe: PlanWorkoutExercise): RoutineExercise {
         fun <T> mostCommon(values: List<T?>): T? =
             values.filterNotNull().groupingBy { it }.eachCount().maxByOrNull { it.value }?.key

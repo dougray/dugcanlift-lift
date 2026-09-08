@@ -50,6 +50,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Keep getIntent()/this.intent current for any other code in this Activity that reads it —
+        // without this it would keep returning the intent the Activity was originally launched with.
+        setIntent(intent)
         handlePlanIntent(intent)
     }
 

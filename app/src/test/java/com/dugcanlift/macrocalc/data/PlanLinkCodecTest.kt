@@ -96,4 +96,29 @@ class PlanLinkCodecTest {
         assertEquals(9.0, exercise.sets[2].rpe)
         assertEquals(1, payload.sessions.size)
     }
+
+    @Test
+    fun `skips a malformed entry instead of rejecting the whole payload`() {
+        // "r" has one entry that isn't even a JSON object (would have thrown with strict
+        // getJSONObject), and a nutrition array with a string where a number belongs (would have
+        // thrown with strict getDouble). Both should be tolerated: the bad recipe entry is skipped,
+        // the bad nutrition field falls back to a default — the rest of the payload still decodes.
+        val json = """
+            {"v":1,"t":"plan","l":"lifter1","n":"Coach",
+             "r":[{"n":"Good Recipe","s":2,"u":["not-a-number",36,31,19,9]},
+                  ["not","an","object"],
+                  {"n":"Second Good","s":1}],
+             "m":[{"d":"2026-09-10","s":2,"x":0,"q":1}],
+             "w":[{"n":"Leg Day"}]}
+        """.trimIndent()
+        val result = PlanLinkCodec.decode(encodeForTest(json), expectedLifterId = "lifter1")
+        assertTrue(result is PlanDecodeResult.Success)
+        val payload = (result as PlanDecodeResult.Success).payload
+        assertEquals(2, payload.recipes.size)
+        assertEquals("Good Recipe", payload.recipes[0].name)
+        assertEquals(0.0, payload.recipes[0].nutritionPerServing?.calories)
+        assertEquals("Second Good", payload.recipes[1].name)
+        assertEquals(1, payload.meals.size)
+        assertEquals(1, payload.workouts.size)
+    }
 }

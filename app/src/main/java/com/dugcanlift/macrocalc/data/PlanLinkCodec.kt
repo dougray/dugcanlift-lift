@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc.data
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.Base64
@@ -66,8 +67,15 @@ object PlanLinkCodec {
 
     private const val SUPPORTED_VERSION = 1
 
+    /** Generous margin over PLAN-FORMAT.md's 16,000-char link ceiling, accounting for encoding overhead. */
+    private const val MAX_FRAGMENT_LENGTH = 20_000
+
+    /** Far more than any legitimate plan could need — guards against a DEFLATE zip-bomb shaped link. */
+    private const val MAX_INFLATED_BYTES = 256 * 1024
+
     fun decode(fragment: String, expectedLifterId: String): PlanDecodeResult {
         if (fragment.length < 2) return PlanDecodeResult.MalformedPayload
+        if (fragment.length > MAX_FRAGMENT_LENGTH) return PlanDecodeResult.MalformedPayload
         val version = fragment[0]
         val codec = fragment[1]
         if (version != '1') return PlanDecodeResult.UnsupportedVersion
@@ -107,8 +115,13 @@ object PlanLinkCodec {
             inflater.setInput(bytes)
             val buffer = ByteArray(8 * 1024)
             val out = ByteArrayOutputStream(bytes.size * 3)
+            var total = 0
             while (!inflater.finished()) {
                 val written = inflater.inflate(buffer)
+                total += written
+                if (total > MAX_INFLATED_BYTES) {
+                    throw DataFormatException("decompressed plan link exceeds the $MAX_INFLATED_BYTES byte cap")
+                }
                 out.write(buffer, 0, written)
                 if (written == 0) break  // No progress made, stop to avoid infinite loop
             }
@@ -120,69 +133,59 @@ object PlanLinkCodec {
         }
     }
 
+    /**
+     * Lenient by design: every field falls back to a default and every array entry is read with
+     * `opt*` accessors, so one malformed recipe/meal/workout/exercise/session/set inside an
+     * otherwise-valid payload is skipped rather than aborting the whole import. Additive wire-format
+     * keys deliberately don't bump the version number (see PLAN-FORMAT.md) specifically so this
+     * client keeps what it understands instead of rejecting the entire plan over one bad field.
+     */
     private fun parsePayload(json: JSONObject, rawJson: String): PlanPayload {
-        val recipesJson = json.optJSONArray("r")
-        val recipes = if (recipesJson == null) emptyList() else
-            (0 until recipesJson.length()).map { i ->
-                val o = recipesJson.getJSONObject(i)
-                val u = o.optJSONArray("u")
-                val nutrition = if (u != null && u.length() >= 5) RecipeNutrition(
-                    calories = u.getDouble(0),
-                    proteinG = u.getDouble(1),
-                    carbsG = u.getDouble(2),
-                    fatG = u.getDouble(3),
-                    fiberG = u.getDouble(4)
-                ) else null
-                val ingredients = o.optJSONArray("i")
-                val steps = o.optJSONArray("t")
-                PlanRecipe(
-                    name = o.optString("n", ""),
-                    servings = o.optDouble("s", 1.0),
-                    nutritionPerServing = nutrition,
-                    ingredients = ingredients?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
-                    steps = steps?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList()
+        val recipes = json.optJSONArray("r").mapObjects { o ->
+            val u = o.optJSONArray("u")
+            val nutrition = if (u != null && u.length() >= 5) RecipeNutrition(
+                calories = u.optDouble(0, 0.0),
+                proteinG = u.optDouble(1, 0.0),
+                carbsG = u.optDouble(2, 0.0),
+                fatG = u.optDouble(3, 0.0),
+                fiberG = u.optDouble(4, 0.0)
+            ) else null
+            PlanRecipe(
+                name = o.optString("n", ""),
+                servings = o.optDouble("s", 1.0),
+                nutritionPerServing = nutrition,
+                ingredients = o.optJSONArray("i").mapStrings(),
+                steps = o.optJSONArray("t").mapStrings()
+            )
+        }
+
+        val meals = json.optJSONArray("m").mapObjects { o ->
+            PlanMeal(
+                date = o.optString("d", ""),
+                mealSlot = o.optInt("s", 2),
+                recipeIndex = o.optInt("x", -1),
+                servings = o.optDouble("q", 1.0)
+            )
+        }
+
+        val workouts = json.optJSONArray("w").mapObjects { o ->
+            val exercises = o.optJSONArray("e").mapObjects { eo ->
+                val sets = eo.optJSONArray("s")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { k -> arr.optJSONArray(k) }.map(::parseSet)
+                } ?: emptyList()
+                PlanWorkoutExercise(
+                    name = eo.optString("n", ""),
+                    equipment = eo.optString("q", ""),
+                    note = eo.optString("c", ""),
+                    sets = sets
                 )
             }
+            PlanWorkout(name = o.optString("n", ""), exercises = exercises)
+        }
 
-        val mealsJson = json.optJSONArray("m")
-        val meals = if (mealsJson == null) emptyList() else
-            (0 until mealsJson.length()).map { i ->
-                val o = mealsJson.getJSONObject(i)
-                PlanMeal(
-                    date = o.optString("d", ""),
-                    mealSlot = o.optInt("s", 2),
-                    recipeIndex = o.optInt("x", -1),
-                    servings = o.optDouble("q", 1.0)
-                )
-            }
-
-        val workoutsJson = json.optJSONArray("w")
-        val workouts = if (workoutsJson == null) emptyList() else
-            (0 until workoutsJson.length()).map { i ->
-                val o = workoutsJson.getJSONObject(i)
-                val exercisesJson = o.optJSONArray("e")
-                val exercises = if (exercisesJson == null) emptyList() else
-                    (0 until exercisesJson.length()).map { j ->
-                        val eo = exercisesJson.getJSONObject(j)
-                        val setsJson = eo.optJSONArray("s")
-                        val sets = if (setsJson == null) emptyList() else
-                            (0 until setsJson.length()).map { k -> parseSet(setsJson.getJSONArray(k)) }
-                        PlanWorkoutExercise(
-                            name = eo.optString("n", ""),
-                            equipment = eo.optString("q", ""),
-                            note = eo.optString("c", ""),
-                            sets = sets
-                        )
-                    }
-                PlanWorkout(name = o.optString("n", ""), exercises = exercises)
-            }
-
-        val sessionsJson = json.optJSONArray("k")
-        val sessions = if (sessionsJson == null) emptyList() else
-            (0 until sessionsJson.length()).map { i ->
-                val o = sessionsJson.getJSONObject(i)
-                PlanSession(date = o.optString("d", ""), workoutIndex = o.optInt("x", -1))
-            }
+        val sessions = json.optJSONArray("k").mapObjects { o ->
+            PlanSession(date = o.optString("d", ""), workoutIndex = o.optInt("x", -1))
+        }
 
         return PlanPayload(
             coachName = json.optString("n", "Your coach"),
@@ -194,10 +197,17 @@ object PlanLinkCodec {
         )
     }
 
-    /** `[weightLb, reps, rpe, durationSec, distanceMeters]`, trailing nulls trimmed, any prefix may be null. */
-    private fun parseSet(array: org.json.JSONArray): PlanSet {
-        fun d(i: Int): Double? = if (i < array.length() && !array.isNull(i)) array.getDouble(i) else null
-        fun n(i: Int): Int? = if (i < array.length() && !array.isNull(i)) array.getInt(i) else null
+    /**
+     * `[weightLb, reps, rpe, durationSec, distanceMeters]`, trailing nulls trimmed, any prefix may be
+     * null. Lenient: a wrong-typed entry reads as null rather than throwing and losing the whole set.
+     */
+    private fun parseSet(array: JSONArray): PlanSet {
+        fun d(i: Int): Double? {
+            if (i >= array.length() || array.isNull(i)) return null
+            val v = array.optDouble(i)
+            return if (v.isNaN()) null else v
+        }
+        fun n(i: Int): Int? = d(i)?.toInt()
         return PlanSet(
             weightLb = d(0),
             reps = n(1),
