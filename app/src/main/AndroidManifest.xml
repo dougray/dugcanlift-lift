@@ -23,13 +23,20 @@
          requested at runtime anywhere — see task-4-report.md. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Read-only: the app displays today's step count but never writes to Health Connect. -->
+    <!-- The app displays today's step count. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <!-- Health Connect hands out only the last 30 days without this. A coach
          asking for a 12-week block would otherwise get a step history that
          stops dead a month back for no visible reason. Optional: refusing it
          costs the older steps and nothing else. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <!-- Write side: exporting a finished Run/Hike as an exercise session.
+         WRITE_EXERCISE_ROUTE is a separate grant from WRITE_EXERCISE — Health
+         Connect can let an app log a workout without letting it log where the
+         user was, so both are declared even though this app always asks for
+         both together. -->
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE_ROUTE" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
