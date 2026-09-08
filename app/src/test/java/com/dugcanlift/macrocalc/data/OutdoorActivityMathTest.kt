@@ -2,7 +2,6 @@ package com.dugcanlift.macrocalc.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import kotlin.math.abs
 
 class OutdoorActivityMathTest {
 
@@ -29,7 +28,7 @@ class OutdoorActivityMathTest {
         val points = listOf(
             point(0.0, 0.0, alt = 100.0),
             point(0.0, 0.0, alt = 101.5), // +1.5, below 3.0 threshold
-            point(0.0, 0.0, alt = 99.0),  // -2.5 from 101.5, below threshold from reference (100.0)
+            point(0.0, 0.0, alt = 99.0),  // -1.0 from reference (100.0, unchanged since 101.5 didn't clear the threshold), below threshold
             point(0.0, 0.0, alt = 100.5)  // +0.5 from 100.0, still below threshold
         )
         assertEquals(0.0, OutdoorActivityMath.elevationGainMeters(points), 0.001)
