@@ -76,6 +76,10 @@ private fun AppTabs(modifier: Modifier = Modifier, pendingPlan: MutableState<Pla
 
     BackHandler(enabled = showCalculator) { showCalculator = false }
 
+    pendingPlan.value?.let { result ->
+        PlanPreviewDialog(result = result, onDismiss = { pendingPlan.value = null })
+    }
+
     if (showCalculator) {
         MacroCalculatorScreen(
             modifier = modifier,
