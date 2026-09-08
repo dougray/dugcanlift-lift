@@ -100,6 +100,7 @@ import kotlin.math.max
  */
 @Composable
 fun OutdoorRecordingScreen(
+    activityType: OutdoorActivityType,
     modifier: Modifier = Modifier,
     onDiscard: () -> Unit,
     onFinished: (OutdoorActivity) -> Unit
@@ -109,7 +110,7 @@ fun OutdoorRecordingScreen(
     val repository = remember { OutdoorActivityRepository.get(context) }
     val scope = rememberCoroutineScope()
 
-    var activityType by remember { mutableStateOf(OutdoorActivityType.RUN) }
+    var selectedActivityType by remember { mutableStateOf(activityType) }
     var startedAtEpochMs by remember { mutableStateOf<Long?>(null) }
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
@@ -197,7 +198,7 @@ fun OutdoorRecordingScreen(
 
     val liveActivity = if (isActive) {
         OutdoorActivity(
-            activityType = activityType,
+            activityType = selectedActivityType,
             startedAtEpochMs = startedAtEpochMs!!,
             endedAtEpochMs = nowMs,
             distanceMeters = OutdoorActivityMath.totalDistanceMeters(routePoints),
@@ -218,8 +219,8 @@ fun OutdoorRecordingScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutdoorActivityType.entries.forEach { option ->
                     FilterChip(
-                        selected = option == activityType,
-                        onClick = { activityType = option },
+                        selected = option == selectedActivityType,
+                        onClick = { selectedActivityType = option },
                         label = { Text(option.displayName) }
                     )
                 }
@@ -314,7 +315,7 @@ fun OutdoorRecordingScreen(
                         val start = startedAtEpochMs
                         if (start != null) {
                             val finished = OutdoorActivity(
-                                activityType = activityType,
+                                activityType = selectedActivityType,
                                 startedAtEpochMs = start,
                                 endedAtEpochMs = System.currentTimeMillis(),
                                 distanceMeters = OutdoorActivityMath.totalDistanceMeters(routePoints),
@@ -335,7 +336,7 @@ fun OutdoorRecordingScreen(
             }
         } else if (!showBackgroundPrompt) {
             Button(onClick = { onStartClicked() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Start ${activityType.displayName}")
+                Text("Start ${selectedActivityType.displayName}")
             }
         }
     }

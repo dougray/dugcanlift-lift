@@ -100,6 +100,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
     if (recordingActivityType != null) {
         OutdoorRecordingScreen(
+            activityType = recordingActivityType!!,
             modifier = modifier,
             onDiscard = { recordingActivityType = null },
             onFinished = { finished ->
