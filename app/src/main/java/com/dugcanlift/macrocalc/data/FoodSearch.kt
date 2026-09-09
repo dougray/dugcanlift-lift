@@ -204,18 +204,22 @@ data class FoodSearchResult(
      * here so the caller can show the same figures in a preview before
      * confirming.
      *
+     * [amountLabel] is the already-formatted, unit-aware amount text (e.g.
+     * "250 g" or "8.8 oz") — the caller builds it with `formatAmount` from
+     * TodayScreen.kt against the person's current `ServingUnit` preference,
+     * so this name suffix always matches what the amount/macro line on the
+     * same row shows. It stays baked into the name (rather than being
+     * dropped now that there's a separate amount line) because it's the only
+     * way the gram amount survives into COACH's share-link format, whose
+     * fixed 8-element array has no amountGrams slot — see SHARE-FORMAT.md.
+     *
      * Per the gram-based FoodEntry design, servings is pinned to 1.0 and the
      * macro fields already hold the totals for this amount, not per-serving
      * values.
      */
-    fun toFoodEntry(date: String, grams: Double, nutrition: Nutriments): FoodEntry {
-        // Rounded to 1 decimal place for the label only — amountGrams below
-        // keeps full precision. Without this, an amount entered in ounces
-        // (converted via a non-terminating decimal factor) would print as
-        // something like "250.00006575 g" instead of "250 g".
-        val labelGrams = (Math.round(grams * 10) / 10.0).trimZeros()
+    fun toFoodEntry(date: String, grams: Double, nutrition: Nutriments, amountLabel: String): FoodEntry {
         return FoodEntry(
-            name = "$displayName, $labelGrams g",
+            name = "$displayName, $amountLabel",
             servings = 1.0,
             amountGrams = grams,
             calories = nutrition.calories,

@@ -243,7 +243,12 @@ private fun AmountEntryDialog(
                     val confirmedGrams = grams
                     val confirmedNutrition = nutrition
                     if (confirmedGrams != null && confirmedNutrition != null) {
-                        onConfirm(result.toFoodEntry(date, confirmedGrams, confirmedNutrition))
+                        // Same formatAmount used for the amount/macro line on
+                        // TodayScreen, so the name suffix and that line always
+                        // agree — see gram-based-serving-android Task "final
+                        // fix wave".
+                        val amountLabel = formatAmount(confirmedGrams, unit)
+                        onConfirm(result.toFoodEntry(date, confirmedGrams, confirmedNutrition, amountLabel))
                     }
                 },
                 enabled = valid

@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.macrocalc.formatAmount
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -60,7 +61,7 @@ class FoodSearchTest {
     fun `toFoodEntry pins servings to 1 and stores amountGrams and the given nutrition totals`() {
         val grams = 250.0
         val nutrition = chickenBreast.nutrition(grams)
-        val entry = chickenBreast.toFoodEntry("2026-09-09", grams, nutrition)
+        val entry = chickenBreast.toFoodEntry("2026-09-09", grams, nutrition, "250 g")
 
         assertEquals(1.0, entry.servings, 0.0001)
         assertEquals(grams, entry.amountGrams!!, 0.0001)
@@ -76,23 +77,53 @@ class FoodSearchTest {
     }
 
     @Test
-    fun `toFoodEntry name includes the gram amount so history reads unambiguously`() {
-        val entry = chickenBreast.toFoodEntry("2026-09-09", 250.0, chickenBreast.nutrition(250.0))
-        assertTrue(entry.name.contains("250"))
-        assertTrue(entry.name.contains("g"))
-        assertTrue(entry.name.contains("Chicken breast"))
+    fun `toFoodEntry name includes the given amount label so history reads unambiguously`() {
+        val entry = chickenBreast.toFoodEntry(
+            "2026-09-09", 250.0, chickenBreast.nutrition(250.0), "250 g"
+        )
+        assertEquals("Chicken breast, 250 g", entry.name)
     }
 
     @Test
-    fun `toFoodEntry name rounds an imprecise ounce-to-gram conversion to a clean label`() {
+    fun `toFoodEntry name suffix is unit-aware, not hardcoded to grams`() {
+        // Regression guard for the bug this task fixes: previously the name
+        // suffix was always "<grams> g" regardless of the person's
+        // ServingUnit preference, so an ounces user saw grams on the name
+        // line but ounces on the amount/macro line below it. The caller now
+        // formats the suffix with formatAmount against the actual unit, so
+        // an ounces preference must show ounces in the name too.
+        val grams = 250.0
+        val label = formatAmount(grams, ServingUnit.OUNCES)
+        val entry = chickenBreast.toFoodEntry(
+            "2026-09-09", grams, chickenBreast.nutrition(grams), label
+        )
+        assertEquals("Chicken breast, 8.8 oz", entry.name)
+    }
+
+    @Test
+    fun `toFoodEntry name suffix matches formatAmount's rounding exactly, in grams or ounces`() {
         // Regression guard: 8.8185 oz * 28.3495 g/oz is 250.00006575g, not an
         // exact 250.0, due to floating point — the label must still read
-        // "250 g" rather than leaking that imprecision to the user.
+        // "250 g" rather than leaking that imprecision to the user, and must
+        // read identically to what formatAmount would print on the amount
+        // line for the same grams + unit.
         val grams = ServingUnit.OUNCES.toGrams(8.8185)
-        val entry = chickenBreast.toFoodEntry("2026-09-09", grams, chickenBreast.nutrition(grams))
-        assertEquals("Chicken breast, 250 g", entry.name)
+
+        val gramsLabel = formatAmount(grams, ServingUnit.GRAMS)
+        val gramsEntry = chickenBreast.toFoodEntry(
+            "2026-09-09", grams, chickenBreast.nutrition(grams), gramsLabel
+        )
+        assertEquals("Chicken breast, 250 g", gramsEntry.name)
+        assertEquals(formatAmount(grams, ServingUnit.GRAMS), gramsLabel)
         // amountGrams itself keeps full precision, unrounded.
-        assertEquals(grams, entry.amountGrams!!, 0.0)
+        assertEquals(grams, gramsEntry.amountGrams!!, 0.0)
+
+        val ouncesLabel = formatAmount(grams, ServingUnit.OUNCES)
+        val ouncesEntry = chickenBreast.toFoodEntry(
+            "2026-09-09", grams, chickenBreast.nutrition(grams), ouncesLabel
+        )
+        assertEquals("Chicken breast, 8.8 oz", ouncesEntry.name)
+        assertEquals(formatAmount(grams, ServingUnit.OUNCES), ouncesLabel)
     }
 
     @Test
