@@ -29,9 +29,17 @@ class SettingsStore private constructor(context: Context) {
             prefs.edit().putInt(KEY_STEP_GOAL, value).apply()
         }
 
+    var servingUnit: ServingUnit
+        get() {
+            val stored = prefs.getString(KEY_SERVING_UNIT, null) ?: return ServingUnit.GRAMS
+            return ServingUnit.entries.firstOrNull { it.name == stored } ?: ServingUnit.GRAMS
+        }
+        set(value) { prefs.edit().putString(KEY_SERVING_UNIT, value.name).apply() }
+
     companion object {
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
+        private const val KEY_SERVING_UNIT = "serving_unit"
 
         @Volatile
         private var instance: SettingsStore? = null
