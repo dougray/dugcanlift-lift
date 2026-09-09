@@ -182,29 +182,51 @@ data class FoodSearchResult(
     val displayName: String
         get() = if (brand.isNotEmpty()) "$name ($brand)" else name
 
+    /** Nutrition for an arbitrary gram amount, always computed from the
+     * per-100g figures (the only OFF value with a known fixed weight
+     * basis — perServing's implied weight is the free-text servingSize
+     * string, not reliably parseable into a number). */
+    fun nutrition(grams: Double): Nutriments {
+        val factor = grams / 100.0
+        return Nutriments(
+            calories = (per100g.calories * factor).roundToInt(),
+            proteinG = (per100g.proteinG * factor).roundToInt(),
+            fatG = (per100g.fatG * factor).roundToInt(),
+            carbsG = (per100g.carbsG * factor).roundToInt(),
+            fiberG = (per100g.fiberG * factor).roundToInt()
+        )
+    }
+
     /**
-     * Converts to a loggable entry.
+     * Converts to a loggable entry for a specific, user-entered gram amount.
+     * [nutrition] should be the result of calling [nutrition] with the same
+     * [grams] value — kept as a separate parameter rather than recomputed
+     * here so the caller can show the same figures in a preview before
+     * confirming.
      *
-     * Prefers the per-serving figures when the product has them. Otherwise
-     * falls back to per-100g and says so in the name, so nobody logs "Rice"
-     * assuming it was one bowl when it was 100 grams.
+     * [amountLabel] is the already-formatted, unit-aware amount text (e.g.
+     * "250 g" or "8.8 oz") — the caller builds it with `formatAmount` from
+     * TodayScreen.kt against the person's current `ServingUnit` preference,
+     * so this name suffix always matches what the amount/macro line on the
+     * same row shows. It stays baked into the name (rather than being
+     * dropped now that there's a separate amount line) because it's the only
+     * way the gram amount survives into COACH's share-link format, whose
+     * fixed 8-element array has no amountGrams slot — see SHARE-FORMAT.md.
+     *
+     * Per the gram-based FoodEntry design, servings is pinned to 1.0 and the
+     * macro fields already hold the totals for this amount, not per-serving
+     * values.
      */
-    fun toFoodEntry(date: String): FoodEntry {
-        val useServing = perServing != null
-        val values = perServing ?: per100g
-        val label = when {
-            useServing && servingSize.isNotEmpty() -> "$displayName, $servingSize"
-            useServing -> displayName
-            else -> "$displayName, per 100 g"
-        }
+    fun toFoodEntry(date: String, grams: Double, nutrition: Nutriments, amountLabel: String): FoodEntry {
         return FoodEntry(
-            name = label,
+            name = "$displayName, $amountLabel",
             servings = 1.0,
-            calories = values.calories,
-            proteinG = values.proteinG,
-            fatG = values.fatG,
-            carbsG = values.carbsG,
-            fiberG = values.fiberG,
+            amountGrams = grams,
+            calories = nutrition.calories,
+            proteinG = nutrition.proteinG,
+            fatG = nutrition.fatG,
+            carbsG = nutrition.carbsG,
+            fiberG = nutrition.fiberG,
             date = date
         )
     }

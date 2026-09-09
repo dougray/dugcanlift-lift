@@ -33,6 +33,11 @@ data class FoodEntry(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val servings: Double = 1.0,
+    /** The authoritative gram amount, when logged via the gram/ounce
+     * entry flow. Null for legacy entries. When set, `servings` is always
+     * 1.0 and calories/proteinG/etc are already the totals for this
+     * amount — see the plan's Global Constraints for why. */
+    val amountGrams: Double? = null,
     val calories: Int,
     val proteinG: Int,
     val fatG: Int,
@@ -93,6 +98,7 @@ internal fun FoodEntry.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("name", name)
     put("servings", servings)
+    amountGrams?.let { put("amountGrams", it) }
     put("calories", calories)
     put("proteinG", proteinG)
     put("fatG", fatG)
@@ -111,6 +117,7 @@ internal fun foodEntryFromJson(o: JSONObject): FoodEntry = FoodEntry(
     id = o.optString("id", UUID.randomUUID().toString()),
     name = o.optString("name", ""),
     servings = o.optDouble("servings", 1.0),
+    amountGrams = if (o.has("amountGrams")) o.optDouble("amountGrams") else null,
     calories = o.optInt("calories", 0),
     proteinG = o.optInt("proteinG", 0),
     fatG = o.optInt("fatG", 0),
