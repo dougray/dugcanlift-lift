@@ -182,29 +182,47 @@ data class FoodSearchResult(
     val displayName: String
         get() = if (brand.isNotEmpty()) "$name ($brand)" else name
 
+    /** Nutrition for an arbitrary gram amount, always computed from the
+     * per-100g figures (the only OFF value with a known fixed weight
+     * basis — perServing's implied weight is the free-text servingSize
+     * string, not reliably parseable into a number). */
+    fun nutrition(grams: Double): Nutriments {
+        val factor = grams / 100.0
+        return Nutriments(
+            calories = (per100g.calories * factor).roundToInt(),
+            proteinG = (per100g.proteinG * factor).roundToInt(),
+            fatG = (per100g.fatG * factor).roundToInt(),
+            carbsG = (per100g.carbsG * factor).roundToInt(),
+            fiberG = (per100g.fiberG * factor).roundToInt()
+        )
+    }
+
     /**
-     * Converts to a loggable entry.
+     * Converts to a loggable entry for a specific, user-entered gram amount.
+     * [nutrition] should be the result of calling [nutrition] with the same
+     * [grams] value — kept as a separate parameter rather than recomputed
+     * here so the caller can show the same figures in a preview before
+     * confirming.
      *
-     * Prefers the per-serving figures when the product has them. Otherwise
-     * falls back to per-100g and says so in the name, so nobody logs "Rice"
-     * assuming it was one bowl when it was 100 grams.
+     * Per the gram-based FoodEntry design, servings is pinned to 1.0 and the
+     * macro fields already hold the totals for this amount, not per-serving
+     * values.
      */
-    fun toFoodEntry(date: String): FoodEntry {
-        val useServing = perServing != null
-        val values = perServing ?: per100g
-        val label = when {
-            useServing && servingSize.isNotEmpty() -> "$displayName, $servingSize"
-            useServing -> displayName
-            else -> "$displayName, per 100 g"
-        }
+    fun toFoodEntry(date: String, grams: Double, nutrition: Nutriments): FoodEntry {
+        // Rounded to 1 decimal place for the label only — amountGrams below
+        // keeps full precision. Without this, an amount entered in ounces
+        // (converted via a non-terminating decimal factor) would print as
+        // something like "250.00006575 g" instead of "250 g".
+        val labelGrams = (Math.round(grams * 10) / 10.0).trimZeros()
         return FoodEntry(
-            name = label,
+            name = "$displayName, $labelGrams g",
             servings = 1.0,
-            calories = values.calories,
-            proteinG = values.proteinG,
-            fatG = values.fatG,
-            carbsG = values.carbsG,
-            fiberG = values.fiberG,
+            amountGrams = grams,
+            calories = nutrition.calories,
+            proteinG = nutrition.proteinG,
+            fatG = nutrition.fatG,
+            carbsG = nutrition.carbsG,
+            fiberG = nutrition.fiberG,
             date = date
         )
     }

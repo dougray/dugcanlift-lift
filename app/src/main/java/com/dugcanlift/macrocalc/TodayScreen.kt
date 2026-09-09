@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.DayTotals
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
-import com.dugcanlift.macrocalc.data.FoodSearchResult
 import com.dugcanlift.macrocalc.data.Meal
 import com.dugcanlift.macrocalc.data.mealForHour
 import com.dugcanlift.macrocalc.data.forDate
@@ -122,10 +121,15 @@ fun TodayScreen(
                 initial = prefill
             )
         } else if (panel == Panel.SEARCH) {
+            // Gram-based entries are already fully determined (amount and
+            // macros both) by the time the amount-entry dialog confirms, so
+            // this skips AddFoodForm entirely rather than routing through it
+            // pre-filled — there's nothing left for that form to add.
             FoodSearchPanel(
-                onPick = { result ->
-                    prefill = result.toFoodEntry(selectedDate)
-                    panel = Panel.FORM
+                date = selectedDate,
+                onConfirm = { entry ->
+                    scope.launch { repo.add(entry) }
+                    panel = Panel.NONE
                 },
                 onCancel = { panel = Panel.NONE }
             )
