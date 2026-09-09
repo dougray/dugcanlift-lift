@@ -77,8 +77,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    // Declared explicitly rather than relying on it resolving transitively —
+    // androidx.lifecycle.compose.LocalLifecycleOwner (used by
+    // OutdoorRecordingScreen's permission-refresh lifecycle observer) comes
+    // from this artifact, not lifecycle-runtime-ktx.
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.health.connect.client)
     testImplementation(libs.junit)
+    testImplementation(libs.json)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

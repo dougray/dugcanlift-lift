@@ -1,5 +1,7 @@
 package com.dugcanlift.macrocalc
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -26,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +37,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.LoggedExercise
+import com.dugcanlift.macrocalc.data.OutdoorActivity
+import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
+import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.Routine
 import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
@@ -42,6 +49,8 @@ import com.dugcanlift.macrocalc.data.WorkoutRepository
 import com.dugcanlift.macrocalc.data.WorkoutSession
 import com.dugcanlift.macrocalc.data.WorkoutSet
 import com.dugcanlift.macrocalc.data.byFolder
+import com.dugcanlift.macrocalc.data.formattedDistanceMiles
+import com.dugcanlift.macrocalc.data.formattedDuration
 import com.dugcanlift.macrocalc.data.knownEquipment
 import com.dugcanlift.macrocalc.data.knownExercises
 import com.dugcanlift.macrocalc.data.lastPerformed
@@ -57,6 +66,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
+/** How many recent outdoor activities show before "See all" is needed. */
+private const val OUTDOOR_HISTORY_PREVIEW_COUNT = 3
+
 @Composable
 fun WorkoutScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -64,25 +76,117 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val routineRepo = remember { RoutineRepository.get(context) }
     val settings = remember { SettingsStore.get(context) }
     val scheduledSessionRepo = remember { ScheduledSessionRepository.get(context) }
+    val outdoorRepo = remember { OutdoorActivityRepository.get(context) }
+    val tracker = remember { LocationTracker.get(context) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         workouts.load()
         routineRepo.load()
         scheduledSessionRepo.load()
+        outdoorRepo.load()
     }
 
     val sessions by workouts.sessions.collectAsState()
     val routines by routineRepo.routines.collectAsState()
     val scheduledSessions by scheduledSessionRepo.sessions.collectAsState()
+    val outdoorActivities by outdoorRepo.activities.collectAsState()
 
     var selectedDate by remember { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
+
+    // Full-screen takeovers for recording/reviewing a Run or Hike, following the
+    // same state-based screen-swap pattern MainActivity uses for showCalculator
+    // (no NavController anywhere in this app). rememberSaveable (not plain
+    // remember) so this state survives a configuration change or process
+    // restart. It does NOT survive a bottom-tab switch on its own — there's
+    // no SaveableStateHolder around MainActivity's `when(selectedTab)`, so
+    // WorkoutScreen (one branch of that `when`) is fully disposed by the
+    // others and this state is lost along with it. The tracker fallback
+    // just below (`effectiveRecordingType`) is what actually keeps the
+    // recording screen visible across a tab switch, using the tracker's own
+    // isRecording/activityType as the ultimate source of truth instead of
+    // relying on this Compose state surviving — see C-2 in the final-review
+    // fix wave.
+    var recordingActivityType by rememberSaveable { mutableStateOf<OutdoorActivityType?>(null) }
+    var reviewingActivityId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAllOutdoorHistory by rememberSaveable { mutableStateOf(false) }
+    var showDiscardRecordingConfirmation by remember { mutableStateOf(false) }
+
+    val reviewingActivity = outdoorActivities.find { it.id == reviewingActivityId }
+
+    // Belt-and-braces on top of the rememberSaveable fix above: the tracker's
+    // own isRecording/activityType are the ultimate source of truth for "is
+    // there a live recording", so even if recordingActivityType were ever
+    // lost some other way, GPS-active still implies the recording screen
+    // stays visible instead of orphaning the foreground service.
+    val isTrackerRecording by tracker.isRecording.collectAsState()
+    val trackerActivityType by tracker.activityType.collectAsState()
+    val effectiveRecordingType = recordingActivityType
+        ?: trackerActivityType.takeIf { isTrackerRecording }
+
+    BackHandler(enabled = effectiveRecordingType != null || reviewingActivity != null) {
+        when {
+            reviewingActivity != null -> reviewingActivityId = null
+            isTrackerRecording -> showDiscardRecordingConfirmation = true
+            else -> recordingActivityType = null
+        }
+    }
+
+    if (showDiscardRecordingConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardRecordingConfirmation = false },
+            title = { Text("Discard this run?") },
+            text = {
+                Text("Recording is still in progress. Going back will stop it and discard the route.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    tracker.stop()
+                    recordingActivityType = null
+                    showDiscardRecordingConfirmation = false
+                }) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardRecordingConfirmation = false }) {
+                    Text("Keep recording")
+                }
+            }
+        )
+    }
+
+    if (effectiveRecordingType != null) {
+        OutdoorRecordingScreen(
+            activityType = effectiveRecordingType,
+            modifier = modifier,
+            onDiscard = { recordingActivityType = null },
+            onFinished = { finished ->
+                recordingActivityType = null
+                reviewingActivityId = finished.id
+            }
+        )
+        return
+    }
+
+    reviewingActivity?.let { activity ->
+        OutdoorReviewScreen(
+            activity = activity,
+            modifier = modifier,
+            onDiscard = { reviewingActivityId = null },
+            onDone = { reviewingActivityId = null }
+        )
+        return
+    }
 
     val daysSessions = sessions.sessionsForDate(selectedDate)
     val known = remember(sessions) { sessions.knownExercises() }
     val equipmentOptions = remember(sessions) {
         (sessions.knownEquipment() + COMMON_EQUIPMENT).distinctBy { it.lowercase(Locale.US) }
+    }
+    val sortedOutdoorActivities = remember(outdoorActivities) {
+        outdoorActivities.sortedByDescending { it.startedAtEpochMs }
     }
 
     Column(
@@ -139,6 +243,52 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
+
+        Text(text = "Outdoor", style = MaterialTheme.typography.labelLarge)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = { recordingActivityType = OutdoorActivityType.RUN },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Start Run")
+            }
+            Button(
+                onClick = { recordingActivityType = OutdoorActivityType.HIKE },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Start Hike")
+            }
+        }
+
+        if (sortedOutdoorActivities.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            val visibleOutdoorActivities = if (showAllOutdoorHistory) {
+                sortedOutdoorActivities
+            } else {
+                sortedOutdoorActivities.take(OUTDOOR_HISTORY_PREVIEW_COUNT)
+            }
+            visibleOutdoorActivities.forEach { activity ->
+                OutdoorActivityRow(
+                    activity = activity,
+                    onClick = { reviewingActivityId = activity.id }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            if (sortedOutdoorActivities.size > OUTDOOR_HISTORY_PREVIEW_COUNT) {
+                TextButton(onClick = { showAllOutdoorHistory = !showAllOutdoorHistory }) {
+                    Text(
+                        if (showAllOutdoorHistory) {
+                            "Show less"
+                        } else {
+                            "See all (${sortedOutdoorActivities.size})"
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         if (routines.isNotEmpty()) {
             Text(text = "Routines", style = MaterialTheme.typography.labelLarge)
@@ -218,6 +368,46 @@ private fun RoutineCard(
         }
     }
 }
+
+@Composable
+private fun OutdoorActivityRow(
+    activity: OutdoorActivity,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(text = activity.activityType.displayName, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = outdoorActivityDateLabel(activity.startedAtEpochMs),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(text = activity.formattedDistanceMiles(), style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = activity.formattedDuration(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun outdoorActivityDateLabel(startedAtEpochMs: Long): String =
+    SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(startedAtEpochMs))
 
 @Composable
 private fun SessionCard(

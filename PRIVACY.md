@@ -2,7 +2,7 @@
 
 **LIFT** (`com.dugcanlift.macrocalc`)
 
-Last updated: 9 August 2026
+Last updated: 8 September 2026
 
 ## The short version
 
@@ -21,6 +21,16 @@ Other apps cannot read it. It is never uploaded.
   distance, and dates
 - Saved workout routines
 - Your training focus preference
+- Your outdoor Run/Hike history: each recording's start/end time, distance,
+  elevation gain, and its full GPS route (latitude, longitude, altitude, and
+  accuracy for every point recorded)
+
+Outdoor activity data is **not** currently included when you use the app's own
+backup/export feature — this is a deliberate, temporary gap (GPS traces are a
+more sensitive category than food or workout logs, and inclusion needs its own
+explicit decision) rather than an oversight, and will be revisited in a future
+update. It is written to Health Connect (see below) independently of that
+backup file.
 
 The figures you enter into the calculator — sex, age, weight, height, activity
 level — are used to compute your goal and are not retained beyond the resulting
@@ -59,9 +69,35 @@ requests whatsoever.
 - **Camera** — used solely to read a barcode when you tap Scan. No image or
   video is stored or transmitted; the camera feed is decoded on the device and
   discarded.
+- **Precise location (`ACCESS_FINE_LOCATION`, plus `ACCESS_COARSE_LOCATION`
+  as Android requires alongside it)** — used only while you are actively
+  recording a Run or Hike, to plot your route and calculate distance and
+  elevation gain. Location is never collected at any other time and never
+  leaves your device.
+- **Background location (`ACCESS_BACKGROUND_LOCATION`)** — optional. Lets a
+  recording keep tracking your route if your phone locks or you switch to
+  another app mid-run. You can decline it and still record — the recording
+  just stops if you lock your phone or leave the app. Used only during an
+  active recording, never otherwise.
+- **Foreground service / foreground service location
+  (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`)** — Android requires
+  an app to run a foreground service, with a persistent notification, to keep
+  receiving location updates while backgrounded. This is what shows the
+  ongoing "Recording your route" notification during a Run or Hike.
+- **Notifications (`POST_NOTIFICATIONS`)** — used to show that same "Recording
+  your route" notification while a recording is in progress.
 - **Health Connect (step count, read-only)** — used to show today's steps on
-  the dashboard. The app cannot write to Health Connect and never sends step
-  data anywhere; it stays between Health Connect and the app, on your device.
+  the dashboard. Read-only for step data: it stays between Health Connect and
+  the app, on your device, and is never sent anywhere.
+- **Health Connect (write: `WRITE_EXERCISE`, `WRITE_EXERCISE_ROUTE`,
+  `WRITE_DISTANCE`, `WRITE_ELEVATION_GAINED`)** — when you finish a Run or
+  Hike and choose to export it, the app can write that activity to Health
+  Connect as an exercise session with its GPS route, distance, and elevation
+  gain attached, so other apps you've granted access to (for example a coach
+  reading your training data) can see it. This only happens when you tap
+  Export on a finished activity — never automatically, and never for any
+  other kind of data. As with step data, this stays on-device between the app
+  and Health Connect; nothing is uploaded anywhere by this app.
 
 ## Analytics, advertising, and tracking
 

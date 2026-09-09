@@ -4,13 +4,43 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Read-only: the app displays today's step count but never writes to Health Connect. -->
+
+    <!-- Route recording (Run/Hike). ACCESS_COARSE_LOCATION is requested
+         alongside ACCESS_FINE_LOCATION per current Android guidance, even
+         though only the fine-accuracy fix is actually used. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Lets recording continue after the phone locks or the user switches
+         apps mid-run. Android 10+ requires this to be granted from system
+         settings as a separate step after foreground location is granted —
+         see LocationTracker.kt's doc comment; OutdoorRecordingScreen.kt
+         builds and runs this whole permission ceremony (Task 6). -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- API 33+: without this, LocationRecordingService still runs and still
+         records, but its ongoing notification silently never shows.
+         Requested at runtime alongside fine/coarse location by
+         OutdoorRecordingScreen.kt (Task 6). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- The app displays today's step count. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <!-- Health Connect hands out only the last 30 days without this. A coach
          asking for a 12-week block would otherwise get a step history that
          stops dead a month back for no visible reason. Optional: refusing it
          costs the older steps and nothing else. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <!-- Write side: exporting a finished Run/Hike as an exercise session,
+         its GPS route, its distance, and its elevation gain. Each is its own
+         separate grant — Health Connect can let an app log a workout without
+         letting it log where the user was, how far, or how much they
+         climbed — so all four are declared even though this app always asks
+         for all four together. -->
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE_ROUTE" />
+    <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
+    <uses-permission android:name="android.permission.health.WRITE_ELEVATION_GAINED" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
@@ -80,5 +110,12 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Un-bound; holds the ongoing notification required for location
+             access once a Run/Hike recording is no longer in the foreground. -->
+        <service
+            android:name=".LocationRecordingService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
     </application>
 </manifest>
