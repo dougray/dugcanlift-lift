@@ -40,10 +40,11 @@ import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.DayTotals
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
-import com.dugcanlift.macrocalc.data.FoodSearchResult
 import com.dugcanlift.macrocalc.data.Meal
 import com.dugcanlift.macrocalc.data.mealForHour
 import com.dugcanlift.macrocalc.data.forDate
+import com.dugcanlift.macrocalc.data.ServingUnit
+import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
 import kotlinx.coroutines.launch
@@ -122,10 +123,15 @@ fun TodayScreen(
                 initial = prefill
             )
         } else if (panel == Panel.SEARCH) {
+            // Gram-based entries are already fully determined (amount and
+            // macros both) by the time the amount-entry dialog confirms, so
+            // this skips AddFoodForm entirely rather than routing through it
+            // pre-filled — there's nothing left for that form to add.
             FoodSearchPanel(
-                onPick = { result ->
-                    prefill = result.toFoodEntry(selectedDate)
-                    panel = Panel.FORM
+                date = selectedDate,
+                onConfirm = { entry ->
+                    scope.launch { repo.add(entry) }
+                    panel = Panel.NONE
                 },
                 onCancel = { panel = Panel.NONE }
             )
@@ -321,6 +327,9 @@ private fun MacroProgress(name: String, eaten: Int, goal: Int) {
 
 @Composable
 private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
+    val context = LocalContext.current
+    val settings = remember { SettingsStore.get(context) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -331,15 +340,23 @@ private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
         // fixed fraction, which was squeezing the button into one letter
         // per line.
         Column(modifier = Modifier.weight(1f)) {
+            val amountGrams = entry.amountGrams
             Text(
-                text = if (entry.servings == 1.0) entry.name
+                text = if (amountGrams != null || entry.servings == 1.0) entry.name
                 else "${entry.name} x${formatServings(entry.servings)}",
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
-                text = "${entry.totalCalories} kcal - " +
-                    "P ${entry.totalProteinG} - F ${entry.totalFatG} - " +
-                    "C ${entry.totalCarbsG} - Fib ${entry.totalFiberG}",
+                text = if (amountGrams != null) {
+                    "${formatAmount(amountGrams, settings.servingUnit)} - " +
+                        "${entry.totalCalories} kcal - " +
+                        "P ${entry.totalProteinG} - F ${entry.totalFatG} - " +
+                        "C ${entry.totalCarbsG} - Fib ${entry.totalFiberG}"
+                } else {
+                    "${entry.totalCalories} kcal - " +
+                        "P ${entry.totalProteinG} - F ${entry.totalFatG} - " +
+                        "C ${entry.totalCarbsG} - Fib ${entry.totalFiberG}"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -490,3 +507,17 @@ private fun dateLabel(key: String): String {
 private fun formatServings(value: Double): String =
     if (value == value.roundToInt().toDouble()) value.roundToInt().toString()
     else value.toString()
+
+/**
+ * Formats a gram amount in the given [unit] for display, e.g. "140 g" or
+ * "4.9 oz" — converted from the canonical gram value stored on the entry,
+ * not whatever unit was active when it was logged. Mirrors LIFT iOS's
+ * `FoodEntryDisplay.amountText(for:preferredUnit:)`.
+ */
+internal fun formatAmount(amountGrams: Double, unit: ServingUnit): String {
+    val converted = unit.fromGrams(amountGrams)
+    val rounded = (converted * 10.0).roundToInt() / 10.0
+    val text = if (rounded == rounded.roundToInt().toDouble()) rounded.roundToInt().toString()
+        else rounded.toString()
+    return "$text ${unit.abbreviation}"
+}

@@ -81,6 +81,12 @@ data class Recipe(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val servings: Double = 1.0,
+    /** Total finished weight of the whole dish, in grams. Null until
+     * filled in via the recipe editor — neither this field nor any
+     * reliable per-ingredient gram total existed before this feature
+     * (see IngredientParser's own doc comment: only ingredients already
+     * written in grams resolve to a gram value). */
+    val totalWeightGrams: Double? = null,
     val ingredients: List<RecipeIngredient> = emptyList(),
     val steps: List<String> = emptyList(),
     /** Per serving. Null means unknown — not zero. */
@@ -104,6 +110,21 @@ data class Recipe(
 
     /** Servings can never be zero; a shopping list divides by it. */
     val safeServings: Double get() = if (servings > 0) servings else 1.0
+
+    /** Total nutrition for the whole finished dish. Null if
+     * nutritionPerServing was never entered/estimated. */
+    val totalNutrition: RecipeNutrition?
+        get() = nutritionPerServing?.scaled(servings)
+
+    /** Nutrition per gram of the finished dish. Null until both
+     * totalNutrition and totalWeightGrams exist. */
+    val nutritionPerGram: RecipeNutrition?
+        get() {
+            val total = totalNutrition ?: return null
+            val weight = totalWeightGrams ?: return null
+            if (weight <= 0) return null
+            return total.scaled(1.0 / weight)
+        }
 }
 
 /**
@@ -120,10 +141,17 @@ data class PlannedMeal(
     val date: String = todayKey(),
     val meal: String = Meal.DINNER.name,
     val servings: Double = 1.0,
+    /** Grams of the dish this instance represents, when planned/logged
+     * via the gram-based flow. Null for legacy servings-based instances. */
+    val amountGrams: Double? = null,
     // Snapshot fields, copied at plan time for the same reason FoodEntry
     // snapshots reference data.
     val recipeName: String = "",
     val snapshotNutrition: RecipeNutrition? = null,
+    /** recipe.nutritionPerGram captured once at creation time — matches
+     * snapshotNutrition's own snapshot-on-write convention, so a later
+     * edit to the recipe never changes an already-planned/logged meal. */
+    val snapshotNutritionPerGram: RecipeNutrition? = null,
     /** Set once turned into a real log entry, so logging twice is visible. */
     val loggedFoodEntryId: String? = null
 ) {
@@ -136,10 +164,30 @@ data class PlannedMeal(
      * Builds the log entry for this planned meal, or null when the recipe never
      * had macros. Better no entry than a zero-calorie dinner in the day total.
      *
+     * When [amountGrams]/[snapshotNutritionPerGram] are both set (the
+     * gram-based flow), the result is pre-scaled to that amount and
+     * `servings` is pinned to 1.0 — see [FoodEntry.amountGrams]. Otherwise
      * [FoodEntry] holds per-serving macros and scales by `servings`, so the
      * snapshot is passed through unscaled and `servings` carries the multiple.
      */
     fun toFoodEntry(): FoodEntry? {
+        val grams = amountGrams
+        val perGram = snapshotNutritionPerGram
+        if (grams != null && perGram != null) {
+            val scaled = perGram.scaled(grams)
+            return FoodEntry(
+                name = recipeName,
+                servings = 1.0,
+                amountGrams = grams,
+                calories = scaled.calories.roundToIntSafe(),
+                proteinG = scaled.proteinG.roundToIntSafe(),
+                fatG = scaled.fatG.roundToIntSafe(),
+                carbsG = scaled.carbsG.roundToIntSafe(),
+                fiberG = scaled.fiberG.roundToIntSafe(),
+                date = date,
+                meal = meal
+            )
+        }
         val perServing = snapshotNutrition ?: return null
         return FoodEntry(
             name = recipeName,
@@ -273,6 +321,7 @@ internal fun Recipe.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("name", name)
     put("servings", servings)
+    totalWeightGrams?.let { put("totalWeightGrams", it) }
     put("ingredients", JSONArray().also { a -> ingredients.forEach { a.put(it.toJson()) } })
     put("steps", JSONArray().also { a -> steps.forEach { a.put(it) } })
     nutritionPerServing?.let { put("nutritionPerServing", it.toJson()) }
@@ -288,6 +337,7 @@ internal fun recipeFromJson(o: JSONObject): Recipe = Recipe(
     id = o.optString("id", UUID.randomUUID().toString()),
     name = o.optString("name", ""),
     servings = o.optDouble("servings", 1.0),
+    totalWeightGrams = o.optDoubleOrNull("totalWeightGrams"),
     ingredients = o.optJSONArray("ingredients").mapObjects(::recipeIngredientFromJson),
     steps = o.optJSONArray("steps").mapStrings(),
     nutritionPerServing = recipeNutritionFromJson(o.optJSONObject("nutritionPerServing")),
@@ -305,8 +355,10 @@ internal fun PlannedMeal.toJson(): JSONObject = JSONObject().apply {
     put("date", date)
     put("meal", meal)
     put("servings", servings)
+    amountGrams?.let { put("amountGrams", it) }
     put("recipeName", recipeName)
     snapshotNutrition?.let { put("snapshotNutrition", it.toJson()) }
+    snapshotNutritionPerGram?.let { put("snapshotNutritionPerGram", it.toJson()) }
     loggedFoodEntryId?.let { put("loggedFoodEntryId", it) }
 }
 
@@ -316,8 +368,10 @@ internal fun plannedMealFromJson(o: JSONObject): PlannedMeal = PlannedMeal(
     date = o.optString("date", todayKey()),
     meal = o.optString("meal", Meal.DINNER.name),
     servings = o.optDouble("servings", 1.0),
+    amountGrams = o.optDoubleOrNull("amountGrams"),
     recipeName = o.optString("recipeName", ""),
     snapshotNutrition = recipeNutritionFromJson(o.optJSONObject("snapshotNutrition")),
+    snapshotNutritionPerGram = recipeNutritionFromJson(o.optJSONObject("snapshotNutritionPerGram")),
     loggedFoodEntryId = o.optStringOrNull("loggedFoodEntryId")
 )
 

@@ -48,6 +48,7 @@ import com.dugcanlift.macrocalc.data.historyFor
 import com.dugcanlift.macrocalc.data.knownExercises
 import com.dugcanlift.macrocalc.data.topWeightLb
 import com.dugcanlift.macrocalc.data.sessionsForDate
+import com.dugcanlift.macrocalc.data.ServingUnit
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
 import kotlinx.coroutines.launch
@@ -77,6 +78,7 @@ fun DashboardScreen(
     var todaySteps by remember { mutableStateOf(0L) }
     var stepGoal by remember { mutableStateOf(settings.stepGoal) }
     var showingStepGoalEditor by remember { mutableStateOf(false) }
+    var servingUnit by remember { mutableStateOf(settings.servingUnit) }
 
     val stepsPermissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract()
@@ -437,6 +439,28 @@ fun DashboardScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         CoachCard(goal = goal, sessions = allSessions, entries = allEntries)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Serving Size",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                ChipRow(
+                    options = ServingUnit.entries,
+                    selected = servingUnit,
+                    label = { it.abbreviation },
+                    onSelect = {
+                        servingUnit = it
+                        settings.servingUnit = it
+                    }
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
