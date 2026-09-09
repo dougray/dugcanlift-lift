@@ -453,9 +453,17 @@ private fun PlannedRow(planned: PlannedMeal, onLog: () -> Unit, onRemove: () -> 
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
         Text(planned.recipeName, style = MaterialTheme.typography.bodyMedium)
 
-        planned.snapshotNutrition?.let { nutrition ->
+        // Gram-based plans pin servings to 1.0 (see RecipeRepository.plan()),
+        // so nutrition.calories * planned.servings would show the whole
+        // recipe's calories instead of the portion actually planned —
+        // prefer the gram-scaled preview when both fields are present.
+        val previewCalories = planned.snapshotNutritionPerGram?.let { perGram ->
+            planned.amountGrams?.let { grams -> perGram.calories * grams }
+        } ?: planned.snapshotNutrition?.let { it.calories * planned.servings }
+
+        previewCalories?.let { calories ->
             Text(
-                text = "${(nutrition.calories * planned.servings).trimZeros()} kcal",
+                text = "${calories.trimZeros()} kcal",
                 style = MaterialTheme.typography.bodySmall
             )
         }
