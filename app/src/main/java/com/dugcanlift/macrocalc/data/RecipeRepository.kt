@@ -74,22 +74,35 @@ class RecipeRepository private constructor(context: Context) {
 
     /* ---------- meal plan ---------- */
 
-    suspend fun plan(recipe: Recipe, date: String, meal: Meal, servings: Double = 1.0) =
-        withContext(Dispatchers.IO) {
-            val entry = PlannedMeal(
-                recipeId = recipe.id,
-                date = date,
-                meal = meal.name,
-                servings = servings,
-                recipeName = recipe.name,
-                // Snapshot at plan time, per serving. PlannedMeal.toFoodEntry
-                // passes servings through, so this must NOT be pre-scaled.
-                snapshotNutrition = recipe.nutritionPerServing
-            )
-            val updated = readPlan() + entry
-            writePlan(updated)
-            _plan.value = updated
-        }
+    suspend fun plan(
+        recipe: Recipe,
+        date: String,
+        meal: Meal,
+        servings: Double = 1.0,
+        /** Grams of the dish, when planning via the gram-based flow instead
+         * of servings. Non-null here switches the snapshot below to
+         * per-gram, matching [PlannedMeal.toFoodEntry]'s gram branch. */
+        amountGrams: Double? = null
+    ) = withContext(Dispatchers.IO) {
+        val entry = PlannedMeal(
+            recipeId = recipe.id,
+            date = date,
+            meal = meal.name,
+            servings = servings,
+            amountGrams = amountGrams,
+            recipeName = recipe.name,
+            // Snapshot at plan time, per serving. PlannedMeal.toFoodEntry
+            // passes servings through, so this must NOT be pre-scaled.
+            snapshotNutrition = recipe.nutritionPerServing,
+            // Snapshot at plan time, per gram, only for the gram-based
+            // flow — a later edit to the recipe must not change an
+            // already-planned meal.
+            snapshotNutritionPerGram = if (amountGrams != null) recipe.nutritionPerGram else null
+        )
+        val updated = readPlan() + entry
+        writePlan(updated)
+        _plan.value = updated
+    }
 
     suspend fun unplan(id: String) = withContext(Dispatchers.IO) {
         val updated = readPlan().filterNot { it.id == id }
