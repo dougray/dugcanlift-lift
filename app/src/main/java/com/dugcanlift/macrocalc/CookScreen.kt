@@ -44,6 +44,7 @@ import com.dugcanlift.macrocalc.data.RecipeNutrition
 import com.dugcanlift.macrocalc.data.RecipeRepository
 import com.dugcanlift.macrocalc.data.ShoppingList
 import com.dugcanlift.macrocalc.data.FoodRepository
+import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.planBetween
 import com.dugcanlift.macrocalc.data.shoppingAmountLabel
 import com.dugcanlift.macrocalc.data.todayKey
@@ -197,10 +198,21 @@ private fun RecipeEditorDialog(
     existing: Recipe?,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Read once per dialog open, same convention as Task 3/4's amount
+    // entry — the real Serving Size preference lives in Settings.
+    val servingUnit = remember { SettingsStore.get(context).servingUnit }
 
     var name by remember { mutableStateOf(existing?.name ?: "") }
     var servings by remember { mutableStateOf((existing?.servings ?: 1.0).trimZeros()) }
+    var totalWeightText by remember {
+        mutableStateOf(
+            existing?.totalWeightGrams
+                ?.let { servingUnit.fromGrams(it).trimZeros() }
+                ?: ""
+        )
+    }
     var ingredientText by remember {
         mutableStateOf(existing?.ingredients.orEmpty().joinToString("\n") { it.rawText })
     }
@@ -225,6 +237,19 @@ private fun RecipeEditorDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 NumberField(value = servings, onValueChange = { servings = it }, label = "Servings")
+
+                Spacer(modifier = Modifier.height(8.dp))
+                NumberField(
+                    value = totalWeightText,
+                    onValueChange = { totalWeightText = it },
+                    label = "Total weight (${servingUnit.abbreviation})"
+                )
+                Text(
+                    text = "Weight of the whole finished dish. Leave blank if " +
+                        "unknown — gram-based logging needs this plus macros " +
+                        "per serving.",
+                    style = MaterialTheme.typography.bodySmall
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -282,6 +307,8 @@ private fun RecipeEditorDialog(
                         existing = existing,
                         name = name.trim(),
                         servings = servings.toDoubleOrNull() ?: 1.0,
+                        totalWeightGrams = totalWeightText.trim().toDoubleOrNull()
+                            ?.let { servingUnit.toGrams(it) },
                         ingredientText = ingredientText,
                         stepText = stepText,
                         calories = calories, protein = protein, carbs = carbs, fat = fat
@@ -301,6 +328,7 @@ private fun buildRecipe(
     existing: Recipe?,
     name: String,
     servings: Double,
+    totalWeightGrams: Double?,
     ingredientText: String,
     stepText: String,
     calories: String,
@@ -330,6 +358,7 @@ private fun buildRecipe(
     return base.copy(
         name = name,
         servings = if (servings > 0) servings else 1.0,
+        totalWeightGrams = totalWeightGrams,
         ingredients = ingredients,
         steps = steps,
         nutritionPerServing = nutrition
@@ -411,8 +440,8 @@ private fun PlanSection(repo: RecipeRepository) {
         RecipePickerDialog(
             recipes = recipes,
             onDismiss = { picking = null },
-            onPick = { recipe, servings ->
-                scope.launch { repo.plan(recipe, day, meal, servings) }
+            onPick = { recipe, servings, amountGrams ->
+                scope.launch { repo.plan(recipe, day, meal, servings, amountGrams) }
                 picking = null
             }
         )
@@ -447,9 +476,16 @@ private fun PlannedRow(planned: PlannedMeal, onLog: () -> Unit, onRemove: () -> 
 private fun RecipePickerDialog(
     recipes: List<Recipe>,
     onDismiss: () -> Unit,
-    onPick: (Recipe, Double) -> Unit
+    // recipe, servings, amountGrams — amountGrams is non-null only for the
+    // gram-based flow (recipe.nutritionPerGram != null), which pins servings
+    // at its default and lets amountGrams carry the actual quantity.
+    onPick: (Recipe, Double, Double?) -> Unit
 ) {
     var servings by remember { mutableStateOf("1") }
+    // Set when a gram-capable recipe row is tapped, to show the amount-entry
+    // step before calling onPick. A recipe without nutritionPerGram never
+    // sets this — it goes straight to onPick with today's servings behavior.
+    var amountRecipe by remember { mutableStateOf<Recipe?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -462,7 +498,17 @@ private fun RecipePickerDialog(
                 recipes.sortedBy { it.name.lowercase() }.forEach { recipe ->
                     val multiplier = servings.toDoubleOrNull() ?: 1.0
                     TextButton(
-                        onClick = { onPick(recipe, multiplier) },
+                        onClick = {
+                            // Gate on nutritionPerGram, not totalWeightGrams — a
+                            // recipe can have a weight set with no macros ever
+                            // entered, in which case nutritionPerGram is
+                            // correctly null and gram-based logging cannot run.
+                            if (recipe.nutritionPerGram != null) {
+                                amountRecipe = recipe
+                            } else {
+                                onPick(recipe, multiplier, null)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(modifier = Modifier.fillMaxWidth()) {
@@ -476,6 +522,79 @@ private fun RecipePickerDialog(
             }
         },
         confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+
+    amountRecipe?.let { recipe ->
+        RecipeAmountEntryDialog(
+            recipe = recipe,
+            onConfirm = { grams ->
+                onPick(recipe, 1.0, grams)
+                amountRecipe = null
+            },
+            onDismiss = { amountRecipe = null }
+        )
+    }
+}
+
+/**
+ * Second step of picking a recipe whose nutritionPerGram is known: how much
+ * of the finished dish, in whichever unit the person prefers. Mirrors
+ * FoodSearchPanel's AmountEntryDialog for FoodSearchResult.
+ */
+@Composable
+private fun RecipeAmountEntryDialog(
+    recipe: Recipe,
+    onConfirm: (Double) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val unit = remember { SettingsStore.get(context).servingUnit }
+    var amountText by remember { mutableStateOf("") }
+
+    val enteredAmount = amountText.toDoubleOrNull()
+    val grams = enteredAmount?.let { unit.toGrams(it) }
+    val perGram = recipe.nutritionPerGram
+    val nutrition = if (grams != null && perGram != null) perGram.scaled(grams) else null
+    val valid = grams != null && grams > 0.0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(recipe.name) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "How much are you planning?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                NumberField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = "Amount (${unit.abbreviation})"
+                )
+
+                nutrition?.let {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "${it.calories.trimZeros()} kcal  " +
+                            "P ${it.proteinG.trimZeros()}  " +
+                            "C ${it.carbsG.trimZeros()}  " +
+                            "F ${it.fatG.trimZeros()}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { grams?.let { onConfirm(it) } },
+                enabled = valid
+            ) { Text("Confirm") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
