@@ -31,7 +31,6 @@ import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodSearch
 import com.dugcanlift.macrocalc.data.FoodSearchResult
 import com.dugcanlift.macrocalc.data.Nutriments
-import com.dugcanlift.macrocalc.data.ServingUnit
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -198,7 +197,10 @@ private fun AmountEntryDialog(
     val context = LocalContext.current
     val settings = remember { SettingsStore.get(context) }
 
-    var unit by remember { mutableStateOf(settings.servingUnit) }
+    // Read once per dialog open; the real Serving Size preference lives in
+    // Settings (DashboardScreen) now, so this just follows it rather than
+    // offering its own switcher.
+    val unit = settings.servingUnit
     var amountText by remember { mutableStateOf("") }
 
     val enteredAmount = amountText.toDoubleOrNull()
@@ -218,21 +220,6 @@ private fun AmountEntryDialog(
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
-
-                // Also updates the saved preference, so switching units here
-                // sticks for next time — a stand-in for a dedicated Settings
-                // picker, which doesn't exist yet.
-                ChipRow(
-                    options = ServingUnit.entries,
-                    selected = unit,
-                    label = { it.abbreviation },
-                    onSelect = {
-                        unit = it
-                        settings.servingUnit = it
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
 
                 NumberField(
                     value = amountText,
