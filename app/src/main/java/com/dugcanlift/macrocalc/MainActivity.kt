@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -14,6 +15,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +31,15 @@ import com.dugcanlift.macrocalc.data.GoalStore
 import com.dugcanlift.macrocalc.ui.theme.DugCanLiftCalcTheme
 
 class MainActivity : ComponentActivity() {
+    // A plain property (not a delegated `by`) so `onNewIntent` can update it
+    // directly — `AppTabs` observes it via `State<Int?>` and re-selects the
+    // tab on every change, not just on the initial composition. Without
+    // this, a notification tap while the app is already running (warm
+    // launch: `CLEAR_TOP`/`SINGLE_TOP` routes into `onNewIntent`, not
+    // `onCreate`) would silently do nothing, since `getIntent()` still
+    // returned the original launch intent and nothing re-read the extra.
+    private val pendingOpenTab = mutableStateOf<Int?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -36,15 +48,24 @@ class MainActivity : ComponentActivity() {
         // bring the user back to the Train tab instead of leaving a live
         // recording with no way back into its UI — see M-22 in the
         // final-review fix wave.
-        val initialTab = intent?.getIntExtra(EXTRA_OPEN_TAB, -1)?.takeIf { it >= 0 }
+        pendingOpenTab.value = extractOpenTab(intent)
         setContent {
             DugCanLiftCalcTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    AppTabs(modifier = Modifier.padding(innerPadding), initialTab = initialTab)
+                    AppTabs(modifier = Modifier.padding(innerPadding), openTab = pendingOpenTab)
                 }
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingOpenTab.value = extractOpenTab(intent)
+    }
+
+    private fun extractOpenTab(intent: Intent?): Int? =
+        intent?.getIntExtra(EXTRA_OPEN_TAB, -1)?.takeIf { it >= 0 }
 
     companion object {
         /** Int extra naming the tab index [AppTabs] should open on launch. */
@@ -56,13 +77,20 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppTabs(modifier: Modifier = Modifier, initialTab: Int? = null) {
+private fun AppTabs(modifier: Modifier = Modifier, openTab: State<Int?> = remember { mutableStateOf(null) }) {
     val context = LocalContext.current
     val goalStore = remember { GoalStore.get(context) }
     val coachStore = remember { CoachStore.get(context) }
 
     var goal by remember { mutableStateOf(goalStore.get()) }
-    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab ?: 0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(openTab.value ?: 0) }
+
+    // Re-select whenever a new tab request arrives (cold launch's initial
+    // value, or a later `onNewIntent` while the app is already running) —
+    // not just once at first composition.
+    LaunchedEffect(openTab.value) {
+        openTab.value?.let { selectedTab = it }
+    }
 
     // The calculator is a set-it-once screen, so it lives behind the dashboard
     // rather than taking a permanent slot in the navigation.

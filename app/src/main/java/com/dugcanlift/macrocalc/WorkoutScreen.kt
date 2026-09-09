@@ -93,12 +93,16 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     // Full-screen takeovers for recording/reviewing a Run or Hike, following the
     // same state-based screen-swap pattern MainActivity uses for showCalculator
     // (no NavController anywhere in this app). rememberSaveable (not plain
-    // remember) so this state — and therefore which full-screen takeover is
-    // showing — survives a bottom-tab switch (WorkoutScreen is one branch of
-    // MainActivity's `when(selectedTab)` and gets fully disposed by the
-    // others) or a process restart, instead of silently resetting to the
-    // normal Train tab while GPS keeps recording underneath with no UI
-    // showing it (see C-2 in the final-review fix wave).
+    // remember) so this state survives a configuration change or process
+    // restart. It does NOT survive a bottom-tab switch on its own — there's
+    // no SaveableStateHolder around MainActivity's `when(selectedTab)`, so
+    // WorkoutScreen (one branch of that `when`) is fully disposed by the
+    // others and this state is lost along with it. The tracker fallback
+    // just below (`effectiveRecordingType`) is what actually keeps the
+    // recording screen visible across a tab switch, using the tracker's own
+    // isRecording/activityType as the ultimate source of truth instead of
+    // relying on this Compose state surviving — see C-2 in the final-review
+    // fix wave.
     var recordingActivityType by rememberSaveable { mutableStateOf<OutdoorActivityType?>(null) }
     var reviewingActivityId by rememberSaveable { mutableStateOf<String?>(null) }
     var showAllOutdoorHistory by rememberSaveable { mutableStateOf(false) }
