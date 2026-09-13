@@ -44,7 +44,19 @@ android {
     }
 
     buildTypes {
+        // A debug build installs as its own application id, so it sits alongside
+        // a release install rather than replacing it — which matters here because
+        // the release build is what people download from the site. It also means
+        // the debug signing key can be named in the site's assetlinks.json against
+        // `com.dugcanlift.macrocalc.debug` without ever being able to claim
+        // dugcanlift.com links on behalf of the real app.
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name", "LIFT (debug)")
+        }
         release {
+            resValue("string", "app_name", "LIFT")
             optimization {
                 enable = false
             }
@@ -59,6 +71,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // Each build type sets its own app_name, so the launcher shows which is which.
+        resValues = true
     }
 }
 
