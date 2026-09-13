@@ -29,8 +29,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.dugcanlift.macrocalc.data.CoachStore
 import com.dugcanlift.macrocalc.data.GoalStore
-import com.dugcanlift.macrocalc.data.PlanDecodeResult
-import com.dugcanlift.macrocalc.data.PlanLinkCodec
+import com.dugcanlift.kit.PlanDecodeResult
+import com.dugcanlift.kit.PlanLinkCodec
 import com.dugcanlift.macrocalc.ui.theme.DugCanLiftCalcTheme
 
 class MainActivity : ComponentActivity() {

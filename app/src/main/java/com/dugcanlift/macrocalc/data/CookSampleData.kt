@@ -1,5 +1,7 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.kit.IngredientParser
+import com.dugcanlift.kit.RecipeNutrition
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
