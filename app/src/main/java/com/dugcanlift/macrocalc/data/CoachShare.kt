@@ -211,7 +211,7 @@ object CoachShare {
             name = store.lifterName.ifBlank { "A LIFT user" },
             sex = profile?.sex?.takeIf { it.isNotBlank() },
             age = profile?.age?.takeIf { it > 0 },
-            heightIn = profile?.heightIn?.takeIf { it > 0 }?.roundToInt(),
+            heightIn = profile?.heightIn?.takeIf { it > 0 },
             unit = "lb",
             platform = "and"
         )
