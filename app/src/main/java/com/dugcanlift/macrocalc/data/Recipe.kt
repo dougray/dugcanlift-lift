@@ -1,5 +1,9 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.kit.IngredientParser
+import com.dugcanlift.kit.RecipeIngredient
+import com.dugcanlift.kit.RecipeNutrition
+import com.dugcanlift.kit.trimZeros
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -24,58 +28,6 @@ import java.util.UUID
  * reader rule — every field falls back to a default, so a file written by an
  * older version still loads.
  */
-
-/**
- * Macros for one serving. Deliberately nullable at the [Recipe] level: an
- * estimate of the macros of a hand-written recipe is a guess, and `null` says
- * so where zeros would quietly enter someone's daily total as fact.
- *
- * Doubles here, not Int as in [FoodEntry]. The wire format is unrounded, and
- * rounding once at log time beats rounding at every scale.
- */
-data class RecipeNutrition(
-    val calories: Double = 0.0,
-    val proteinG: Double = 0.0,
-    val carbsG: Double = 0.0,
-    val fatG: Double = 0.0,
-    val fiberG: Double = 0.0,
-    /** True when derived by an LLM rather than a food database. Show it. */
-    val estimated: Boolean = false
-) {
-    fun scaled(factor: Double) = copy(
-        calories = calories * factor,
-        proteinG = proteinG * factor,
-        carbsG = carbsG * factor,
-        fatG = fatG * factor,
-        fiberG = fiberG * factor
-    )
-}
-
-/**
- * One line of a recipe's ingredients.
- *
- * [rawText] is always populated, even when the parse succeeded. It is what the
- * person checks the parse against, and what the shopping list falls back to
- * when [qty] and [unit] could not be resolved.
- */
-data class RecipeIngredient(
-    val rawText: String,
-    val item: String? = null,
-    val qty: Double? = null,
-    val unit: String? = null,
-    /** Resolved mass, when a conversion was possible. Drives macro lookup. */
-    val grams: Double? = null,
-    val optional: Boolean = false,
-    val note: String? = null
-) {
-    /** The parse when it worked, the raw text when it didn't. */
-    val displayText: String
-        get() {
-            val name = item?.takeIf { it.isNotBlank() } ?: return rawText
-            val amount = listOfNotNull(qty?.trimZeros(), unit).joinToString(" ")
-            return if (amount.isBlank()) name else "$amount $name"
-        }
-}
 
 data class Recipe(
     val id: String = UUID.randomUUID().toString(),
@@ -218,10 +170,20 @@ object ShoppingList {
     }
 }
 
-/* ---------- helpers ---------- */
+/**
+ * Renders an aggregated amount map for display.
+ *
+ * Counts print bare — "2", not "2 x banana".
+ */
+fun Map<String, Double>.shoppingAmountLabel(): String =
+    entries
+        .sortedBy { it.key }
+        .joinToString(" + ") { (unit, value) ->
+            if (unit == IngredientParser.COUNT_UNIT) value.trimZeros()
+            else "${value.trimZeros()} $unit"
+        }
 
-internal fun Double.trimZeros(): String =
-    if (this == Math.floor(this) && !isInfinite()) toInt().toString() else toString()
+/* ---------- helpers ---------- */
 
 internal fun Double.roundToIntSafe(): Int =
     if (isNaN() || isInfinite()) 0 else Math.round(this).toInt()

@@ -1,9 +1,7 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.kit.DayKey
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.UUID
 import kotlin.math.roundToInt
 
@@ -80,12 +78,9 @@ fun List<FoodEntry>.totals(): DayTotals = DayTotals(
     fiberG = sumOf { it.totalFiberG }
 )
 
-private val DATE_FORMAT: SimpleDateFormat
-    get() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+fun todayKey(): String = DayKey.today()
 
-fun todayKey(): String = DATE_FORMAT.format(Date())
-
-fun dateKey(millis: Long): String = DATE_FORMAT.format(Date(millis))
+fun dateKey(millis: Long): String = DayKey.make(millis)
 
 /* ---------- JSON ---------- */
 
