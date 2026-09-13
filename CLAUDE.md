@@ -22,7 +22,7 @@ covered by the kit's own tests.
 - `DclPalette` — the ARGB constants `ui/theme/Color.kt`'s `DclBg`/`DclAccent`/…
   wrap.
 
-The app depends on it as `com.github.dougray:liftcore`, pinned to an **exact
+The app depends on it as `com.github.dougray:dugcanlift-kit-android`, pinned to an **exact
 release tag** (never a branch or `SNAPSHOT`) in `app/build.gradle.kts`, resolved
 through JitPack.
 
