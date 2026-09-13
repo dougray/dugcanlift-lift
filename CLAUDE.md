@@ -37,3 +37,10 @@ this `android/` Gradle root. `settings.gradle.kts` turns that into an
 `includeBuild` with a dependency substitution, so the local `:liftcore` project
 wins over the JitPack artifact with no network resolution. Remove the line (or
 delete the file) to go back to building against the pinned tag.
+
+LIFT's own App Links (tap-to-open for shared plan/share links) are verified
+through the site's `.well-known/assetlinks.json`, the same mechanism Coach
+Android's tap-to-import depends on — that file also carries LIFT's release
+signing fingerprint alongside Coach's, so a broken or missing entry for
+either app shows up as autoVerify silently falling back to the
+disambiguation sheet for that app specifically, not both.
