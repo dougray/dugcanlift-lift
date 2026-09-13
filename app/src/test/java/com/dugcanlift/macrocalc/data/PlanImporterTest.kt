@@ -1,6 +1,13 @@
 package com.dugcanlift.macrocalc.data
 
 import androidx.test.core.app.ApplicationProvider
+import com.dugcanlift.kit.PlanMeal
+import com.dugcanlift.kit.PlanPayload
+import com.dugcanlift.kit.PlanRecipe
+import com.dugcanlift.kit.PlanSession
+import com.dugcanlift.kit.PlanSet
+import com.dugcanlift.kit.PlanWorkout
+import com.dugcanlift.kit.PlanWorkoutExercise
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

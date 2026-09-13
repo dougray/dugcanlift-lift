@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.*
+import com.dugcanlift.kit.PlanDecodeResult
 import kotlinx.coroutines.launch
 
 @Composable

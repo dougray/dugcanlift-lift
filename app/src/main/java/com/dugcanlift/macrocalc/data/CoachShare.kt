@@ -4,15 +4,19 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.util.Base64
+import com.dugcanlift.kit.ShareClient
+import com.dugcanlift.kit.ShareDay
+import com.dugcanlift.kit.ShareExercise
+import com.dugcanlift.kit.ShareFood
+import com.dugcanlift.kit.ShareGoal
+import com.dugcanlift.kit.ShareLinkCodec
+import com.dugcanlift.kit.SharePayload
+import com.dugcanlift.kit.ShareSet
 import com.dugcanlift.macrocalc.MacroResult
-import org.json.JSONArray
-import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.zip.Deflater
 import kotlin.math.roundToInt
 
 /**
@@ -47,8 +51,8 @@ object CoachShare {
         entries: List<FoodEntry>,
         steps: Map<String, Long> = emptyMap()
     ): String {
-        val json = buildPayload(store, settings, goal, sessions, entries, steps).toString()
-        return COACH_URL + "#1z" + base64Url(deflateRaw(json))
+        val payload = buildSharePayload(store, settings, goal, sessions, entries, steps)
+        return COACH_URL + "#" + ShareLinkCodec.encodeFragment(payload)
     }
 
     fun linkIsRisky(link: String): Boolean = link.length > RISKY_LINK_CHARS
@@ -117,138 +121,113 @@ object CoachShare {
 
     /* ---------- payload ---------- */
 
-    private fun buildPayload(
+    /**
+     * Maps this device's stores into the kit's typed [SharePayload]. One
+     * [ShareDay] per day in the window, unfiltered — [ShareLinkCodec] applies
+     * the day-emission rule (a day survives only when it has exercises,
+     * itemized food, foodTotals, steps or bodyweight), so pre-filtering here
+     * would shift every day's offset.
+     */
+    private fun buildSharePayload(
         store: CoachStore,
         settings: SettingsStore,
         goal: MacroResult?,
         sessions: List<WorkoutSession>,
         entries: List<FoodEntry>,
         steps: Map<String, Long>
-    ): JSONObject {
+    ): SharePayload {
         val span = store.weeks * 7
         val days = lastDays(span)
         val start = days.first()
-
-        val exerciseDict = mutableListOf<String>()
-        val foodDict = mutableListOf<String>()
         val weights = store.bodyweights()
 
-        val dayArray = JSONArray()
-
-        days.forEachIndexed { offset, key ->
-            val day = JSONObject()
-            var any = false
-
+        val shareDays = days.mapIndexed { offset, key ->
             val dayExercises = sessions.filter { it.date == key }.flatMap { it.exercises }
-            if (dayExercises.isNotEmpty()) {
-                any = true
-                sessions.firstOrNull { it.date == key && it.name.isNotBlank() }
-                    ?.let { day.put("n", it.name) }
-                day.put("fo", settings.focus.name)
+            val hasExercises = dayExercises.isNotEmpty()
 
-                val exercisesJson = JSONArray()
-                dayExercises.forEach { exercise ->
-                    val index = indexIn(exerciseDict, "${exercise.name.trim()}|${exercise.equipment.trim()}")
-                    val setsJson = JSONArray()
-                    exercise.sets.forEach { set -> setsJson.put(setTuple(set)) }
-                    exercisesJson.put(JSONArray().put(index).put(setsJson))
-                }
-                day.put("w", exercisesJson)
-            }
-
-            val dayEntries = entries.filter { it.date == key }
-            if (dayEntries.isNotEmpty()) {
-                any = true
-                if (store.itemisedFood) {
-                    val foodJson = JSONArray()
-                    dayEntries.forEach { entry ->
-                        foodJson.put(
-                            JSONArray()
-                                .put(indexIn(foodDict, entry.name))
-                                .put(entry.servings)
-                                .put(entry.calories)
-                                .put(entry.proteinG)
-                                .put(entry.fatG)
-                                .put(entry.carbsG)
-                                .put(entry.fiberG)
-                                .put(mealIndex(entry))
-                        )
-                    }
-                    day.put("f", foodJson)
-                } else {
-                    val totals = dayEntries.totals()
-                    day.put(
-                        "ft",
-                        JSONArray()
-                            .put(totals.calories).put(totals.proteinG).put(totals.fatG)
-                            .put(totals.carbsG).put(totals.fiberG)
+            val exercises = if (hasExercises) {
+                dayExercises.map { exercise ->
+                    ShareExercise(
+                        name = exercise.name.trim(),
+                        equipment = exercise.equipment.trim(),
+                        sets = exercise.sets.map { set ->
+                            ShareSet(
+                                weightLb = set.weightLb,
+                                reps = set.reps,
+                                rpe = set.rpe,
+                                durationSec = set.durationSec?.toDouble(),
+                                distanceMeters = set.distanceMeters,
+                                isWarmup = false
+                            )
+                        }
                     )
                 }
-            }
+            } else emptyList()
 
-            steps[key]?.let { day.put("st", it); any = true }
-            weights[key]?.let { day.put("bw", it); any = true }
+            val sessionName = if (hasExercises) {
+                sessions.firstOrNull { it.date == key && it.name.isNotBlank() }?.name
+            } else null
 
-            if (any) {
-                day.put("k", offset)
-                dayArray.put(day)
-            }
-        }
+            val dayEntries = entries.filter { it.date == key }
 
-        val client = JSONObject()
-            .put("i", store.lifterId)
-            .put("n", store.lifterName.ifBlank { "A LIFT user" })
-            .put("u", "lb")
-            .put("p", "and")
-        store.profile?.let { profile ->
-            if (profile.sex.isNotBlank()) client.put("s", profile.sex)
-            if (profile.age > 0) client.put("a", profile.age)
-            if (profile.heightIn > 0) client.put("h", profile.heightIn)
-        }
+            val food = if (store.itemisedFood && dayEntries.isNotEmpty()) {
+                dayEntries.map { entry ->
+                    ShareFood(
+                        name = entry.name,
+                        servings = entry.servings,
+                        calories = entry.calories.toDouble(),
+                        proteinG = entry.proteinG.toDouble(),
+                        fatG = entry.fatG.toDouble(),
+                        carbsG = entry.carbsG.toDouble(),
+                        fiberG = entry.fiberG.toDouble(),
+                        meal = mealIndex(entry)
+                    )
+                }
+            } else null
 
-        val payload = JSONObject()
-            .put("v", 1)
-            .put("c", client)
-            .put("r", start)
-            .put("t", todayKey())
-            .put("z", System.currentTimeMillis() / 1000)
-            .put("x", JSONArray(exerciseDict))
-            .put("d", dayArray)
+            val foodTotals = if (!store.itemisedFood && dayEntries.isNotEmpty()) {
+                val totals = dayEntries.totals()
+                listOf(
+                    totals.calories.toDouble(), totals.proteinG.toDouble(), totals.fatG.toDouble(),
+                    totals.carbsG.toDouble(), totals.fiberG.toDouble()
+                )
+            } else null
 
-        goal?.let {
-            payload.put(
-                "g",
-                JSONObject()
-                    .put("c", it.calories).put("p", it.proteinG).put("f", it.fatG)
-                    .put("cb", it.carbsG).put("fb", it.fiberG)
+            ShareDay(
+                dayOffset = offset,
+                sessionName = sessionName,
+                focus = if (hasExercises) settings.focus.name else null,
+                bodyweightLb = weights[key],
+                steps = steps[key],
+                exercises = exercises,
+                foodTotals = foodTotals,
+                food = food
             )
         }
-        if (foodDict.isNotEmpty()) payload.put("fd", JSONArray(foodDict))
 
-        return payload
-    }
-
-    /**
-     * [weight, reps, rpe, seconds, metres, flags] with trailing blanks dropped,
-     * so an ordinary set costs eleven characters instead of sixty.
-     */
-    private fun setTuple(set: WorkoutSet): JSONArray {
-        val values = mutableListOf<Any?>(
-            set.weightLb, set.reps, set.rpe, set.durationSec, set.distanceMeters, 0
+        val profile = store.profile
+        val client = ShareClient(
+            id = store.lifterId,
+            name = store.lifterName.ifBlank { "A LIFT user" },
+            sex = profile?.sex?.takeIf { it.isNotBlank() },
+            age = profile?.age?.takeIf { it > 0 },
+            heightIn = profile?.heightIn?.takeIf { it > 0 },
+            unit = "lb",
+            platform = "and"
         )
-        while (values.isNotEmpty() && (values.last() == null || values.last() == 0)) {
-            values.removeAt(values.size - 1)
-        }
-        val array = JSONArray()
-        values.forEach { if (it == null) array.put(JSONObject.NULL) else array.put(it) }
-        return array
-    }
 
-    private fun indexIn(dict: MutableList<String>, value: String): Int {
-        val at = dict.indexOf(value)
-        if (at >= 0) return at
-        dict.add(value)
-        return dict.size - 1
+        val shareGoal = goal?.let {
+            ShareGoal(calories = it.calories, proteinG = it.proteinG, fatG = it.fatG, carbsG = it.carbsG, fiberG = it.fiberG)
+        }
+
+        return SharePayload(
+            client = client,
+            goal = shareGoal,
+            startDay = start,
+            endDay = todayKey(),
+            exportedAtEpochSeconds = System.currentTimeMillis() / 1000,
+            days = shareDays
+        )
     }
 
     private fun mealIndex(entry: FoodEntry): Int = when (entry.mealOrDefault) {
@@ -307,33 +286,6 @@ object CoachShare {
     }
 
     /* ---------- encoding ---------- */
-
-    /**
-     * Raw DEFLATE — no zlib wrapper. `nowrap = true` is what makes this the
-     * same bytes as the browser's CompressionStream('deflate-raw') and iOS's
-     * COMPRESSION_ZLIB, which is the whole reason one decoder can read all
-     * three.
-     */
-    private fun deflateRaw(text: String): ByteArray {
-        val input = text.toByteArray(Charsets.UTF_8)
-        val deflater = Deflater(Deflater.BEST_COMPRESSION, true)
-        return try {
-            deflater.setInput(input)
-            deflater.finish()
-            val buffer = ByteArray(8 * 1024)
-            val out = java.io.ByteArrayOutputStream(input.size / 3)
-            while (!deflater.finished()) {
-                val written = deflater.deflate(buffer)
-                out.write(buffer, 0, written)
-            }
-            out.toByteArray()
-        } finally {
-            deflater.end()
-        }
-    }
-
-    private fun base64Url(bytes: ByteArray): String =
-        Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
 
     private fun escapeHtml(text: String): String = text
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
