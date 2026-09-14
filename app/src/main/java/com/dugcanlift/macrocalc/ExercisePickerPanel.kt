@@ -206,7 +206,7 @@ private fun ExerciseResultRow(
             style = MaterialTheme.typography.bodyLarge
         )
         Text(
-            text = hit.resultLabel.substringAfter(" - "),
+            text = hit.detailLabel,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

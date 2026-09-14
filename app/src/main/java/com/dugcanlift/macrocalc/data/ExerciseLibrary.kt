@@ -50,17 +50,21 @@ data class LibraryExercise(
     val matchKey: String
         get() = "${name.trim()}|${storedEquipment.trim()}".lowercase(Locale.US)
 
+    /**
+     * What the row says under the name: "chest, barbell", or just the muscle
+     * when the exercise needs no equipment.
+     *
+     * Built as its own string rather than sliced back out of [resultLabel].
+     * Plenty of these names carry a " - " of their own — "Barbell Bench Press
+     * - Medium Grip" — so splitting the joined label puts half the name into
+     * the subtitle.
+     */
+    val detailLabel: String
+        get() = if (equipment.isBlank()) muscle else "$muscle, $equipment"
+
     /** "Barbell Squat - quadriceps, barbell", the browser's row text. */
     val resultLabel: String
-        get() = buildString {
-            append(name)
-            append(" - ")
-            append(muscle)
-            if (equipment.isNotBlank()) {
-                append(", ")
-                append(equipment)
-            }
-        }
+        get() = "$name - $detailLabel"
 }
 
 /** The equipment chips over the results, in the browser's order. */
