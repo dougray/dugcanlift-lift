@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.focusSummary
@@ -42,6 +44,8 @@ import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.Routine
+import com.dugcanlift.macrocalc.data.StarterSplitStore
+import com.dugcanlift.macrocalc.data.alreadyHas
 import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.SettingsStore
@@ -90,6 +94,10 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
     val sessions by workouts.sessions.collectAsState()
     val routines by routineRepo.routines.collectAsState()
+
+    // Six routines off a bundled file, for someone who has not written any.
+    var starters by remember { mutableStateOf<List<Routine>>(emptyList()) }
+    LaunchedEffect(Unit) { starters = StarterSplitStore.load(context) }
     val scheduledSessions by scheduledSessionRepo.sessions.collectAsState()
     val outdoorActivities by outdoorRepo.activities.collectAsState()
 
@@ -309,6 +317,43 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                             scope.launch { workouts.save(routine.toSession(selectedDate)) }
                         },
                         onDelete = { scope.launch { routineRepo.delete(routine.id) } }
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        val unclaimed = starters.filterNot { routines.alreadyHas(it) }
+        if (unclaimed.isNotEmpty()) {
+            Text(text = "Ready-made", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (routines.isEmpty()) {
+                    "Splits to start from, until you have written your own."
+                } else {
+                    "Splits you have not added yet."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            unclaimed.groupBy { it.folder }.forEach { (folder, list) ->
+                Text(
+                    text = folder,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                list.forEach { starter ->
+                    StarterSplitCard(
+                        routine = starter,
+                        // Copied, not referenced: from here on it is an
+                        // ordinary routine of theirs, editable and deletable,
+                        // and nothing about it stays special.
+                        onAdd = { scope.launch { routineRepo.save(starter) } }
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
@@ -551,8 +596,17 @@ private fun ExerciseBlock(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = exercise.displayName, style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onRemove) { Text("Remove") }
+            // The name takes the space that is left and wraps; Remove keeps
+            // its own width. Without the weight they compete, and a long name
+            // -- which every library name is -- squeezed "Remove" down to one
+            // letter per line.
+            Text(
+                text = exercise.displayName,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            TextButton(onClick = onRemove) { Text("Remove", maxLines = 1) }
         }
 
         previous?.let { last ->
@@ -738,5 +792,47 @@ private fun WorkoutDateNavigator(
         TextButton(onClick = onPrevious) { Text("Previous") }
         Text(text = workoutDateLabel(date), style = MaterialTheme.typography.headlineSmall)
         TextButton(onClick = onNext, enabled = !isToday) { Text("Next") }
+    }
+}
+
+/**
+ * A ready-made split, before it is yours.
+ *
+ * Deliberately not a [RoutineCard]: there is no Start and no Delete, because
+ * neither means anything yet. Adding copies it into your routines, where the
+ * real card takes over — so there is exactly one place that starts a workout
+ * and one place that deletes one.
+ */
+@Composable
+private fun StarterSplitCard(
+    routine: Routine,
+    onAdd: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "${routine.exercises.size} exercises - " +
+                    "${routine.exercises.sumOf { it.targetSets }} sets",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                // Names only, no equipment, clipped to two lines. The full
+                // preview is unreadable here: these are library names, and
+                // "Barbell Bench Press - Medium Grip (Barbell)" five times
+                // over is a paragraph, not a summary. The detail is one tap
+                // away once it is their routine.
+                text = routine.exercises.joinToString(", ") { it.name },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(onClick = onAdd) { Text("Add to my routines") }
+        }
     }
 }
