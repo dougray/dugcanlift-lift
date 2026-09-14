@@ -39,7 +39,13 @@ import androidx.health.connect.client.PermissionController
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.HealthConnectManager
+import com.dugcanlift.macrocalc.data.FocusChart
 import com.dugcanlift.macrocalc.data.SettingsStore
+import com.dugcanlift.macrocalc.data.clockLabel
+import com.dugcanlift.macrocalc.data.distanceLabel
+import com.dugcanlift.macrocalc.data.totalMetres
+import com.dugcanlift.macrocalc.data.totalReps
+import com.dugcanlift.macrocalc.data.totalSeconds
 import com.dugcanlift.macrocalc.data.WorkoutRepository
 import com.dugcanlift.macrocalc.data.WorkoutSession
 import com.dugcanlift.macrocalc.data.estimatedOneRepMax
@@ -289,6 +295,12 @@ fun DashboardScreen(
 
         Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
+        // Read at composition rather than held in state: the focus is changed on
+        // the Train tab, and coming back here recomposes, which is when this card
+        // should pick the change up. The browser behaves the same way -- the
+        // chart is on Home and re-renders when Home is next drawn.
+        val focus = settings.focus
+
         Spacer(modifier = Modifier.height(12.dp))
 
         if (exerciseOptions.isEmpty()) {
@@ -335,27 +347,88 @@ fun DashboardScreen(
                         val bestE1rm = history.mapNotNull { it.second.estimatedOneRepMax() }.maxOrNull()
 
                         StatRow("Sessions", "${history.size}")
-                        StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
-                        StatRow("Most recent", latest?.let { "${it.roundToInt()} lb" } ?: "-")
-                        StatRow("Best est. 1RM", bestE1rm?.let { "${it.roundToInt()} lb" } ?: "-")
+
+                        /* Which numbers matter depends on what you train for, and
+                         * this card used to answer "top weight and estimated 1RM"
+                         * for everyone — so a Hyrox or endurance user got two
+                         * dashes and a flat line.
+                         *
+                         * LineChart scales every series against ONE shared maximum
+                         * AND prints that maximum as the axis label, so a mode may
+                         * only plot series sharing a unit. Pounds against pounds is
+                         * fine; metres against minutes would pin the minutes to the
+                         * baseline under a number that describes neither. Where
+                         * nothing comparable exists, one series is the honest
+                         * answer. */
+                        val series = when (focus.chart) {
+                            FocusChart.VOLUME -> {
+                                val volumes = history.map { it.second.volumeLb }.filter { it > 0 }
+                                StatRow("Best volume", volumes.maxOrNull()?.let { "${it.roundToInt()} lb" } ?: "-")
+                                StatRow("Most recent", volumes.lastOrNull()?.let { "${it.roundToInt()} lb" } ?: "-")
+                                StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
+                                listOf(
+                                    ChartSeries(
+                                        "Volume (lb)",
+                                        ChartColors.Fat,
+                                        history.map { it.second.volumeLb.takeIf { v -> v > 0 }?.toFloat() }
+                                    )
+                                )
+                            }
+
+                            FocusChart.WORK -> {
+                                val times = history.map { it.second.totalSeconds() }.filter { it > 0 }
+                                StatRow("Longest", times.maxOrNull()?.let { clockLabel(it) } ?: "-")
+                                StatRow("Most recent", times.lastOrNull()?.let { clockLabel(it) } ?: "-")
+                                StatRow("Total reps", history.sumOf { it.second.totalReps() }.takeIf { it > 0 }?.toString() ?: "-")
+                                listOf(
+                                    ChartSeries(
+                                        "Working time (min)",
+                                        ChartColors.Fiber,
+                                        history.map { it.second.totalSeconds().takeIf { v -> v > 0 }?.let { v -> v / 60f } }
+                                    )
+                                )
+                            }
+
+                            FocusChart.PACE -> {
+                                val metres = history.map { it.second.totalMetres() }.filter { it > 0 }
+                                val times = history.map { it.second.totalSeconds() }.filter { it > 0 }
+                                StatRow("Furthest", metres.maxOrNull()?.let { distanceLabel(it) } ?: "-")
+                                StatRow("Most recent", metres.lastOrNull()?.let { distanceLabel(it) } ?: "-")
+                                StatRow("Longest", times.maxOrNull()?.let { clockLabel(it) } ?: "-")
+                                listOf(
+                                    ChartSeries(
+                                        "Distance (km)",
+                                        ChartColors.Protein,
+                                        history.map { it.second.totalMetres().takeIf { v -> v > 0 }?.let { v -> v.toFloat() / 1000f } }
+                                    )
+                                )
+                            }
+
+                            FocusChart.STRENGTH -> {
+                                StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
+                                StatRow("Most recent", latest?.let { "${it.roundToInt()} lb" } ?: "-")
+                                StatRow("Best est. 1RM", bestE1rm?.let { "${it.roundToInt()} lb" } ?: "-")
+                                listOf(
+                                    ChartSeries(
+                                        "Top weight",
+                                        ChartColors.Weight,
+                                        history.map { it.second.topWeightLb()?.toFloat() }
+                                    ),
+                                    ChartSeries(
+                                        "Est. 1RM",
+                                        ChartColors.Carbs,
+                                        history.map { it.second.estimatedOneRepMax()?.toFloat() }
+                                    )
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Plotted per session, not per calendar day — an exercise
                         // trained twice a week would otherwise be mostly gaps.
                         LineChart(
-                            series = listOf(
-                                ChartSeries(
-                                    "Top weight",
-                                    ChartColors.Weight,
-                                    history.map { it.second.topWeightLb()?.toFloat() }
-                                ),
-                                ChartSeries(
-                                    "Est. 1RM",
-                                    ChartColors.Carbs,
-                                    history.map { it.second.estimatedOneRepMax()?.toFloat() }
-                                )
-                            ),
+                            series = series,
                             labels = history.map { shortLabel(it.first) }
                         )
                     }
