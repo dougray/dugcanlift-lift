@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
+import com.dugcanlift.macrocalc.data.focusSummary
 import com.dugcanlift.macrocalc.data.LoggedExercise
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
@@ -439,8 +440,7 @@ private fun SessionCard(
             if (session.setCount > 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "${session.setCount} sets" +
-                        if (session.volumeLb > 0) " - ${session.volumeLb.roundToInt()} lb volume" else "",
+                    text = focusSummary(session, focus),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -666,7 +666,11 @@ private fun SetForm(
     onCancel: () -> Unit
 ) {
     var weight by remember { mutableStateOf(previousSet?.weightLb?.trimZero() ?: "") }
-    var reps by remember { mutableStateOf(previousSet?.reps?.toString() ?: "") }
+    // The set before is the best guess there is; the focus only has to answer
+    // for the first one, where 5 and 10 are different training decisions.
+    var reps by remember {
+        mutableStateOf(previousSet?.reps?.toString() ?: focus.defaultReps?.toString() ?: "")
+    }
     var rpe by remember { mutableStateOf("") }
     var time by remember { mutableStateOf("") }
     var distance by remember { mutableStateOf(previousSet?.distanceMeters?.trimZero() ?: "") }
