@@ -78,7 +78,7 @@ android {
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.core:core-splashscreen:1.2.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     testImplementation("org.json:json:20240303")
     testImplementation("org.robolectric:robolectric:4.16.1")
