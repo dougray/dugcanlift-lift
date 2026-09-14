@@ -422,8 +422,6 @@ private fun SessionCard(
     onSaveAsRoutine: (String, String) -> Unit
 ) {
     var addingExercise by remember(session.id) { mutableStateOf(false) }
-    var newName by remember(session.id) { mutableStateOf("") }
-    var newEquipment by remember(session.id) { mutableStateOf("") }
 
     var savingRoutine by remember(session.id) { mutableStateOf(false) }
     var routineName by remember(session.id) { mutableStateOf("") }
@@ -475,77 +473,22 @@ private fun SessionCard(
             }
 
             if (addingExercise) {
-                NameField(value = newName, onValueChange = { newName = it }, label = "Exercise")
-
-                if (known.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                    ) {
-                        known.forEach { item ->
-                            AssistChip(
-                                onClick = {
-                                    newName = item.name
-                                    newEquipment = item.equipment
-                                },
-                                label = { Text(item.displayName) }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                NameField(
-                    value = newEquipment,
-                    onValueChange = { newEquipment = it },
-                    label = "Equipment (optional)"
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                ) {
-                    equipmentOptions.forEach { option ->
-                        AssistChip(
-                            onClick = { newEquipment = option },
-                            label = { Text(option) }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = {
-                            onChange(
-                                session.copy(
-                                    exercises = session.exercises + LoggedExercise(
-                                        name = newName.trim(),
-                                        equipment = newEquipment.trim()
-                                    )
+                ExercisePickerPanel(
+                    known = known,
+                    equipmentOptions = equipmentOptions,
+                    onAdd = { name, equipment ->
+                        onChange(
+                            session.copy(
+                                exercises = session.exercises + LoggedExercise(
+                                    name = name.trim(),
+                                    equipment = equipment.trim()
                                 )
                             )
-                            newName = ""
-                            newEquipment = ""
-                            addingExercise = false
-                        },
-                        enabled = newName.isNotBlank()
-                    ) {
-                        Text("Add")
-                    }
-                    OutlinedButton(onClick = {
-                        newName = ""
-                        newEquipment = ""
+                        )
                         addingExercise = false
-                    }) {
-                        Text("Cancel")
-                    }
-                }
+                    },
+                    onCancel = { addingExercise = false }
+                )
             } else if (savingRoutine) {
                 NameField(
                     value = routineName,
