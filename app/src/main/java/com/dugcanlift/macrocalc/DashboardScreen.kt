@@ -19,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -154,7 +155,11 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedButton(onClick = onOpenCalculator) { Text("Set my goal") }
+                    // Filled, not outlined: the browser build renders a primary
+                    // action as a solid accent pill and reserves the outline for
+                    // its `.ghost` secondary. This is the call to action on an
+                    // empty Home screen -- there is nothing else to do here.
+                    Button(onClick = onOpenCalculator) { Text("Set my goal") }
                 }
             }
         } else {
