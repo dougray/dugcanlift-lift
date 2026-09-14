@@ -97,6 +97,28 @@ class ExerciseLibraryTest {
         )
     }
 
+    // MARK: - Row text
+
+    @Test fun `a name containing a dash keeps all of itself out of the subtitle`() {
+        // Caught on the device: the row built its subtitle by slicing the
+        // joined label at the first " - ", and this name has one, so the row
+        // read "Medium Grip - chest, barbell" under the name.
+        val hit = library.first { it.name == "Barbell Bench Press - Medium Grip" }
+
+        assertEquals("chest, barbell", hit.detailLabel)
+        assertEquals("Barbell Bench Press - Medium Grip - chest, barbell", hit.resultLabel)
+    }
+
+    @Test fun `an exercise needing no equipment says only the muscle`() {
+        val hit = library.first { it.equipment.isBlank() }
+        assertEquals(hit.muscle, hit.detailLabel)
+    }
+
+    @Test fun `plenty of these names carry their own dash`() {
+        // If this ever hits zero the test above is guarding nothing.
+        assertTrue(library.count { " - " in it.name } > 10)
+    }
+
     // MARK: - Search
 
     @Test fun `search matches a name`() {
