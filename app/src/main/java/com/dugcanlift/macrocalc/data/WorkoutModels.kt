@@ -4,9 +4,31 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
+/** Which number summarises a session under a given focus. */
+enum class FocusSummary { VOLUME, TOP_SET, WORK, DISTANCE }
+
+/** Which series the exercise progression chart plots under a given focus. */
+enum class FocusChart { STRENGTH, VOLUME, WORK, PACE }
+
 /**
- * Training style. This only controls which fields the UI shows — every set
- * stores every field regardless, so switching focus never loses data.
+ * Training style.
+ *
+ * This used to control only which fields the UI showed, and Bodybuilding and
+ * Powerlifting carried identical flags — so picking between the two most
+ * likely options changed nothing whatsoever. It now also decides what a new
+ * set starts at, which number summarises a session, and what the progression
+ * chart plots, because those are the things that actually differ between a
+ * hypertrophy block and a strength block.
+ *
+ * The visibility flags stay, because they still matter: an endurance set has
+ * no business asking for reps.
+ *
+ * `defaultReps` seeds the FIRST set of an exercise only. Every set after it
+ * copies the one before, which is a better guess than any constant. Null means
+ * the focus has no opinion.
+ *
+ * Every set stores every field regardless of focus, so switching focus — or
+ * opening a log written on a device set to another focus — never loses data.
  */
 enum class TrainingFocus(
     val label: String,
@@ -14,14 +36,23 @@ enum class TrainingFocus(
     val showReps: Boolean,
     val showRpe: Boolean,
     val showTime: Boolean,
-    val showDistance: Boolean
+    val showDistance: Boolean,
+    val defaultReps: Int?,
+    val summary: FocusSummary,
+    val chart: FocusChart
 ) {
-    BODYBUILDING("Bodybuilding", true, true, true, false, false),
-    POWERLIFTING("Powerlifting", true, true, true, false, false),
-    CROSSFIT("CrossFit", true, true, false, true, false),
-    HYROX("Hyrox", true, true, false, true, true),
-    ENDURANCE("Endurance", false, false, true, true, true),
-    EVERYTHING("Everything", true, true, true, true, true)
+    BODYBUILDING("Bodybuilding", true, true, true, false, false,
+        defaultReps = 10, summary = FocusSummary.VOLUME, chart = FocusChart.VOLUME),
+    POWERLIFTING("Powerlifting", true, true, true, false, false,
+        defaultReps = 5, summary = FocusSummary.TOP_SET, chart = FocusChart.STRENGTH),
+    CROSSFIT("CrossFit", true, true, false, true, false,
+        defaultReps = null, summary = FocusSummary.WORK, chart = FocusChart.WORK),
+    HYROX("Hyrox", true, true, false, true, true,
+        defaultReps = null, summary = FocusSummary.DISTANCE, chart = FocusChart.PACE),
+    ENDURANCE("Endurance", false, false, true, true, true,
+        defaultReps = null, summary = FocusSummary.DISTANCE, chart = FocusChart.PACE),
+    EVERYTHING("Everything", true, true, true, true, true,
+        defaultReps = 8, summary = FocusSummary.VOLUME, chart = FocusChart.STRENGTH)
 }
 
 /**
