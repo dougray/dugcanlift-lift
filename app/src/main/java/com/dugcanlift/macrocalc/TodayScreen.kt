@@ -493,6 +493,36 @@ private fun AddFoodForm(
 
             NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fiber (g/100g)")
 
+            // What it will actually count as, before it is committed. The
+            // iPhone's food search and both watches have always shown this
+            // while you set the amount; this form made you save first and
+            // find out afterwards. It also makes a typo in the per-100 g
+            // numbers obvious at entry rather than in the day's total.
+            val preview = amountGrams?.let { g ->
+                calories.toIntOrNull()?.let { kcal ->
+                    scaleFrom100g(
+                        Per100g(
+                            calories = kcal,
+                            proteinG = protein.toIntOrNull() ?: 0,
+                            fatG = fat.toIntOrNull() ?: 0,
+                            carbsG = carbs.toIntOrNull() ?: 0,
+                            fiberG = fiber.toIntOrNull() ?: 0,
+                        ),
+                        g
+                    )
+                }
+            }
+            if (preview != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "${formatAmount(amountGrams, unit)} = ${preview.calories} kcal - " +
+                        "P ${preview.proteinG} - F ${preview.fatG} - " +
+                        "C ${preview.carbsG} - Fib ${preview.fiberG}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
