@@ -11,6 +11,9 @@ enum class ServingUnit {
 
     val abbreviation: String get() = if (this == GRAMS) "g" else "oz"
 
+    /** What the chip says. The abbreviation is for amounts, not for choosing. */
+    val label: String get() = if (this == GRAMS) "Grams" else "Ounces"
+
     fun fromGrams(grams: Double): Double =
         if (this == GRAMS) grams else grams / GRAMS_PER_OUNCE
 

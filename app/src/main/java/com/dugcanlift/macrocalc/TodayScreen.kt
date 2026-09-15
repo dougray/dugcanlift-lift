@@ -53,6 +53,8 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+import com.dugcanlift.macrocalc.data.scaleFrom100g
+import com.dugcanlift.macrocalc.data.Per100g
 
 @Composable
 fun TodayScreen(
@@ -379,8 +381,18 @@ private fun AddFoodForm(
 ) {
     // Keyed on the prefill so picking a different search result refills the
     // fields rather than keeping the previous one's numbers.
+    val context = LocalContext.current
+    val settingsStore = remember { SettingsStore.get(context) }
+    var unit by remember { mutableStateOf(settingsStore.servingUnit) }
+
     var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
-    var servings by remember(initial) { mutableStateOf("1") }
+
+    // Food is logged by weight. Servings is gone as something you type; the
+    // amount is a real weight in the person's own unit, and grams are what
+    // gets stored. Entries logged before this keep their old multiplier.
+    var amount by remember(initial, unit) {
+        mutableStateOf(trimAmount(unit.fromGrams(100.0)))
+    }
     var calories by remember(initial) { mutableStateOf(initial?.calories?.toString() ?: "") }
     var protein by remember(initial) { mutableStateOf(initial?.proteinG?.toString() ?: "") }
     var fat by remember(initial) { mutableStateOf(initial?.fatG?.toString() ?: "") }
@@ -397,7 +409,9 @@ private fun AddFoodForm(
         )
     }
 
-    val valid = name.isNotBlank() && calories.toIntOrNull() != null
+    val amountGrams = amount.toDoubleOrNull()?.let { unit.toGrams(it) }
+    val valid = name.isNotBlank() && calories.toIntOrNull() != null &&
+        amountGrams != null && amountGrams > 0.0
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -421,42 +435,94 @@ private fun AddFoodForm(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            NumberField(value = servings, onValueChange = { servings = it }, label = "Servings")
+            Text(
+                text = "Log by",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ServingUnit.entries.forEach { option ->
+                    FilterChip(
+                        selected = option == unit,
+                        onClick = {
+                            // Keep the amount meaning the same weight, so
+                            // switching to ounces mid-entry does not silently
+                            // re-scale what is about to be logged.
+                            val grams = amount.toDoubleOrNull()?.let { unit.toGrams(it) }
+                            unit = option
+                            settingsStore.servingUnit = option
+                            if (grams != null) amount = trimAmount(option.fromGrams(grams))
+                        },
+                        label = { Text(option.label) }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            NumberField(value = calories, onValueChange = { calories = it }, label = "Calories per serving")
+            Text(
+                text = "Macros as they read per 100 g, then the amount you actually ate.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            NumberField(value = protein, onValueChange = { protein = it }, label = "Protein (g)")
+            NumberField(value = amount, onValueChange = { amount = it },
+                        label = "Amount (${unit.abbreviation})")
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            NumberField(value = fat, onValueChange = { fat = it }, label = "Fat (g)")
+            NumberField(value = calories, onValueChange = { calories = it },
+                        label = "Calories (per 100 g)")
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            NumberField(value = carbs, onValueChange = { carbs = it }, label = "Carbs (g)")
+            NumberField(value = protein, onValueChange = { protein = it }, label = "Protein (g/100g)")
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fiber (g)")
+            NumberField(value = fat, onValueChange = { fat = it }, label = "Fat (g/100g)")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            NumberField(value = carbs, onValueChange = { carbs = it }, label = "Carbs (g/100g)")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fiber (g/100g)")
 
             Spacer(modifier = Modifier.height(20.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = {
-                        onAdd(
-                            FoodEntry(
-                                name = name.trim(),
-                                servings = servings.toDoubleOrNull() ?: 1.0,
+                        // amountGrams is authoritative, servings stays 1,
+                        // and the macros are already the totals for this
+                        // amount -- FoodEntry's own contract, and the one the
+                        // browser and iPhone builds write too.
+                        val scaled = scaleFrom100g(
+                            Per100g(
                                 calories = calories.toIntOrNull() ?: 0,
                                 proteinG = protein.toIntOrNull() ?: 0,
                                 fatG = fat.toIntOrNull() ?: 0,
                                 carbsG = carbs.toIntOrNull() ?: 0,
                                 fiberG = fiber.toIntOrNull() ?: 0,
+                            ),
+                            amountGrams ?: return@Button
+                        ) ?: return@Button
+
+                        onAdd(
+                            FoodEntry(
+                                name = name.trim(),
+                                servings = 1.0,
+                                amountGrams = amountGrams,
+                                calories = scaled.calories,
+                                proteinG = scaled.proteinG,
+                                fatG = scaled.fatG,
+                                carbsG = scaled.carbsG,
+                                fiberG = scaled.fiberG,
                                 date = date,
                                 meal = meal.name
                             )
@@ -514,6 +580,13 @@ private fun formatServings(value: Double): String =
  * not whatever unit was active when it was logged. Mirrors LIFT iOS's
  * `FoodEntryDisplay.amountText(for:preferredUnit:)`.
  */
+/** An amount for a text field: one decimal at most, never a trailing ".0". */
+internal fun trimAmount(value: Double): String {
+    val rounded = (value * 10.0).roundToInt() / 10.0
+    return if (rounded == rounded.roundToInt().toDouble()) rounded.roundToInt().toString()
+    else rounded.toString()
+}
+
 internal fun formatAmount(amountGrams: Double, unit: ServingUnit): String {
     val converted = unit.fromGrams(amountGrams)
     val rounded = (converted * 10.0).roundToInt() / 10.0
