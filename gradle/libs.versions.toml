@@ -11,7 +11,7 @@ kotlin = "2.2.10"
 composeBom = "2026.02.01"
 healthConnect = "1.1.0"
 json = "20260814"
-robolectric = "4.16.1"
+robolectric = "4.17"
 androidxTestCore = "1.7.0"
 kotlinxCoroutinesTest = "1.8.1"
 
