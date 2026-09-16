@@ -2,13 +2,14 @@
 
 **LIFT** (`com.dugcanlift.macrocalc`)
 
-Last updated: 8 September 2026
+Last updated: 16 September 2026
 
 ## The short version
 
 Everything you enter stays on your phone. There are no accounts, no analytics,
-no advertising, and no cloud sync. The only thing that ever leaves your device
-is a food search term or barcode, and only when you choose to use that feature.
+no advertising, and no cloud sync. Nothing leaves your device unless you choose
+to send it: a food search term or barcode when you search, and your log when you
+use Send to Coach (see below).
 
 ## What the app stores, and where
 
@@ -98,6 +99,20 @@ requests whatsoever.
   Export on a finished activity — never automatically, and never for any
   other kind of data. As with step data, this stays on-device between the app
   and Health Connect; nothing is uploaded anywhere by this app.
+
+## Sending your log to a coach
+
+Send to Coach builds a link holding the log you chose to send and opens your
+own email app with it written out. You pick the recipient and you press send;
+the app uploads nothing itself, and the log rides in the part of the link that
+browsers never send to a web server.
+
+The link carries your training, food totals or items, steps, bodyweight, goal,
+and, for runs, walks and hikes, each activity's date, time, distance and climb
+plus your personal bests. It carries **no GPS route** unless you turn on **Your
+last route**, which is off until you do. With it on, the link includes the route
+of your newest activity with the first and last 200 m removed, so it does not
+show where you started or finished, and thinned to at most 150 points.
 
 ## Analytics, advertising, and tracking
 
