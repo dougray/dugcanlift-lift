@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.horizontalScroll
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -61,7 +62,7 @@ fun <T> ChipRow(
 
 @Composable
 fun ResultCard(result: MacroResult) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "${result.calories} kcal / day",

@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.background
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import com.dugcanlift.macrocalc.data.AppearanceStore
+import com.dugcanlift.macrocalc.data.AppAppearance
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -86,6 +89,8 @@ fun DashboardScreen(
     var stepGoal by remember { mutableStateOf(settings.stepGoal) }
     var showingStepGoalEditor by remember { mutableStateOf(false) }
     var servingUnit by remember { mutableStateOf(settings.servingUnit) }
+    val appearanceStore = remember { AppearanceStore.get(context) }
+    val appearance by appearanceStore.appearance.collectAsState()
 
     val stepsPermissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract()
@@ -145,7 +150,7 @@ fun DashboardScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (goal == null) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = "No goal set yet.", style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(4.dp))
@@ -163,7 +168,7 @@ fun DashboardScreen(
                 }
             }
         } else {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     val remaining = goal.calories - eaten.calories
                     Text(
@@ -189,7 +194,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "Steps", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -213,7 +218,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "Training", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -244,7 +249,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "Fuel so far today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -262,7 +267,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 StatRow("Workouts", "${weekSessions.size}")
                 StatRow(
@@ -309,7 +314,7 @@ fun DashboardScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (exerciseOptions.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Text(
                     text = "Log a workout and your lifts will chart here.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -339,7 +344,7 @@ fun DashboardScreen(
             if (chosen != null) {
                 val history = allSessions.historyFor(chosen.name, chosen.equipment).takeLast(10)
 
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = chosen.displayName,
@@ -447,7 +452,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 StatRow("Days logged", "$daysLogged of 7")
                 // Averaged over days actually logged, not over seven — otherwise
@@ -520,7 +525,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = "Serving Size",
@@ -536,6 +541,29 @@ fun DashboardScreen(
                         servingUnit = it
                         settings.servingUnit = it
                     }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Appearance",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                ChipRow(
+                    options = AppAppearance.entries,
+                    selected = appearance,
+                    label = { it.label },
+                    onSelect = { appearanceStore.set(it) }
+                )
+                Text(
+                    text = "System follows your phone's light or dark setting.",
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
         }

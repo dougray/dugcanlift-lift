@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.background
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -264,7 +265,7 @@ private fun DateNavigator(
 
 @Composable
 private fun SummaryCard(goal: MacroResult, eaten: DayTotals) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             val remaining = goal.calories - eaten.calories
             Text(
@@ -413,7 +414,7 @@ private fun AddFoodForm(
     val valid = name.isNotBlank() && calories.toIntOrNull() != null &&
         amountGrams != null && amountGrams > 0.0
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = "Add food", style = MaterialTheme.typography.titleMedium)
 
