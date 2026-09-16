@@ -28,6 +28,7 @@ object BackupStore {
     data class RestoreResult(val added: Int, val ok: Boolean, val problem: String? = null)
 
     fun build(context: Context): String {
+        adoptPreservedOutdoor(context)
         val food = FoodRepository.get(context).entries.value
         val workouts = WorkoutRepository.get(context).sessions.value
         val routines = RoutineRepository.get(context).routines.value
@@ -51,6 +52,9 @@ object BackupStore {
         data.put("food", JSONArray().apply { food.forEach { put(it.toJson()) } })
         data.put("workouts", JSONArray().apply { workouts.forEach { put(it.toJson()) } })
         data.put("routines", JSONArray().apply { routines.forEach { put(it.toJson()) } })
+        data.put("outdoor", JSONArray().apply {
+            OutdoorActivityRepository.get(context).activitiesForBackup().forEach { put(outdoorForBackup(it)) }
+        })
 
         goal?.let {
             data.put("goal", JSONObject()
@@ -117,6 +121,8 @@ object BackupStore {
         val data = root.optJSONObject("data")
             ?: return RestoreResult(0, false, "That file isn't a LIFT backup.")
 
+        adoptPreservedOutdoor(context)
+
         var added = 0
 
         data.optJSONArray("food")?.let { array ->
@@ -138,6 +144,13 @@ object BackupStore {
                 runCatching { routineFromJson(array.getJSONObject(it)) }.getOrNull()
             }
             added += RoutineRepository.get(context).restoreMissing(incoming)
+        }
+
+        data.optJSONArray("outdoor")?.let { array ->
+            val incoming = (0 until array.length()).mapNotNull {
+                runCatching { outdoorForRestore(array.getJSONObject(it)) }.getOrNull()
+            }
+            added += OutdoorActivityRepository.get(context).restoreMissing(incoming)
         }
 
         // Recipes and the meal plan, restored together so a planned meal can be
@@ -229,6 +242,119 @@ object BackupStore {
         })
     }
 
+    /**
+     * One activity in BACKUP-FORMAT's `outdoor[]` shape: this app's own storage
+     * names, and only the fields the format lists. Mirrors LIFT web's
+     * `LiftOutdoor.toBackup`.
+     *
+     * `healthConnectRecordId` is deliberately left out. It says this phone
+     * exported the activity to its Health Connect; carried to another phone it
+     * would claim an export that never happened there, and the export button
+     * would never appear. `activeCalories` (never set by this app) and a point's
+     * `verticalAccuracyMeters` (only used for that export) are not in the format.
+     */
+    internal fun outdoorForBackup(a: OutdoorActivity): JSONObject = JSONObject()
+        .put("id", a.id)
+        .put("activityType", a.activityType.name)
+        .put("startedAtEpochMs", a.startedAtEpochMs)
+        .put("endedAtEpochMs", a.endedAtEpochMs)
+        .put("distanceMeters", a.distanceMeters)
+        .put("elevationGainMeters", a.elevationGainMeters)
+        .put("routePoints", JSONArray().also { array ->
+            a.routePoints.forEach { p ->
+                array.put(JSONObject()
+                    .put("latitude", p.latitude)
+                    .put("longitude", p.longitude)
+                    .put("altitudeMeters", p.altitudeMeters)
+                    .put("recordedAtEpochMs", p.recordedAtEpochMs)
+                    .put("horizontalAccuracyMeters", p.horizontalAccuracyMeters))
+            }
+        })
+
+    /**
+     * An activity from a file, or null for anything that is not a finished
+     * activity of a known type -- the rules of LIFT web's
+     * `LiftOutdoor.fromBackup`. A recording with no end is never written, even
+     * if a file carries one, and an unknown type is skipped rather than guessed
+     * as a run.
+     *
+     * Never carries `healthConnectRecordId`, even from a file that has one: an
+     * activity restored here was not exported from this phone.
+     *
+     * The format allows a null altitude; this app's points always have one, and
+     * 0.0 is what its own tracker records before a fix reports altitude.
+     */
+    internal fun outdoorForRestore(o: JSONObject): OutdoorActivity? {
+        val id = when (val raw = o.opt("id")) {
+            null, JSONObject.NULL -> return null
+            is String -> raw.takeIf { it.isNotEmpty() } ?: return null
+            else -> raw.toString()
+        }
+        val started = finite(o.opt("startedAtEpochMs")) ?: return null
+        val ended = finite(o.opt("endedAtEpochMs")) ?: return null
+        val type = OutdoorActivityType.entries.firstOrNull { it.name == o.opt("activityType") } ?: return null
+
+        val array = o.optJSONArray("routePoints")
+        val points = if (array == null) emptyList() else (0 until array.length()).mapNotNull { i ->
+            val p = array.optJSONObject(i) ?: return@mapNotNull null
+            val latitude = finite(p.opt("latitude")) ?: return@mapNotNull null
+            val longitude = finite(p.opt("longitude")) ?: return@mapNotNull null
+            RoutePoint(
+                latitude = latitude,
+                longitude = longitude,
+                altitudeMeters = finite(p.opt("altitudeMeters")) ?: 0.0,
+                recordedAtEpochMs = finite(p.opt("recordedAtEpochMs"))?.toLong() ?: started.toLong(),
+                horizontalAccuracyMeters = finite(p.opt("horizontalAccuracyMeters")) ?: 0.0,
+                verticalAccuracyMeters = 0.0
+            )
+        }
+        return OutdoorActivity(
+            id = id,
+            activityType = type,
+            startedAtEpochMs = started.toLong(),
+            endedAtEpochMs = ended.toLong(),
+            distanceMeters = finite(o.opt("distanceMeters")) ?: OutdoorActivityMath.totalDistanceMeters(points),
+            elevationGainMeters = finite(o.opt("elevationGainMeters"))
+                ?: OutdoorActivityMath.elevationGainMeters(points),
+            routePoints = points,
+            healthConnectRecordId = null
+        )
+    }
+
+    private fun finite(value: Any?): Double? =
+        (value as? Number)?.toDouble()?.takeIf { it.isFinite() }
+
+    /**
+     * Before this app stored `outdoor`, a file's `outdoor` section was kept
+     * aside with the other sections it did not read, and written back out
+     * untouched. Now that `outdoor` is [STORED], that copy would be filtered out
+     * of the next save and lost, so it is moved into the repository instead --
+     * under the same restore rules as a file, adding only ids this phone does
+     * not have -- and removed from the preserved sections.
+     *
+     * Done at the start of both [build] and [restore], the only two places the
+     * preserved copy is read: before a save so the file carries those
+     * activities, and before a restore so a second file's merge sees them. It is
+     * a no-op once the copy is gone. Not done at app start, so an update never
+     * rewrites a user's stores until they use backups again.
+     */
+    private fun adoptPreservedOutdoor(context: Context) {
+        val preserved = foreignData(context) ?: return
+        val section = preserved.optJSONArray("outdoor")
+        if (!preserved.has("outdoor")) return
+        if (section != null) {
+            val incoming = (0 until section.length()).mapNotNull {
+                runCatching { section.optJSONObject(it)?.let(::outdoorForRestore) }.getOrNull()
+            }
+            OutdoorActivityRepository.get(context).restoreMissing(incoming)
+        }
+        preserved.remove("outdoor")
+        prefs(context).edit().apply {
+            if (preserved.length() == 0) remove(KEY_FOREIGN_DATA)
+            else putString(KEY_FOREIGN_DATA, preserved.toString())
+        }.apply()
+    }
+
     private fun prefs(context: Context) = context.applicationContext
         .getSharedPreferences("dcl_backup", Context.MODE_PRIVATE)
 
@@ -251,7 +377,7 @@ object BackupStore {
      *  not stored. */
     internal val STORED = setOf(
         "food", "workouts", "routines", "goal", "settings", "coach", "profile", "weights",
-        "recipes", "plan"
+        "recipes", "plan", "outdoor"
     )
 
     /** Never written and never preserved, by the format: ticks mark one week's
