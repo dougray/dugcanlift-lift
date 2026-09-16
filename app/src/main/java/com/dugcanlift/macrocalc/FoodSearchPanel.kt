@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -101,7 +102,7 @@ fun FoodSearchPanel(
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = "Search food", style = MaterialTheme.typography.titleMedium)
 

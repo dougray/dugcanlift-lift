@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import android.Manifest
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -274,7 +275,7 @@ fun OutdoorRecordingScreen(
 
         statusMessage?.let { message ->
             Spacer(modifier = Modifier.height(8.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(text = message, style = MaterialTheme.typography.bodyMedium)
                     if (statusNeedsSettings) {
@@ -289,7 +290,7 @@ fun OutdoorRecordingScreen(
 
         if (showBackgroundPrompt) {
             Spacer(modifier = Modifier.height(8.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     val label = backgroundPermissionSettingsLabel(context)
                     Text(
