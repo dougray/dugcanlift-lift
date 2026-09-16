@@ -22,16 +22,23 @@ Other apps cannot read it. It is never uploaded.
   distance, and dates
 - Saved workout routines
 - Your training focus preference
-- Your outdoor Run/Hike history: each recording's start/end time, distance,
+- Your outdoor Run/Walk/Hike history: each recording's start/end time, distance,
   elevation gain, and its full GPS route (latitude, longitude, altitude, and
   accuracy for every point recorded)
 
-Outdoor activity data is **not** currently included when you use the app's own
-backup/export feature — this is a deliberate, temporary gap (GPS traces are a
-more sensitive category than food or workout logs, and inclusion needs its own
-explicit decision) rather than an oversight, and will be revisited in a future
-update. It is written to Health Connect (see below) independently of that
-backup file.
+## Backup files
+
+When you tap **Save a backup file**, the app writes one file with everything listed
+above, **including your outdoor history and every GPS route in full**, to the
+place you choose in Android's file picker. The app does not upload it; the file
+stays wherever you put it. If you choose a folder that syncs to a cloud service,
+that service receives it under its own terms, so treat the file as you would
+any other file holding where you have been. **Restore from a backup file** reads a file
+you pick and adds only what the phone does not already have.
+
+A backup does not record whether an activity was exported to Health Connect, so
+restoring on another phone never claims an export that phone did not make.
+Health Connect's own copy (see below) is separate from the backup file.
 
 The figures you enter into the calculator — sex, age, weight, height, activity
 level — are used to compute your goal and are not retained beyond the resulting

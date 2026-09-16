@@ -113,8 +113,10 @@ row both read naturally.
 ### Your data
 
 - Save a backup file and restore it on this phone or another; restoring only
-  adds what the device doesn't already have. The file format is shared with LIFT
-  for iOS and the browser version
+  adds what the device doesn't already have. The file holds your food, training,
+  recipes and meal plan, and your runs, walks and hikes with their full GPS
+  routes, so keep it somewhere private. The format is shared with LIFT for iOS
+  and the browser version
 - Appearance: System (the default), Light, or Dark
 
 ## Privacy
