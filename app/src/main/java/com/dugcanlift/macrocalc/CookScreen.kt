@@ -34,9 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.dugcanlift.kit.CaptionRecipe
 import com.dugcanlift.kit.IngredientParser
 import com.dugcanlift.kit.RecipeIngredient
 import com.dugcanlift.kit.RecipeNutrition
+import com.dugcanlift.kit.Split
 import com.dugcanlift.kit.trimZeros
 import com.dugcanlift.macrocalc.data.CookSampleData
 import com.dugcanlift.macrocalc.data.Meal
@@ -217,6 +219,12 @@ private fun RecipeEditorDialog(
         mutableStateOf(existing?.ingredients.orEmpty().joinToString("\n") { it.rawText })
     }
     var stepText by remember { mutableStateOf(existing?.steps.orEmpty().joinToString("\n")) }
+    // Paste-a-recipe, offered only on a new recipe: pasting over a recipe that
+    // already exists would replace work rather than start from it.
+    var pasting by remember { mutableStateOf(false) }
+    var pasteText by remember { mutableStateOf("") }
+    var splitAdvice by remember { mutableStateOf<String?>(null) }
+
     var calories by remember { mutableStateOf(existing?.nutritionPerServing?.calories?.trimZeros() ?: "") }
     var protein by remember { mutableStateOf(existing?.nutritionPerServing?.proteinG?.trimZeros() ?: "") }
     var carbs by remember { mutableStateOf(existing?.nutritionPerServing?.carbsG?.trimZeros() ?: "") }
@@ -227,6 +235,66 @@ private fun RecipeEditorDialog(
         title = { Text(if (existing == null) "New recipe" else "Edit recipe") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                // Paste a recipe written out as text -- a video caption, an
+                // email, a card off the fridge. `CaptionRecipe` only PROPOSES
+                // a split; it fills the fields below and they are checked
+                // before anything is saved. That is what makes it safe: a
+                // wrong split costs an edit, never a number, because
+                // `IngredientParser` still reads the quantities on save and
+                // still refuses to weigh a volume.
+                if (existing == null) {
+                    if (!pasting) {
+                        TextButton(onClick = { pasting = true }) { Text("Paste a recipe") }
+                    } else {
+                        OutlinedTextField(
+                            value = pasteText,
+                            onValueChange = { pasteText = it },
+                            label = { Text("Paste the recipe's text") },
+                            placeholder = { Text("Ingredients:\n- 2 eggs\n\nMethod:\n1. Whisk") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row {
+                            TextButton(
+                                enabled = pasteText.isNotBlank(),
+                                onClick = {
+                                    val parsed = CaptionRecipe.parse(pasteText)
+                                    if (parsed.isEmpty) {
+                                        splitAdvice = "Nothing in that reads as a recipe. " +
+                                            "Paste the ingredients and steps as text."
+                                    } else {
+                                        name = parsed.name.orEmpty()
+                                        ingredientText = parsed.ingredientLines.joinToString("\n")
+                                        stepText = parsed.steps.joinToString("\n")
+                                        // Only ever from an explicit "serves 4".
+                                        // A guessed yield silently divides every
+                                        // macro by a number nobody chose.
+                                        parsed.servings?.let { servings = it.trimZeros() }
+                                        splitAdvice = when (parsed.split) {
+                                            Split.LABELLED ->
+                                                "Split on the headings in the text \u2014 check it read them right."
+                                            Split.INFERRED ->
+                                                "The text labelled one section and this worked out the rest, " +
+                                                    "so check the division."
+                                            Split.UNSORTED ->
+                                                "The text had no headings, so everything landed in Ingredients " +
+                                                    "\u2014 cut any method steps out and paste them into Method."
+                                        } + if (parsed.servings == null) {
+                                            " It didn't say how many this serves; set it below."
+                                        } else ""
+                                        pasting = false
+                                        pasteText = ""
+                                    }
+                                }
+                            ) { Text("Read it") }
+                            TextButton(onClick = { pasting = false; pasteText = "" }) { Text("Cancel") }
+                        }
+                    }
+                    splitAdvice?.let {
+                        Text(text = it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
