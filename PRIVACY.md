@@ -40,9 +40,12 @@ A backup does not record whether an activity was exported to Health Connect, so
 restoring on another phone never claims an export that phone did not make.
 Health Connect's own copy (see below) is separate from the backup file.
 
-The figures you enter into the calculator — sex, age, weight, height, activity
-level — are used to compute your goal and are not retained beyond the resulting
-numbers.
+When you save a goal from the calculator, the app keeps your sex, age and height,
+and records the weight you entered as that day's bodyweight, so the calculator
+opens filled in next time and your weight history has a real data point. They are
+stored the same way as everything else above, on your phone, and go in a backup
+file and in Send to Coach. Activity level and goal choice are used to work out the
+numbers and are not kept.
 
 Your daily step goal is stored the same way as your training focus. Today's
 step count itself is **not** stored by the app — it's read live from Health
