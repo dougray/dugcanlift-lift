@@ -53,6 +53,7 @@ Save the result as your goal and everything else tracks against it.
 - Scan a barcode to pull nutrition straight off the packet
 - One-tap re-log of anything you've eaten before
 - Manual entry for anything not in the database
+- Tap a logged entry to change its name, meal, amount or macros
 - Fiber tracked alongside protein, fat and carbs
 - Browse back through previous days
 
@@ -165,7 +166,6 @@ or maps dependency.
 
 ## Not built yet
 
-- Editing a logged entry (currently delete and re-add)
 - Saturated fat, sugars, and sodium tracking
 
 ## License

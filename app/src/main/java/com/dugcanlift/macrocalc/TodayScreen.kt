@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.DayTotals
 import com.dugcanlift.macrocalc.data.FoodEntry
+import com.dugcanlift.macrocalc.data.FoodEntryEdit
 import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.Meal
 import com.dugcanlift.macrocalc.data.mealForHour
@@ -85,6 +87,7 @@ fun TodayScreen(
 
     var panel by remember { mutableStateOf(Panel.NONE) }
     var prefill by remember { mutableStateOf<FoodEntry?>(null) }
+    var editing by remember { mutableStateOf<FoodEntry?>(null) }
 
     Column(
         modifier = modifier
@@ -111,7 +114,21 @@ fun TodayScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        if (panel == Panel.FORM) {
+        val editingEntry = editing
+        if (panel == Panel.EDIT && editingEntry != null) {
+            EditFoodForm(
+                entry = editingEntry,
+                onSave = { updated ->
+                    scope.launch { repo.update(updated) }
+                    panel = Panel.NONE
+                    editing = null
+                },
+                onCancel = {
+                    panel = Panel.NONE
+                    editing = null
+                }
+            )
+        } else if (panel == Panel.FORM) {
             AddFoodForm(
                 onAdd = { entry ->
                     scope.launch { repo.add(entry) }
@@ -227,7 +244,17 @@ fun TodayScreen(
                 forMeal.sortedBy { it.loggedAt }.forEach { entry ->
                     EntryRow(
                         entry = entry,
-                        onDelete = { scope.launch { repo.delete(entry.id) } }
+                        onEdit = {
+                            editing = entry
+                            panel = Panel.EDIT
+                        },
+                        onDelete = {
+                            if (editing?.id == entry.id) {
+                                editing = null
+                                panel = Panel.NONE
+                            }
+                            scope.launch { repo.delete(entry.id) }
+                        }
                     )
                 }
 
@@ -329,7 +356,7 @@ private fun MacroProgress(name: String, eaten: Int, goal: Int) {
 }
 
 @Composable
-private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
+private fun EntryRow(entry: FoodEntry, onEdit: () -> Unit, onDelete: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { SettingsStore.get(context) }
 
@@ -342,7 +369,11 @@ private fun EntryRow(entry: FoodEntry, onDelete: () -> Unit) {
         // weight(1f) lets the text take the space that's left instead of a
         // fixed fraction, which was squeezing the button into one letter
         // per line.
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClickLabel = "Edit ${entry.name}", onClick = onEdit)
+        ) {
             val amountGrams = entry.amountGrams
             Text(
                 text = if (amountGrams != null || entry.servings == 1.0) entry.name
@@ -569,7 +600,116 @@ private fun AddFoodForm(
     }
 }
 
-private enum class Panel { NONE, FORM, SEARCH }
+/**
+ * Changes an entry already in the log. Shaped like the entry was logged -- by
+ * weight with the totals for that weight, or by servings with per-serving
+ * macros -- because those numbers mean different things; the rules live in
+ * [FoodEntryEdit], where they are tested.
+ */
+@Composable
+private fun EditFoodForm(
+    entry: FoodEntry,
+    onSave: (FoodEntry) -> Unit,
+    onCancel: () -> Unit
+) {
+    val context = LocalContext.current
+    val settingsStore = remember { SettingsStore.get(context) }
+    var form by remember(entry) { mutableStateOf(FoodEntryEdit.from(entry, settingsStore.servingUnit)) }
+    val saved = form.applyTo(entry)
+    val per = if (form.byWeight) "for this amount" else "per serving"
+
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Edit food", style = MaterialTheme.typography.titleMedium)
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            NameField(value = form.name, onValueChange = { form = form.withName(it) }, label = "Name")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Meal.entries.forEach { option ->
+                    FilterChip(
+                        selected = option == form.meal,
+                        onClick = { form = form.withMeal(option) },
+                        label = { Text(option.label) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (form.byWeight) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ServingUnit.entries.forEach { option ->
+                        FilterChip(
+                            selected = option == form.unit,
+                            onClick = {
+                                form = form.withUnit(option)
+                                settingsStore.servingUnit = option
+                            },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Macros are the totals for the amount. Change the amount and they follow it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                NumberField(value = form.amount, onValueChange = { form = form.withAmount(it) },
+                            label = "Amount (${form.unit.abbreviation})")
+            } else {
+                Text(
+                    text = "Logged by servings. Macros are per serving.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                NumberField(value = form.amount, onValueChange = { form = form.withAmount(it) },
+                            label = "Servings")
+            }
+
+            listOf(
+                Triple(FoodEntryEdit.Field.CALORIES, form.macros.calories, "Calories (kcal, $per)"),
+                Triple(FoodEntryEdit.Field.PROTEIN, form.macros.proteinG, "Protein (g, $per)"),
+                Triple(FoodEntryEdit.Field.FAT, form.macros.fatG, "Fat (g, $per)"),
+                Triple(FoodEntryEdit.Field.CARBS, form.macros.carbsG, "Carbs (g, $per)"),
+                Triple(FoodEntryEdit.Field.FIBER, form.macros.fiberG, "Fiber (g, $per)"),
+            ).forEach { (field, value, label) ->
+                Spacer(modifier = Modifier.height(12.dp))
+                NumberField(value = value, onValueChange = { form = form.withMacro(field, it) }, label = label)
+            }
+
+            if (saved != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                val amountText = saved.amountGrams?.let { formatAmount(it, form.unit) }
+                    ?: "x${formatServings(saved.servings)}"
+                Text(
+                    text = "$amountText = ${saved.totalCalories} kcal - " +
+                        "P ${saved.totalProteinG} - F ${saved.totalFatG} - " +
+                        "C ${saved.totalCarbsG} - Fib ${saved.totalFiberG}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { saved?.let(onSave) }, enabled = saved != null) {
+                    Text("Save")
+                }
+                OutlinedButton(onClick = onCancel) { Text("Cancel") }
+            }
+        }
+    }
+}
+
+private enum class Panel { NONE, FORM, SEARCH, EDIT }
 
 /* ---------- date helpers ---------- */
 
