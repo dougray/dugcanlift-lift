@@ -295,13 +295,18 @@ fun OutdoorRecordingScreen(
                 Column(modifier = Modifier.padding(12.dp)) {
                     val label = backgroundPermissionSettingsLabel(context)
                     Text(
-                        text = if (label != null) {
-                            "To keep recording when your phone locks or you switch apps, " +
-                                "allow \"$label\" for location in Settings."
-                        } else {
-                            "Allow background location so recording continues when your phone " +
-                                "locks or you switch apps."
-                        },
+                        // Play's prominent-disclosure wording for background location:
+                        // what is collected, that it happens when the app is closed or
+                        // not in use, and what it is for. It must come before the
+                        // system prompt, which is why it is here and not after.
+                        text = "LIFT collects location data to record your run, walk or hike " +
+                            "route even when the app is closed or not in use, for as long as " +
+                            "a recording is running. It stays on your phone." +
+                            if (label != null) {
+                                "\n\nTo allow it, choose \"$label\" for location in Settings."
+                            } else {
+                                ""
+                            },
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))

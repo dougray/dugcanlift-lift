@@ -157,7 +157,8 @@ wording may be rejected; suggested wording:
 > the app is closed or not in use, for as long as a recording is running. It
 > stays on your phone.
 
-Changing it is a UI change and has not been made here.
+This is now the text of the in-app prompt shown before the system asks
+(`OutdoorRecordingScreen.kt`, the background-location card).
 
 ## Other declarations Play Console will ask for
 
