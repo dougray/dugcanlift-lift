@@ -55,13 +55,18 @@ Save the result as your goal and everything else tracks against it.
 - Manual entry for anything not in the database
 - Tap a logged entry to change its name, meal, amount or macros
 - Fiber tracked alongside protein, fat and carbs
+- Saturated fat, sugar and sodium, optional under "More nutrients" and read
+  from Open Food Facts when a product lists them. Tracked with no goal: each
+  day's total counts only the foods that recorded it, and says so ("Sodium
+  1,840 mg · from 3 of 5 foods")
 - Browse back through previous days
 
 ### Cook
 
 - **Recipes** — write one, or paste a recipe's text (a blog post or a social
   video's caption) and edit the split into ingredients and method
-- A recipe's macros per serving, with labelled fields, and the finished dish's
+- A recipe's macros per serving, with labelled fields (saturated fat, sugar and
+  sodium too, all optional), and the finished dish's
   weight in grams or ounces so a portion can be logged by weight
 - **Plan** — put recipes on the days and meals of the week, then log a planned
   meal to the food log in one tap
@@ -104,7 +109,8 @@ row both read naturally.
 ### Coach
 
 - **Send to Coach** writes an email to your coach with your log in a link: pick
-  4, 8, or 12 weeks or 6 months, daily food totals or every item, and whether
+  4, 8, or 12 weeks or 6 months, daily food totals or every item (saturated
+  fat, sugar and sodium go with either, when you recorded them), and whether
   to include **your last route**. The route is off until you turn it on, and
   goes with its first and last 200 m cut off so it never shows where you start
 - A coach's plan link (training sessions and meals) opens in the app for you to

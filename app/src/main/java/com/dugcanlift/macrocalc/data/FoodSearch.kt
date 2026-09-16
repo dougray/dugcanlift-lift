@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.kit.NutrientDetails
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -102,7 +103,7 @@ object FoodSearch {
         }
     }
 
-    private fun parseProduct(product: JSONObject): FoodSearchResult? {
+    internal fun parseProduct(product: JSONObject): FoodSearchResult? {
         val name = product.optString("product_name", "").trim()
         if (name.isEmpty()) return null
 
@@ -142,9 +143,34 @@ object FoodSearch {
             proteinG = (nutriments.opt("proteins_$suffix").asDoubleOrNull() ?: 0.0).roundToInt(),
             fatG = (nutriments.opt("fat_$suffix").asDoubleOrNull() ?: 0.0).roundToInt(),
             carbsG = (nutriments.opt("carbohydrates_$suffix").asDoubleOrNull() ?: 0.0).roundToInt(),
-            fiberG = (nutriments.opt("fiber_$suffix").asDoubleOrNull() ?: 0.0).roundToInt()
+            fiberG = (nutriments.opt("fiber_$suffix").asDoubleOrNull() ?: 0.0).roundToInt(),
+            details = readDetails(nutriments, suffix)
         )
     }
+
+    /**
+     * Saturated fat, sugar and sodium on the same basis as the macros beside
+     * them. Kept unrounded -- rounding happens once, after scaling to the
+     * amount eaten. Missing is null, never zero: plenty of products list
+     * energy and macros and nothing else.
+     *
+     * Open Food Facts stores `sodium_*` in GRAMS, like every other nutriment,
+     * whatever the label printed, so it is multiplied by 1000 here. A product
+     * that only lists salt gets sodium from it: salt is sodium chloride, taken
+     * as 2.5 g of salt per 1 g of sodium -- the factor EU labels and Open Food
+     * Facts itself use to derive one from the other.
+     */
+    private fun readDetails(nutriments: JSONObject, suffix: String): NutrientDetails {
+        fun read(key: String) = nutriments.opt("${key}_$suffix").asDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 }
+        val sodiumGrams = read("sodium") ?: read("salt")?.let { it / SALT_PER_SODIUM }
+        return NutrientDetails(
+            saturatedFatG = read("saturated-fat"),
+            sugarG = read("sugars"),
+            sodiumMg = sodiumGrams?.let { it * 1000.0 }
+        )
+    }
+
+    private const val SALT_PER_SODIUM = 2.5
 
     // Open Food Facts returns numbers sometimes as numbers, sometimes as strings.
     private fun Any?.asDoubleOrNull(): Double? = when (this) {
@@ -167,7 +193,9 @@ data class Nutriments(
     val proteinG: Int,
     val fatG: Int,
     val carbsG: Int,
-    val fiberG: Int
+    val fiberG: Int,
+    /** Unrounded on a search result; rounded once on a scaled amount. Unknown is null. */
+    val details: NutrientDetails = NutrientDetails()
 )
 
 data class FoodSearchResult(
@@ -193,7 +221,8 @@ data class FoodSearchResult(
             proteinG = (per100g.proteinG * factor).roundToInt(),
             fatG = (per100g.fatG * factor).roundToInt(),
             carbsG = (per100g.carbsG * factor).roundToInt(),
-            fiberG = (per100g.fiberG * factor).roundToInt()
+            fiberG = (per100g.fiberG * factor).roundToInt(),
+            details = NutrientDetailsText.scaled(per100g.details, factor)
         )
     }
 
@@ -227,7 +256,10 @@ data class FoodSearchResult(
             fatG = nutrition.fatG,
             carbsG = nutrition.carbsG,
             fiberG = nutrition.fiberG,
-            date = date
+            date = date,
+            saturatedFatG = nutrition.details.saturatedFatG,
+            sugarG = nutrition.details.sugarG,
+            sodiumMg = nutrition.details.sodiumMg
         )
     }
 }

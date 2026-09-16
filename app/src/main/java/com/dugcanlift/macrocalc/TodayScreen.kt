@@ -44,6 +44,8 @@ import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodEntryEdit
 import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.Meal
+import com.dugcanlift.macrocalc.data.NutrientDetailsText
+import com.dugcanlift.kit.NutrientDetails
 import com.dugcanlift.macrocalc.data.mealForHour
 import com.dugcanlift.macrocalc.data.forDate
 import com.dugcanlift.macrocalc.data.ServingUnit
@@ -75,6 +77,7 @@ fun TodayScreen(
     var selectedDate by remember { mutableStateOf(todayKey()) }
     val entries = allEntries.forDate(selectedDate)
     val eaten = entries.totals()
+    val detailRows = NutrientDetailsText.dayRows(entries)
 
     // Most people eat the same handful of things. Anything logged before can be
     // re-logged in one tap, which removes most of the manual entry pain.
@@ -108,8 +111,15 @@ fun TodayScreen(
                 text = "Set a goal on the Calculator tab and it'll show up here.",
                 style = MaterialTheme.typography.bodyMedium
             )
+            // Tracked without a goal, so they have no reason to wait for one.
+            if (detailRows.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+                    Column(modifier = Modifier.padding(16.dp)) { NutrientDetailRows(detailRows) }
+                }
+            }
         } else {
-            SummaryCard(goal = goal, eaten = eaten)
+            SummaryCard(goal = goal, eaten = eaten, detailRows = detailRows)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -291,7 +301,7 @@ private fun DateNavigator(
 }
 
 @Composable
-private fun SummaryCard(goal: MacroResult, eaten: DayTotals) {
+private fun SummaryCard(goal: MacroResult, eaten: DayTotals, detailRows: List<NutrientDetailsText.Row>) {
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             val remaining = goal.calories - eaten.calories
@@ -311,6 +321,11 @@ private fun SummaryCard(goal: MacroResult, eaten: DayTotals) {
             MacroProgress("Fat", eaten.fatG, goal.fatG)
             MacroProgress("Carbs", eaten.carbsG, goal.carbsG)
             MacroProgress("Fiber", eaten.fiberG, goal.fiberG)
+
+            if (detailRows.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                NutrientDetailRows(detailRows)
+            }
         }
     }
 }
@@ -394,6 +409,13 @@ private fun EntryRow(entry: FoodEntry, onEdit: () -> Unit, onDelete: () -> Unit)
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            NutrientDetailsText.entryLine(entry)?.let { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         TextButton(
             onClick = onDelete,
@@ -430,6 +452,14 @@ private fun AddFoodForm(
     var fat by remember(initial) { mutableStateOf(initial?.fatG?.toString() ?: "") }
     var carbs by remember(initial) { mutableStateOf(initial?.carbsG?.toString() ?: "") }
     var fiber by remember(initial) { mutableStateOf(initial?.fiberG?.toString() ?: "") }
+    // Per 100 g, like the macros above. Blank is not recorded, never zero.
+    var saturatedFat by remember(initial) { mutableStateOf("") }
+    var sugar by remember(initial) { mutableStateOf("") }
+    var sodium by remember(initial) { mutableStateOf("") }
+    var moreNutrients by remember(initial) { mutableStateOf(false) }
+    val per100Details = NutrientDetails(
+        NutrientDetailsText.parse(saturatedFat), NutrientDetailsText.parse(sugar), NutrientDetailsText.parse(sodium)
+    )
 
     // Defaults to whatever meal it currently is, so most of the time nobody
     // has to touch this.
@@ -525,6 +555,15 @@ private fun AddFoodForm(
 
             NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fiber (g/100g)")
 
+            MoreNutrientsFields(
+                expanded = moreNutrients,
+                onToggle = { moreNutrients = !moreNutrients },
+                label = { name, unit -> "$name ($unit/100g)" },
+                saturatedFat = saturatedFat, onSaturatedFat = { saturatedFat = it },
+                sugar = sugar, onSugar = { sugar = it },
+                sodium = sodium, onSodium = { sodium = it }
+            )
+
             // What it will actually count as, before it is committed. The
             // iPhone's food search and both watches have always shown this
             // while you set the amount; this form made you save first and
@@ -539,6 +578,7 @@ private fun AddFoodForm(
                             fatG = fat.toIntOrNull() ?: 0,
                             carbsG = carbs.toIntOrNull() ?: 0,
                             fiberG = fiber.toIntOrNull() ?: 0,
+                            details = per100Details,
                         ),
                         g
                     )
@@ -553,6 +593,13 @@ private fun AddFoodForm(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                NutrientDetailsText.line(preview.details)?.let { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -571,6 +618,7 @@ private fun AddFoodForm(
                                 fatG = fat.toIntOrNull() ?: 0,
                                 carbsG = carbs.toIntOrNull() ?: 0,
                                 fiberG = fiber.toIntOrNull() ?: 0,
+                                details = per100Details,
                             ),
                             amountGrams ?: return@Button
                         ) ?: return@Button
@@ -586,7 +634,10 @@ private fun AddFoodForm(
                                 carbsG = scaled.carbsG,
                                 fiberG = scaled.fiberG,
                                 date = date,
-                                meal = meal.name
+                                meal = meal.name,
+                                saturatedFatG = scaled.details.saturatedFatG,
+                                sugarG = scaled.details.sugarG,
+                                sodiumMg = scaled.details.sodiumMg
                             )
                         )
                     },
@@ -617,6 +668,9 @@ private fun EditFoodForm(
     var form by remember(entry) { mutableStateOf(FoodEntryEdit.from(entry, settingsStore.servingUnit)) }
     val saved = form.applyTo(entry)
     val per = if (form.byWeight) "for this amount" else "per serving"
+    // Open already when the entry recorded any, so they are never hidden from
+    // someone who is here to change them.
+    var moreNutrients by remember(entry) { mutableStateOf(!entry.details.isEmpty) }
 
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -684,6 +738,18 @@ private fun EditFoodForm(
                 NumberField(value = value, onValueChange = { form = form.withMacro(field, it) }, label = label)
             }
 
+            MoreNutrientsFields(
+                expanded = moreNutrients,
+                onToggle = { moreNutrients = !moreNutrients },
+                label = { name, unit -> "$name ($unit, $per)" },
+                saturatedFat = form.macros.saturatedFatG,
+                onSaturatedFat = { form = form.withMacro(FoodEntryEdit.Field.SATURATED_FAT, it) },
+                sugar = form.macros.sugarG,
+                onSugar = { form = form.withMacro(FoodEntryEdit.Field.SUGAR, it) },
+                sodium = form.macros.sodiumMg,
+                onSodium = { form = form.withMacro(FoodEntryEdit.Field.SODIUM, it) }
+            )
+
             if (saved != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 val amountText = saved.amountGrams?.let { formatAmount(it, form.unit) }
@@ -695,6 +761,13 @@ private fun EditFoodForm(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                NutrientDetailsText.entryLine(saved)?.let { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
