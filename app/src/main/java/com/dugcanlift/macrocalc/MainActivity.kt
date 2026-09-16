@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.dugcanlift.macrocalc.ui.theme.LocalDclDark
+import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -57,6 +59,19 @@ class MainActivity : ComponentActivity() {
         pendingOpenTab.value = extractOpenTab(intent)
         setContent {
             DugCanLiftCalcTheme {
+                // Status and navigation bar icons follow the appearance actually
+                // drawn, not the phone's: with Light chosen on a dark-mode phone,
+                // `enableEdgeToEdge()`'s default would leave light icons on a
+                // parchment background, which is to say invisible.
+                val dark = LocalDclDark.current
+                LaunchedEffect(dark) {
+                    val style = if (dark) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                    }
+                    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     AppTabs(
                         modifier = Modifier.padding(innerPadding),
