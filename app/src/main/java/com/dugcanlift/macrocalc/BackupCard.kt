@@ -32,7 +32,7 @@ import com.dugcanlift.macrocalc.data.todayKey
  * in a browser restores here and the other way round.
  */
 @Composable
-fun BackupCard() {
+fun BackupCard(onRestored: () -> Unit = {}) {
     val context = LocalContext.current
 
     val saveLauncher = rememberLauncherForActivityResult(
@@ -72,6 +72,10 @@ fun BackupCard() {
             else -> "Restored. Added ${outcome.added} entries this phone didn't have."
         }
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        // The goal and coach details are held in screen state read once at
+        // launch; without this the dashboard kept saying "No goal set yet"
+        // after a restore that had just set one, until the app restarted.
+        if (outcome.ok) onRestored()
     }
 
     Text("Your data", style = MaterialTheme.typography.titleMedium)
