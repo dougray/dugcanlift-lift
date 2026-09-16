@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.dugcanlift.kit.OutdoorShare
+import com.dugcanlift.kit.OutdoorShareActivity
 import com.dugcanlift.kit.ShareClient
 import com.dugcanlift.kit.ShareDay
 import com.dugcanlift.kit.ShareExercise
@@ -49,9 +51,10 @@ object CoachShare {
         goal: MacroResult?,
         sessions: List<WorkoutSession>,
         entries: List<FoodEntry>,
-        steps: Map<String, Long> = emptyMap()
+        steps: Map<String, Long> = emptyMap(),
+        outdoor: List<OutdoorActivity> = emptyList()
     ): String {
-        val payload = buildSharePayload(store, settings, goal, sessions, entries, steps)
+        val payload = buildSharePayload(store, settings, goal, sessions, entries, steps, outdoor)
         return COACH_URL + "#" + ShareLinkCodec.encodeFragment(payload)
     }
 
@@ -70,9 +73,10 @@ object CoachShare {
         goal: MacroResult?,
         sessions: List<WorkoutSession>,
         entries: List<FoodEntry>,
-        steps: Map<String, Long> = emptyMap()
+        steps: Map<String, Long> = emptyMap(),
+        outdoor: List<OutdoorActivity> = emptyList()
     ): Boolean {
-        val link = buildLink(store, settings, goal, sessions, entries, steps)
+        val link = buildLink(store, settings, goal, sessions, entries, steps, outdoor)
         val name = store.lifterName.ifBlank { "your client" }
         val subject = "LIFT log from $name - ${shortDate(todayKey())}"
         val summary = weekSummary(goal, sessions, entries, store, steps)
@@ -125,21 +129,33 @@ object CoachShare {
      * Maps this device's stores into the kit's typed [SharePayload]. One
      * [ShareDay] per day in the window, unfiltered — [ShareLinkCodec] applies
      * the day-emission rule (a day survives only when it has exercises,
-     * itemized food, foodTotals, steps or bodyweight), so pre-filtering here
-     * would shift every day's offset.
+     * itemized food, foodTotals, outdoor activity, steps or bodyweight), so
+     * pre-filtering here would shift every day's offset.
+     *
+     * Outdoor follows SHARE-FORMAT "Outdoor": each day's finished runs, walks
+     * and hikes as `o`, all-time bests as `ob`, and the newest route as `lr`
+     * only when [CoachStore.sendLastRoute] is on. The numbers and the polyline
+     * come from the kit's [OutdoorShare], because every sender has to produce
+     * the same string. [nowMs] is only ever overridden by tests, so a fixture
+     * recorded on a fixed date stays inside the window.
      */
-    private fun buildSharePayload(
+    internal fun buildSharePayload(
         store: CoachStore,
         settings: SettingsStore,
         goal: MacroResult?,
         sessions: List<WorkoutSession>,
         entries: List<FoodEntry>,
-        steps: Map<String, Long>
+        steps: Map<String, Long>,
+        outdoor: List<OutdoorActivity> = emptyList(),
+        nowMs: Long = System.currentTimeMillis()
     ): SharePayload {
         val span = store.weeks * 7
-        val days = lastDays(span)
+        val days = lastDays(span, nowMs)
         val start = days.first()
         val weights = store.bodyweights()
+        // Unfinished recordings go in too; OutdoorShare skips them itself.
+        val outdoorShare = outdoor.map { it.toShareActivity() }
+        val outdoorByDay = outdoor.indices.groupBy { dateKey(outdoor[it].startedAtEpochMs) }
 
         val shareDays = days.mapIndexed { offset, key ->
             val dayExercises = sessions.filter { it.date == key }.flatMap { it.exercises }
@@ -193,6 +209,10 @@ object CoachShare {
                 )
             } else null
 
+            val dayOutdoor = outdoorByDay[key]
+                ?.let { indices -> OutdoorShare.day(indices.map { outdoorShare[it] }) }
+                ?.takeIf { it.isNotEmpty() }
+
             ShareDay(
                 dayOffset = offset,
                 sessionName = sessionName,
@@ -201,7 +221,8 @@ object CoachShare {
                 steps = steps[key],
                 exercises = exercises,
                 foodTotals = foodTotals,
-                food = food
+                food = food,
+                outdoor = dayOutdoor
             )
         }
 
@@ -224,11 +245,27 @@ object CoachShare {
             client = client,
             goal = shareGoal,
             startDay = start,
-            endDay = todayKey(),
-            exportedAtEpochSeconds = System.currentTimeMillis() / 1000,
-            days = shareDays
+            endDay = dateKey(nowMs),
+            exportedAtEpochSeconds = nowMs / 1000,
+            days = shareDays,
+            // All-time, not the window: a best set three months ago is still the best.
+            outdoorBests = OutdoorShare.bests(outdoorShare),
+            lastRoute = if (store.sendLastRoute) OutdoorShare.lastRoute(outdoorShare) else null
         )
     }
+
+    private fun OutdoorActivity.toShareActivity() = OutdoorShareActivity(
+        type = when (activityType) {
+            OutdoorActivityType.RUN -> 0
+            OutdoorActivityType.WALK -> 1
+            OutdoorActivityType.HIKE -> 2
+        },
+        startedAtEpochMs = startedAtEpochMs,
+        endedAtEpochMs = endedAtEpochMs,
+        distanceMeters = distanceMeters,
+        climbMeters = elevationGainMeters,
+        route = routePoints.map { it.latitude to it.longitude }
+    )
 
     private fun mealIndex(entry: FoodEntry): Int = when (entry.mealOrDefault) {
         Meal.BREAKFAST -> 0
@@ -292,9 +329,9 @@ object CoachShare {
 
     /* ---------- dates ---------- */
 
-    private fun lastDays(count: Int): List<String> {
+    private fun lastDays(count: Int, nowMs: Long = System.currentTimeMillis()): List<String> {
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val calendar = Calendar.getInstance()
+        val calendar = Calendar.getInstance().apply { timeInMillis = nowMs }
         calendar.add(Calendar.DAY_OF_YEAR, -(count - 1))
         return (0 until count).map {
             val key = format.format(calendar.time)

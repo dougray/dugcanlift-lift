@@ -64,6 +64,15 @@ class CoachStore private constructor(context: Context) {
         get() = prefs.getBoolean(KEY_ITEMISED, false)
         set(value) = prefs.edit().putBoolean(KEY_ITEMISED, value).apply()
 
+    /**
+     * Send the newest run, walk or hike's route, trimmed 200 m at each end.
+     * Off until the person turns it on: times, distances and bests always go,
+     * but a map of where someone runs is theirs to offer, not ours to assume.
+     */
+    var sendLastRoute: Boolean
+        get() = prefs.getBoolean(KEY_LAST_ROUTE, false)
+        set(value) = prefs.edit().putBoolean(KEY_LAST_ROUTE, value).apply()
+
     val isConfigured: Boolean get() = email.isNotBlank()
 
     /* ---------- profile ---------- */
@@ -128,6 +137,7 @@ class CoachStore private constructor(context: Context) {
         private const val KEY_ID = "lifter_id"
         private const val KEY_WEEKS = "weeks"
         private const val KEY_ITEMISED = "itemised_food"
+        private const val KEY_LAST_ROUTE = "send_last_route"
         private const val KEY_PROFILE = "profile"
         private const val KEY_WEIGHTS = "bodyweights"
 
