@@ -7,6 +7,7 @@ import kotlin.math.sqrt
 
 enum class OutdoorActivityType(val displayName: String) {
     RUN("Run"),
+    WALK("Walk"),
     HIKE("Hike")
 }
 

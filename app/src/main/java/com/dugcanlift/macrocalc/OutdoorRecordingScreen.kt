@@ -66,6 +66,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Live Run/Hike recording.
@@ -397,7 +398,10 @@ internal fun OutdoorStatRow(label: String, value: String) {
 @Composable
 internal fun RoutePolylineCanvas(
     routePoints: List<RoutePoint>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Width over height. Square on the recording and review screens; wider
+     *  on Train's Last route card, where a square would fill the screen. */
+    aspectRatio: Float = 1f
 ) {
     val lineColor = MaterialTheme.colorScheme.primary
     val startColor = lineColor.copy(alpha = 0.5f)
@@ -405,7 +409,7 @@ internal fun RoutePolylineCanvas(
 
     Box(
         modifier = modifier
-            .aspectRatio(1f)
+            .aspectRatio(aspectRatio)
             .clip(RoundedCornerShape(12.dp))
             .background(backgroundColor),
         contentAlignment = Alignment.Center
@@ -418,7 +422,7 @@ internal fun RoutePolylineCanvas(
             )
         } else {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val offsets = projectRoutePoints(routePoints, size.minDimension)
+                val offsets = projectRoutePoints(routePoints, size.width, size.height)
                 val path = Path()
                 offsets.forEachIndexed { index, offset ->
                     if (index == 0) path.moveTo(offset.x, offset.y) else path.lineTo(offset.x, offset.y)
@@ -441,7 +445,15 @@ internal fun RoutePolylineCanvas(
  * a non-square aspect). A minimum span guards against a division blow-up
  * when every fix so far is nearly the same point (e.g. right after Start).
  */
-internal fun projectRoutePoints(points: List<RoutePoint>, drawableDimension: Float): List<Offset> {
+internal fun projectRoutePoints(points: List<RoutePoint>, drawableDimension: Float): List<Offset> =
+    projectRoutePoints(points, drawableDimension, drawableDimension)
+
+/**
+ * The same projection into a [width] x [height] box. One scale for both axes,
+ * so a route is never stretched; the spare room on the longer side is split
+ * evenly, which centres the route.
+ */
+internal fun projectRoutePoints(points: List<RoutePoint>, width: Float, height: Float): List<Offset> {
     val avgLatRadians = Math.toRadians(points.map { it.latitude }.average())
     val lonScale = cos(avgLatRadians)
 
@@ -453,20 +465,22 @@ internal fun projectRoutePoints(points: List<RoutePoint>, drawableDimension: Flo
     val minY = ys.min()
     val maxY = ys.max()
 
-    val spanX = maxX - minX
-    val spanY = maxY - minY
-    val span = max(max(spanX, spanY), MIN_SPAN_DEGREES)
+    val spanX = max(maxX - minX, MIN_SPAN_DEGREES)
+    val spanY = max(maxY - minY, MIN_SPAN_DEGREES)
 
-    val padding = drawableDimension * 0.1f
-    val drawable = drawableDimension - (padding * 2f)
+    val padding = min(width, height) * 0.1f
+    val drawableWidth = width - (padding * 2f)
+    val drawableHeight = height - (padding * 2f)
+    // Degrees per pixel: whichever axis is tighter decides.
+    val scale = max(spanX / drawableWidth, spanY / drawableHeight)
+    val offsetX = (drawableWidth - (maxX - minX) / scale) / 2
+    val offsetY = (drawableHeight - (maxY - minY) / scale) / 2
 
     return points.map { point ->
-        val nx = ((point.longitude * lonScale - minX) + (span - spanX) / 2) / span
-        val ny = ((point.latitude - minY) + (span - spanY) / 2) / span
         Offset(
-            x = padding + (nx * drawable).toFloat(),
+            x = padding + (offsetX + (point.longitude * lonScale - minX) / scale).toFloat(),
             // Screen Y grows downward; latitude grows northward, so flip.
-            y = padding + ((1 - ny) * drawable).toFloat()
+            y = padding + (offsetY + (maxY - point.latitude) / scale).toFloat()
         )
     }
 }
