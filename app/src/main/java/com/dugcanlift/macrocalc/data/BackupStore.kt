@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc.data
 
 import android.content.Context
+import com.dugcanlift.kit.IngredientParser
 import com.dugcanlift.macrocalc.MacroResult
 import org.json.JSONArray
 import org.json.JSONObject
@@ -33,8 +34,19 @@ object BackupStore {
         val coach = CoachStore.get(context)
         val settings = SettingsStore.get(context)
         val goal = GoalStore.get(context).get()
+        val cook = RecipeRepository.get(context)
 
+        // Sections another client wrote that this app does not store go in
+        // first and are overwritten below by anything this app does store --
+        // a preserved copy must never roll back the device's own data.
         val data = JSONObject()
+        foreignData(context)?.let { preserved ->
+            preserved.keys().forEach { k ->
+                if (k !in STORED && k !in NEVER_BACKED_UP) data.put(k, preserved.get(k))
+            }
+        }
+        data.put("recipes", JSONArray().apply { cook.recipesForBackup().forEach { put(it.toJson()) } })
+        data.put("plan", JSONArray().apply { cook.planForBackup().forEach { put(it.toJson()) } })
 
         data.put("food", JSONArray().apply { food.forEach { put(it.toJson()) } })
         data.put("workouts", JSONArray().apply { workouts.forEach { put(it.toJson()) } })
@@ -128,6 +140,22 @@ object BackupStore {
             added += RoutineRepository.get(context).restoreMissing(incoming)
         }
 
+        // Recipes and the meal plan, restored together so a planned meal can be
+        // checked against recipes arriving in this same file.
+        val incomingRecipes = data.optJSONArray("recipes")?.let { array ->
+            (0 until array.length()).mapNotNull {
+                runCatching { recipeForRestore(array.getJSONObject(it)) }.getOrNull()
+            }
+        }.orEmpty()
+        val incomingPlan = data.optJSONArray("plan")?.let { array ->
+            (0 until array.length()).mapNotNull {
+                runCatching { plannedMealFromJson(array.getJSONObject(it)) }.getOrNull()
+            }
+        }.orEmpty()
+        if (incomingRecipes.isNotEmpty() || incomingPlan.isNotEmpty()) {
+            added += RecipeRepository.get(context).restoreMissing(incomingRecipes, incomingPlan)
+        }
+
         val goals = GoalStore.get(context)
         if (goals.get() == null) {
             data.optJSONObject("goal")?.let {
@@ -173,11 +201,41 @@ object BackupStore {
             }
         }
 
+        // The same promise for `data`: a section this app does not store --
+        // web's `steps`, or one a newer client adds -- is kept and written back
+        // out, rather than lost the moment this app re-saves the file.
+        val unknown = JSONObject()
+        data.keys().forEach { k -> if (k !in STORED && k !in NEVER_BACKED_UP) unknown.put(k, data.get(k)) }
+        if (unknown.length() > 0) {
+            val merged = foreignData(context) ?: JSONObject()
+            unknown.keys().forEach { k -> merged.put(k, unknown.get(k)) }
+            prefs(context).edit().putString(KEY_FOREIGN_DATA, merged.toString()).apply()
+        }
+
         return RestoreResult(added, true)
+    }
+
+    /**
+     * A recipe from a file, with its ingredient lines reparsed rather than
+     * trusted. `rawText` is the contract and every client runs the same parser;
+     * only the fields the parser does not own -- `optional`, `note` -- are
+     * carried across, so a cached quantity cannot outlive a line that no longer
+     * parses to it.
+     */
+    internal fun recipeForRestore(o: JSONObject): Recipe {
+        val recipe = recipeFromJson(o)
+        return recipe.copy(ingredients = recipe.ingredients.map { cached ->
+            IngredientParser.parse(cached.rawText).copy(optional = cached.optional, note = cached.note)
+        })
     }
 
     private fun prefs(context: Context) = context.applicationContext
         .getSharedPreferences("dcl_backup", Context.MODE_PRIVATE)
+
+    private fun foreignData(context: Context): JSONObject? {
+        val raw = prefs(context).getString(KEY_FOREIGN_DATA, null) ?: return null
+        return runCatching { JSONObject(raw) }.getOrNull()?.takeIf { it.length() > 0 }
+    }
 
     private fun foreignExt(context: Context): JSONObject? {
         val raw = prefs(context).getString(KEY_FOREIGN_EXT, null) ?: return null
@@ -185,4 +243,18 @@ object BackupStore {
     }
 
     private const val KEY_FOREIGN_EXT = "foreign_ext"
+    private const val KEY_FOREIGN_DATA = "foreign_data"
+
+    /** Sections this app stores and writes from its own data. Anything else in
+     *  a file's `data` is preserved. `steps` is deliberately absent: this app
+     *  reads steps from Health Connect, so a browser's `steps` is preserved,
+     *  not stored. */
+    internal val STORED = setOf(
+        "food", "workouts", "routines", "goal", "settings", "coach", "profile", "weights",
+        "recipes", "plan"
+    )
+
+    /** Never written and never preserved, by the format: ticks mark one week's
+     *  shop, and restoring last month's would show this week's list as bought. */
+    internal val NEVER_BACKED_UP = setOf("shopping")
 }
