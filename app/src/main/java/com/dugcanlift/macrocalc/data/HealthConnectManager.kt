@@ -241,6 +241,7 @@ internal fun buildExerciseSessionRecord(activity: OutdoorActivity): ExerciseSess
 
     val exerciseType = when (activity.activityType) {
         OutdoorActivityType.RUN -> ExerciseSessionRecord.EXERCISE_TYPE_RUNNING
+        OutdoorActivityType.WALK -> ExerciseSessionRecord.EXERCISE_TYPE_WALKING
         OutdoorActivityType.HIKE -> ExerciseSessionRecord.EXERCISE_TYPE_HIKING
     }
 
