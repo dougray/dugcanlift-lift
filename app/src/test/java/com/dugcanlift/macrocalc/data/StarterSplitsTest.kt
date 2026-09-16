@@ -61,16 +61,34 @@ class StarterSplitsTest {
 
     // MARK: - What shipped
 
-    @Test fun `the six splits are there, in three folders`() {
-        assertEquals(6, splits.size)
+    @Test fun `the ten splits are there, in five folders`() {
+        assertEquals(10, splits.size)
         assertEquals(
-            listOf("Push/Pull/Legs", "Upper/Lower", "Full Body"),
+            listOf("Push/Pull/Legs", "Upper/Lower", "Full Body", "Mobility & Recovery", "Running"),
             splits.map { it.folder }.distinct()
         )
         assertEquals(
-            listOf("Push", "Pull", "Legs", "Upper", "Lower", "Full Body"),
+            listOf("Push", "Pull", "Legs", "Upper", "Lower", "Full Body",
+                   "Mobility", "Active Rest", "Short Run", "Long Run"),
             splits.map { it.name }
         )
+    }
+
+    @Test fun `mobility, recovery and running are timed, never repped`() {
+        // A stretch held for 45 s and a 20 minute run have no rep count. A
+        // rep target here would open a set asking how many reps of a run.
+        val timed = splits.filter { it.folder == "Mobility & Recovery" || it.folder == "Running" }
+        assertEquals(4, timed.size)
+        timed.flatMap { r -> r.exercises.map { r.name to it } }.forEach { (name, exercise) ->
+            assertNull("$name/${exercise.name} has reps", exercise.targetReps)
+            assertTrue("$name/${exercise.name} has no time", (exercise.targetDurationSec ?: 0) > 0)
+        }
+    }
+
+    @Test fun `the long run is longer than the short one`() {
+        fun runSeconds(name: String) = splits.first { it.name == name }.exercises
+            .filter { it.name == "Trail Running/Walking" }.sumOf { it.targetDurationSec ?: 0 }
+        assertTrue(runSeconds("Long Run") > runSeconds("Short Run"))
     }
 
     @Test fun `every split holds real work`() {
