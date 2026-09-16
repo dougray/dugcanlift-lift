@@ -74,7 +74,8 @@ import kotlin.math.roundToInt
 fun DashboardScreen(
     goal: MacroResult?,
     onOpenCalculator: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRestored: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val foods = remember { FoodRepository.get(context) }
@@ -90,6 +91,7 @@ fun DashboardScreen(
     }
 
     var todaySteps by remember { mutableStateOf(0L) }
+    var hasStepsAccess by remember { mutableStateOf(true) }
     var stepGoal by remember { mutableStateOf(settings.stepGoal) }
     var showingStepGoalEditor by remember { mutableStateOf(false) }
     var servingUnit by remember { mutableStateOf(settings.servingUnit) }
@@ -99,16 +101,21 @@ fun DashboardScreen(
     val stepsPermissionLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract()
     ) { granted ->
-        if (granted.containsAll(HealthConnectManager.permissions)) {
+        hasStepsAccess = granted.containsAll(HealthConnectManager.permissions)
+        if (hasStepsAccess) {
             scope.launch { todaySteps = HealthConnectManager.todaysStepCount(context) }
         }
     }
 
     LaunchedEffect(Unit) {
         if (!HealthConnectManager.isAvailable(context)) return@LaunchedEffect
-        if (HealthConnectManager.hasPermission(context)) {
+        hasStepsAccess = HealthConnectManager.hasPermission(context)
+        if (hasStepsAccess) {
             todaySteps = HealthConnectManager.todaysStepCount(context)
-        } else {
+        } else if (!settings.askedForSteps) {
+            // Once, not on every visit to Home: this effect reruns whenever the
+            // tab is shown, and a person who declined was asked again each time.
+            settings.askedForSteps = true
             stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
         }
     }
@@ -205,7 +212,14 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 DashboardBar("Today", todaySteps.toInt(), stepGoal, unit = "steps")
                 Spacer(modifier = Modifier.height(4.dp))
-                TextButton(onClick = { showingStepGoalEditor = true }) { Text("Edit goal") }
+                Row {
+                    TextButton(onClick = { showingStepGoalEditor = true }) { Text("Edit goal") }
+                    if (!hasStepsAccess && HealthConnectManager.isAvailable(context)) {
+                        TextButton(onClick = {
+                            stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
+                        }) { Text("Read steps from Health Connect") }
+                    }
+                }
             }
         }
 
@@ -578,7 +592,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        BackupCard()
+        BackupCard(onRestored = onRestored)
 
         if (goal != null) {
             Spacer(modifier = Modifier.height(24.dp))
