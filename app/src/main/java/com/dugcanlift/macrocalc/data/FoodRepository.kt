@@ -60,8 +60,10 @@ class FoodRepository private constructor(context: Context) {
      */
     fun restoreMissing(incoming: List<FoodEntry>): Int {
         val existing = read()
-        val known = existing.map { it.id }.toSet()
-        val fresh = incoming.filter { it.id !in known }
+        // Case-insensitive: see backupIdKey. distinctBy so a file listing the
+        // same record twice adds it once.
+        val known = existing.map { backupIdKey(it.id) }.toSet()
+        val fresh = incoming.filter { backupIdKey(it.id) !in known }.distinctBy { backupIdKey(it.id) }
         if (fresh.isEmpty()) return 0
         val updated = existing + fresh
         write(updated)

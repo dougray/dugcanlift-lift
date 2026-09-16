@@ -138,6 +138,50 @@ class RecipeRepository private constructor(context: Context) {
         _checked.value = emptySet()
     }
 
+    /* ---------- backup ---------- */
+
+    /** Read straight from disk, so a backup is complete even if [load] has not
+     *  run yet in this process. Shopping ticks are deliberately not offered:
+     *  the backup format leaves them out. */
+    fun recipesForBackup(): List<Recipe> = readRecipes()
+    fun planForBackup(): List<PlannedMeal> = readPlan()
+
+    /**
+     * Adds the recipes and planned meals this device does not already have.
+     * Never overwrites. Returns how many records were added.
+     *
+     * Recipes first, so a meal whose recipe arrives in the same file keeps it.
+     * A meal whose recipe exists in neither the file nor the device is skipped:
+     * it would render as a meal with nothing behind it.
+     */
+    @Synchronized
+    fun restoreMissing(incomingRecipes: List<Recipe>, incomingPlan: List<PlannedMeal>): Int {
+        val recipes = readRecipes()
+        val knownRecipes = recipes.map { backupIdKey(it.id) }.toSet()
+        val freshRecipes = incomingRecipes
+            .filter { backupIdKey(it.id) !in knownRecipes }
+            .distinctBy { backupIdKey(it.id) }
+        val allRecipes = recipes + freshRecipes
+
+        val plan = readPlan()
+        val knownMeals = plan.map { backupIdKey(it.id) }.toSet()
+        val recipeKeys = allRecipes.map { backupIdKey(it.id) }.toSet()
+        val freshMeals = incomingPlan
+            .filter { backupIdKey(it.id) !in knownMeals && backupIdKey(it.recipeId) in recipeKeys }
+            .distinctBy { backupIdKey(it.id) }
+
+        if (freshRecipes.isNotEmpty()) {
+            writeRecipes(allRecipes)
+            _recipes.value = allRecipes
+        }
+        if (freshMeals.isNotEmpty()) {
+            val allMeals = plan + freshMeals
+            writePlan(allMeals)
+            _plan.value = allMeals
+        }
+        return freshRecipes.size + freshMeals.size
+    }
+
     /* ---------- file access ---------- */
 
     @Synchronized
