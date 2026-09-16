@@ -175,7 +175,8 @@ private fun AppTabs(
         when (selectedTab) {
             0 -> DashboardScreen(
                 goal = goal,
-                onOpenCalculator = { showCalculator = true }
+                onOpenCalculator = { showCalculator = true },
+                onRestored = { goal = goalStore.get() }
             )
             1 -> TodayScreen(goal = goal)
             2 -> CookScreen()
