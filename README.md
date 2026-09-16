@@ -53,6 +53,7 @@ Save the result as your goal and everything else tracks against it.
 - Scan a barcode to pull nutrition straight off the packet
 - One-tap re-log of anything you've eaten before
 - Manual entry for anything not in the database
+- Tap a logged entry to change its name, meal, amount or macros
 - Fiber tracked alongside protein, fat and carbs
 - Browse back through previous days
 
@@ -112,8 +113,10 @@ row both read naturally.
 ### Your data
 
 - Save a backup file and restore it on this phone or another; restoring only
-  adds what the device doesn't already have. The file format is shared with LIFT
-  for iOS and the browser version
+  adds what the device doesn't already have. The file holds your food, training,
+  recipes and meal plan, and your runs, walks and hikes with their full GPS
+  routes, so keep it somewhere private. The format is shared with LIFT for iOS
+  and the browser version
 - Appearance: System (the default), Light, or Dark
 
 ## Privacy
@@ -165,7 +168,6 @@ or maps dependency.
 
 ## Not built yet
 
-- Editing a logged entry (currently delete and re-add)
 - Saturated fat, sugars, and sodium tracking
 
 ## License
