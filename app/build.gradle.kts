@@ -97,7 +97,7 @@ dependencies {
     // from this artifact, not lifecycle-runtime-ktx.
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.health.connect.client)
-    implementation("com.github.dougray:dugcanlift-kit-android:1.0.0")
+    implementation("com.github.dougray:dugcanlift-kit-android:1.1.0")
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.robolectric)
