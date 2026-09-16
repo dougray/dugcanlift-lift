@@ -229,6 +229,7 @@ private fun RecipeEditorDialog(
     var protein by remember { mutableStateOf(existing?.nutritionPerServing?.proteinG?.trimZeros() ?: "") }
     var carbs by remember { mutableStateOf(existing?.nutritionPerServing?.carbsG?.trimZeros() ?: "") }
     var fat by remember { mutableStateOf(existing?.nutritionPerServing?.fatG?.trimZeros() ?: "") }
+    var fiber by remember { mutableStateOf(existing?.nutritionPerServing?.fiberG?.trimZeros() ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -345,13 +346,15 @@ private fun RecipeEditorDialog(
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
-                NumberField(value = calories, onValueChange = { calories = it }, label = "kcal")
+                NumberField(value = calories, onValueChange = { calories = it }, label = "Calories (kcal)")
                 Spacer(modifier = Modifier.height(8.dp))
-                NumberField(value = protein, onValueChange = { protein = it }, label = "Protein g")
+                NumberField(value = protein, onValueChange = { protein = it }, label = "Protein (g)")
                 Spacer(modifier = Modifier.height(8.dp))
-                NumberField(value = carbs, onValueChange = { carbs = it }, label = "Carbs g")
+                NumberField(value = carbs, onValueChange = { carbs = it }, label = "Carbs (g)")
                 Spacer(modifier = Modifier.height(8.dp))
-                NumberField(value = fat, onValueChange = { fat = it }, label = "Fat g")
+                NumberField(value = fat, onValueChange = { fat = it }, label = "Fat (g)")
+                Spacer(modifier = Modifier.height(8.dp))
+                NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fibre (g)")
 
                 if (existing != null) {
                     Spacer(modifier = Modifier.height(12.dp))
@@ -379,7 +382,8 @@ private fun RecipeEditorDialog(
                             ?.let { servingUnit.toGrams(it) },
                         ingredientText = ingredientText,
                         stepText = stepText,
-                        calories = calories, protein = protein, carbs = carbs, fat = fat
+                        calories = calories, protein = protein, carbs = carbs, fat = fat,
+                        fiber = fiber
                     )
                     scope.launch {
                         if (existing == null) repo.addRecipe(recipe) else repo.updateRecipe(recipe)
@@ -402,7 +406,8 @@ private fun buildRecipe(
     calories: String,
     protein: String,
     carbs: String,
-    fat: String
+    fat: String,
+    fiber: String
 ): Recipe {
     val ingredients: List<RecipeIngredient> = ingredientText
         .lines()
@@ -414,12 +419,20 @@ private fun buildRecipe(
 
     // Null unless something was actually typed — an untouched form must not
     // write zeros, which would later log as a zero-calorie meal.
-    val typed = listOf(calories, protein, carbs, fat).map { it.trim().toDoubleOrNull() }
+    val typed = listOf(calories, protein, carbs, fat, fiber).map { it.trim().toDoubleOrNull() }
     val nutrition = if (typed.all { it == null }) null else RecipeNutrition(
         calories = typed[0] ?: 0.0,
         proteinG = typed[1] ?: 0.0,
         carbsG = typed[2] ?: 0.0,
-        fatG = typed[3] ?: 0.0
+        fatG = typed[3] ?: 0.0,
+        // Fibre was absent here, so every save rebuilt the figure without it
+        // and silently zeroed whatever the recipe had -- including a figure
+        // read off a page by the JSON-LD importer.
+        fiberG = typed[4] ?: 0.0,
+        // Likewise `estimated`: rebuilding the figure reset the flag, so an
+        // imported recipe stopped admitting it was an estimate the first time
+        // anyone opened it. Editing a number does not make it a measurement.
+        estimated = existing?.nutritionPerServing?.estimated ?: false
     )
 
     val base = existing ?: Recipe(name = name)
