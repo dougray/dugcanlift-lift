@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +45,7 @@ import com.dugcanlift.macrocalc.data.LoggedExercise
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
+import com.dugcanlift.macrocalc.data.OutdoorRecords
 import com.dugcanlift.macrocalc.data.Routine
 import com.dugcanlift.macrocalc.data.StarterSplitStore
 import com.dugcanlift.macrocalc.data.alreadyHas
@@ -96,7 +98,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val sessions by workouts.sessions.collectAsState()
     val routines by routineRepo.routines.collectAsState()
 
-    // Six routines off a bundled file, for someone who has not written any.
+    // Starter routines off a bundled file, for someone who has not written any.
     var starters by remember { mutableStateOf<List<Routine>>(emptyList()) }
     LaunchedEffect(Unit) { starters = StarterSplitStore.load(context) }
     val scheduledSessions by scheduledSessionRepo.sessions.collectAsState()
@@ -257,17 +259,13 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         Text(text = "Outdoor", style = MaterialTheme.typography.labelLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
-                onClick = { recordingActivityType = OutdoorActivityType.RUN },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Start Run")
-            }
-            Button(
-                onClick = { recordingActivityType = OutdoorActivityType.HIKE },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Start Hike")
+            OutdoorActivityType.entries.forEach { type ->
+                Button(
+                    onClick = { recordingActivityType = type },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(type.displayName)
+                }
             }
         }
 
@@ -297,6 +295,12 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        OutdoorHighlights(
+            activities = outdoorActivities,
+            onOpen = { reviewingActivityId = it.id }
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -413,6 +417,95 @@ private fun RoutineCard(
                 TextButton(onClick = onDelete) { Text("Delete") }
             }
         }
+    }
+}
+
+/**
+ * The space under Outdoor: the newest route and the best distance, time and
+ * pace for each kind of activity. All-time rather than the selected day's, so
+ * it is still there on a rest day. The rules are [OutdoorRecords].
+ *
+ * The route is a line on a plain canvas, not a street map — this app has no
+ * maps dependency, and the recording and review screens draw it the same way.
+ */
+@Composable
+private fun OutdoorHighlights(
+    activities: List<OutdoorActivity>,
+    onOpen: (OutdoorActivity) -> Unit
+) {
+    val last = remember(activities) { OutdoorRecords.lastRoute(activities) }
+    val bests = remember(activities) { OutdoorRecords.bests(activities) }
+
+    if (last != null) {
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { onOpen(last) },
+            border = dclCardBorder()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Last route", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(12.dp))
+                RoutePolylineCanvas(
+                    routePoints = last.routePoints,
+                    modifier = Modifier.fillMaxWidth(),
+                    aspectRatio = 2f
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(last.activityType.displayName, style = MaterialTheme.typography.titleSmall)
+                    Text(outdoorActivityDateLabel(last.startedAtEpochMs),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    OutdoorStat("Distance", OutdoorRecords.distanceText(last.distanceMeters))
+                    OutdoorStat("Time", last.durationMs?.let(OutdoorRecords::durationText) ?: "—")
+                    OutdoorStat("Pace",
+                        last.averagePaceSecondsPerMeter
+                            ?.takeIf { last.distanceMeters >= OutdoorRecords.MINIMUM_PACE_DISTANCE_METERS }
+                            ?.let(OutdoorRecords::paceText) ?: "—")
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Personal bests", style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            if (bests.isEmpty()) {
+                Text(
+                    "Your last route and your best distance, time and pace show up here after your first run, walk or hike.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            bests.forEachIndexed { index, best ->
+                if (index > 0) Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    "${best.type.displayName} · ${best.count} " + if (best.count == 1) "activity" else "activities",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    OutdoorStat("Farthest", best.longestDistanceMeters?.let(OutdoorRecords::distanceText) ?: "—")
+                    OutdoorStat("Longest", best.longestDurationMs?.let(OutdoorRecords::durationText) ?: "—")
+                    OutdoorStat("Fastest pace", best.fastestPaceSecondsPerMeter?.let(OutdoorRecords::paceText) ?: "—")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.OutdoorStat(label: String, value: String) {
+    Column(modifier = Modifier.weight(1f)) {
+        Text(label, style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleMedium, maxLines = 1)
     }
 }
 
