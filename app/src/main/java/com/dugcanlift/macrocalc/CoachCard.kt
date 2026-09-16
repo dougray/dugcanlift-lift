@@ -32,6 +32,7 @@ import com.dugcanlift.macrocalc.data.CoachShare
 import com.dugcanlift.macrocalc.data.CoachStore
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.HealthConnectManager
+import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.WorkoutSession
 
@@ -48,6 +49,7 @@ fun CoachCard(
     goal: MacroResult?,
     sessions: List<WorkoutSession>,
     entries: List<FoodEntry>,
+    outdoor: List<OutdoorActivity> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -59,6 +61,7 @@ fun CoachCard(
     var name by remember { mutableStateOf(store.lifterName) }
     var weeks by remember { mutableStateOf(store.weeks) }
     var itemised by remember { mutableStateOf(store.itemisedFood) }
+    var sendRoute by remember { mutableStateOf(store.sendLastRoute) }
     var sizeNote by remember { mutableStateOf("") }
 
     // Step history is read from Health Connect rather than stored here, so it
@@ -74,9 +77,9 @@ fun CoachCard(
 
     // Recomputed rather than guessed: the person deserves to know how long the
     // email is before they send one their coach's mail app might mangle.
-    LaunchedEffect(weeks, itemised, sessions, entries, steps, editing) {
+    LaunchedEffect(weeks, itemised, sendRoute, sessions, entries, steps, outdoor, editing) {
         if (editing) return@LaunchedEffect
-        val link = CoachShare.buildLink(store, settings, goal, sessions, entries, steps)
+        val link = CoachShare.buildLink(store, settings, goal, sessions, entries, steps, outdoor)
         val kb = link.length / 1024.0
         sizeNote = String.format("About %.1f KB of email.", kb) +
             if (CoachShare.linkIsRisky(link))
@@ -172,11 +175,37 @@ fun CoachCard(
                     )
                 }
 
+                // The route is the one part of a link that says where someone
+                // lives, so it is asked for rather than assumed. Same words as
+                // LIFT web, so the choice reads the same on every build.
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = "Your last route", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !sendRoute,
+                        onClick = { sendRoute = false; store.sendLastRoute = false },
+                        label = { Text("Don't send") }
+                    )
+                    FilterChip(
+                        selected = sendRoute,
+                        onClick = { sendRoute = true; store.sendLastRoute = true },
+                        label = { Text("Send, trimmed") }
+                    )
+                }
+                Text(
+                    text = "Runs, walks and hikes always go as times, distances and bests. " +
+                        "The map of your newest one goes only if you turn it on, with the first " +
+                        "and last 200 m cut off so it never shows where you start from.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
                         val opened = CoachShare.sendEmail(
-                            context, store, settings, goal, sessions, entries, steps
+                            context, store, settings, goal, sessions, entries, steps, outdoor
                         )
                         if (!opened) {
                             Toast.makeText(
