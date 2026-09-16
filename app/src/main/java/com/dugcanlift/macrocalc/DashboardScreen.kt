@@ -58,6 +58,7 @@ import com.dugcanlift.macrocalc.data.historyFor
 import com.dugcanlift.macrocalc.data.knownExercises
 import com.dugcanlift.macrocalc.data.topWeightLb
 import com.dugcanlift.macrocalc.data.sessionsForDate
+import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.ServingUnit
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
@@ -77,12 +78,14 @@ fun DashboardScreen(
     val context = LocalContext.current
     val foods = remember { FoodRepository.get(context) }
     val workouts = remember { WorkoutRepository.get(context) }
+    val outdoorRepo = remember { OutdoorActivityRepository.get(context) }
     val settings = remember { SettingsStore.get(context) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         foods.load()
         workouts.load()
+        outdoorRepo.load()
     }
 
     var todaySteps by remember { mutableStateOf(0L) }
@@ -111,6 +114,7 @@ fun DashboardScreen(
 
     val allEntries by foods.entries.collectAsState()
     val allSessions by workouts.sessions.collectAsState()
+    val outdoorActivities by outdoorRepo.activities.collectAsState()
 
     val today = remember { todayKey() }
     val eaten = allEntries.forDate(today).totals()
@@ -521,7 +525,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        CoachCard(goal = goal, sessions = allSessions, entries = allEntries)
+        CoachCard(goal = goal, sessions = allSessions, entries = allEntries, outdoor = outdoorActivities)
 
         Spacer(modifier = Modifier.height(16.dp))
 

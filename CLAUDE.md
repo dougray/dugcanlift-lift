@@ -15,6 +15,12 @@ covered by the kit's own tests.
 - `PlanLinkCodec` + the `Plan*` types + `PlanDecodeResult` — plan links.
 - `ShareLinkCodec` + the `Share*` types — coach share links. `CoachShare.kt`
   only maps this app's stores into a `SharePayload` and calls the codec.
+- `OutdoorShare` + `OutdoorShareActivity` — a link's runs, walks and hikes
+  (`o` per day, all-time bests `ob`, and the trimmed last route `lr`, sent only
+  when `CoachStore.sendLastRoute` is on). `CoachShare.kt` maps
+  `OutdoorActivity` in; the rounding and polyline stay in the kit because every
+  sender must produce the same string, checked against LIFT web's fixtures in
+  `CoachShareOutdoorTest`.
 - `IngredientParser`, `RecipeIngredient`, `RecipeNutrition`, `Double.trimZeros()`.
 - `DayKey` — local `yyyy-MM-dd` day keys. `todayKey()`/`dateKey()` in
   `data/FoodEntry.kt` are one-line wrappers over `DayKey.today()`/`DayKey.make()`
