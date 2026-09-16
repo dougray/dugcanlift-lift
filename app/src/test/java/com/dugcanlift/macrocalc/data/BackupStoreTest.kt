@@ -96,6 +96,41 @@ class BackupStoreTest {
         assertEquals("flaky", ingredient.note)
     }
 
+    // MARK: - Interop with the iOS build
+
+    /** Written by LIFT iOS's own BackupStore.build, so every id is upper case. */
+    @Test
+    fun `an iOS backup restores its recipe and keeps the meal linked`() {
+        val result = BackupStore.restore(context, fixture("ios-backup-recipes.json"))
+        assertEquals("one recipe and one planned meal", 2, result.added)
+        val repo = RecipeRepository.get(context)
+        val recipe = repo.recipesForBackup().single()
+        assertEquals("Salmon and Sweet Potato", recipe.name)
+        assertEquals(900.0, recipe.totalWeightGrams!!, 1e-9)
+        assertEquals(recipe.id, repo.planForBackup().single().recipeId)
+    }
+
+    /** iOS's `ext` block -- sugar, sodium, ingredient foodRefIDs -- has no home
+     *  here and must go back out untouched on the next save. */
+    @Test
+    fun `an iOS backup's ext survives a restore and save`() {
+        BackupStore.restore(context, fixture("ios-backup-recipes.json"))
+        val ext = JSONObject(BackupStore.build(context)).getJSONObject("ext")
+        val recipes = ext.getJSONObject("ios").getJSONObject("recipes")
+        assertEquals(410, recipes.getJSONObject(recipes.keys().next()).getInt("sodiumMg"))
+    }
+
+    @Test
+    fun `the same recipe spelled in both cases restores once`() {
+        val upper = JSONObject(fixture("ios-backup-recipes.json"))
+        val lower = JSONObject(upper.toString())
+        val recipe = lower.getJSONObject("data").getJSONArray("recipes").getJSONObject(0)
+        recipe.put("id", recipe.getString("id").lowercase())
+        BackupStore.restore(context, lower.toString())
+        BackupStore.restore(context, upper.toString())
+        assertEquals(1, RecipeRepository.get(context).recipesForBackup().size)
+    }
+
     // MARK: - Restoring
 
     @Test
