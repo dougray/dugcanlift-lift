@@ -114,6 +114,30 @@ class OutdoorActivityRepository private constructor(context: Context) {
         _activities.value = updated
     }
 
+    /** Finished activities only, read from the file rather than [activities],
+     *  which is empty until a screen has called [load]. A recording still in
+     *  progress is never written to a backup. */
+    fun activitiesForBackup(): List<OutdoorActivity> = read().filter { it.endedAtEpochMs != null }
+
+    /**
+     * Adds only activities this device has never seen, matched on id
+     * case-insensitively (see [backupIdKey]), and returns how many landed.
+     * Never overwrites: restoring an old file must not undo a Health Connect
+     * export recorded on the activity since.
+     */
+    @Synchronized
+    fun restoreMissing(incoming: List<OutdoorActivity>): Int {
+        val existing = read()
+        val known = existing.map { backupIdKey(it.id) }.toSet()
+        val fresh = incoming.filter { backupIdKey(it.id) !in known }.distinctBy { backupIdKey(it.id) }
+        if (fresh.isEmpty()) return 0
+        val updated = existing + fresh
+        write(updated)
+        _activities.value = updated
+        return fresh.size
+    }
+
+    @Synchronized
     private fun read(): List<OutdoorActivity> {
         if (!file.exists()) return emptyList()
         return try {
