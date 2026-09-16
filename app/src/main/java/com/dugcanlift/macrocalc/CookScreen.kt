@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.layout.Arrangement
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -128,7 +129,7 @@ private fun RecipesSection(repo: RecipeRepository) {
             recipes.sortedBy { it.name.lowercase() }.forEach { recipe ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    onClick = { editing = recipe }
+                    onClick = { editing = recipe }, border = dclCardBorder()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(modifier = Modifier.fillMaxWidth()) {
@@ -469,7 +470,7 @@ private fun PlanSection(repo: RecipeRepository) {
         }
 
         weekDays().forEach { day ->
-            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(dayLabel(day), style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -714,7 +715,7 @@ private fun ShoppingSection(repo: RecipeRepository) {
 
         lines.forEach { line ->
             val isChecked = line.key in checked
-            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), border = dclCardBorder()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically

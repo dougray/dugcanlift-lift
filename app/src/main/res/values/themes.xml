@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DugCanLiftCalc" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#1C1B19</item>
+    <!-- Light by default, with values-night/themes.xml for dark: the window
+         background and splash are drawn before Compose can read the person's
+         appearance setting, so they follow the phone. A person who chose Dark
+         on a light-mode phone sees a parchment splash for a moment. -->
+    <style name="Theme.DugCanLiftCalc" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F4EFE7</item>
     </style>
 
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#1C1B19</item>
+        <item name="windowSplashScreenBackground">#F4EFE7</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
         <item name="postSplashScreenTheme">@style/Theme.DugCanLiftCalc</item>
     </style>

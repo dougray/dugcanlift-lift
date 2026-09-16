@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.activity.compose.BackHandler
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -234,7 +235,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
         scheduledSessions.onDate(selectedDate).forEach { session ->
             val scheduledRoutine = routines.firstOrNull { it.id == session.routineId }
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), border = dclCardBorder()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -395,7 +396,7 @@ private fun RoutineCard(
     onStart: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
             if (routine.preview.isNotBlank()) {
@@ -423,7 +424,7 @@ private fun OutdoorActivityRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick), border = dclCardBorder()
     ) {
         Row(
             modifier = Modifier
@@ -472,7 +473,7 @@ private fun SessionCard(
     var routineName by remember(session.id) { mutableStateOf("") }
     var routineFolder by remember(session.id) { mutableStateOf("") }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             NameField(
                 value = session.name,
@@ -808,7 +809,7 @@ private fun StarterSplitCard(
     routine: Routine,
     onAdd: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(4.dp))

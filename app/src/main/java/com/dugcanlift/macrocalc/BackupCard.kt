@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import android.widget.Toast
+import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -76,7 +77,7 @@ fun BackupCard() {
     Text("Your data", style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(8.dp))
 
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(Modifier.padding(16.dp)) {
             Text(
                 "Everything you log stays on this phone. There is no account to " +
