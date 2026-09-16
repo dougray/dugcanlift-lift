@@ -132,6 +132,10 @@ object CoachShare {
      * itemized food, foodTotals, outdoor activity, steps or bodyweight), so
      * pre-filtering here would shift every day's offset.
      *
+     * Saturated fat, sugar and sodium follow SHARE-FORMAT's section of that
+     * name: `fx` on any day with food that recorded one, `fe` beside an
+     * itemised `f`. Both are built by the kit, as the screen's totals are.
+     *
      * Outdoor follows SHARE-FORMAT "Outdoor": each day's finished runs, walks
      * and hikes as `o`, all-time bests as `ob`, and the newest route as `lr`
      * only when [CoachStore.sendLastRoute] is on. The numbers and the polyline
@@ -196,7 +200,9 @@ object CoachShare {
                         fatG = entry.fatG.toDouble(),
                         carbsG = entry.carbsG.toDouble(),
                         fiberG = entry.fiberG.toDouble(),
-                        meal = mealIndex(entry)
+                        meal = mealIndex(entry),
+                        // `fe`: per serving like the macros, null when none recorded.
+                        details = entry.details.takeIf { !it.isEmpty }
                     )
                 }
             } else null
@@ -222,7 +228,11 @@ object CoachShare {
                 exercises = exercises,
                 foodTotals = foodTotals,
                 food = food,
-                outdoor = dayOutdoor
+                outdoor = dayOutdoor,
+                // `fx`, itemised or not: totals over only the foods that
+                // recorded each, with the counts. Null -- no key -- when no
+                // food that day recorded any of the three.
+                nutrientTotals = dayEntries.nutrientTotals()
             )
         }
 

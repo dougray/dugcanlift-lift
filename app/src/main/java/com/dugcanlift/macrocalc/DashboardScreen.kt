@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodRepository
+import com.dugcanlift.macrocalc.data.NutrientDetailsText
 import com.dugcanlift.macrocalc.data.HealthConnectManager
 import com.dugcanlift.macrocalc.data.FocusChart
 import com.dugcanlift.macrocalc.data.SettingsStore
@@ -262,6 +263,9 @@ fun DashboardScreen(
                 StatRow("Carbs", "${eaten.carbsG} g")
                 StatRow("Fat", "${eaten.fatG} g")
                 StatRow("Fiber", "${eaten.fiberG} g")
+                // No goal and no bar: what was eaten, and how much of the day
+                // each total covers when not every food recorded it.
+                NutrientDetailsText.dayRows(allEntries.forDate(today)).forEach { StatRow(it.label, it.value) }
             }
         }
 

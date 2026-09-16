@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.kit.ShareNutrients
 import kotlin.math.roundToInt
 
 /**
@@ -26,7 +27,11 @@ import kotlin.math.roundToInt
  * Blank stays blank: a blank macro field is never rescaled into a number, and a
  * blank or unreadable amount or calories refuses the save rather than writing a
  * zero nobody entered. FoodEntry's protein/fat/carbs/fibre are not nullable, so
- * a blank one saves as 0, the same as the add form does.
+ * a blank one saves as 0, the same as the add form does. Saturated fat, sugar
+ * and sodium are nullable, and blank saves as null -- not recorded -- because
+ * a zero there would count as a food with no sodium in a day's total. They
+ * rescale with the weight like the macros, rounded to one decimal of a gram
+ * and to a whole milligram.
  */
 data class FoodEntryEdit(
     val name: String,
@@ -53,13 +58,22 @@ data class FoodEntryEdit(
         val fatG: String,
         val carbsG: String,
         val fiberG: String,
+        val saturatedFatG: String = "",
+        val sugarG: String = "",
+        val sodiumMg: String = "",
     ) {
-        fun map(transform: (String) -> String) = MacroText(
-            transform(calories), transform(proteinG), transform(fatG), transform(carbsG), transform(fiberG)
+        /** Every field scaled from one weight to another. Blank stays blank. */
+        fun rescaled(fromGrams: Double, toGrams: Double) = MacroText(
+            rescale(calories, fromGrams, toGrams), rescale(proteinG, fromGrams, toGrams),
+            rescale(fatG, fromGrams, toGrams), rescale(carbsG, fromGrams, toGrams),
+            rescale(fiberG, fromGrams, toGrams),
+            rescaleDetail(saturatedFatG, fromGrams, toGrams, milligrams = false),
+            rescaleDetail(sugarG, fromGrams, toGrams, milligrams = false),
+            rescaleDetail(sodiumMg, fromGrams, toGrams, milligrams = true),
         )
     }
 
-    enum class Field { CALORIES, PROTEIN, FAT, CARBS, FIBER }
+    enum class Field { CALORIES, PROTEIN, FAT, CARBS, FIBER, SATURATED_FAT, SUGAR, SODIUM }
 
     /** The weight the amount field currently reads as, in grams. */
     val grams: Double?
@@ -81,7 +95,7 @@ data class FoodEntryEdit(
         val base = basisGrams
             // Macros typed while the amount was blank belong to this weight.
             ?: return next.copy(basisGrams = newGrams, basisMacros = macros)
-        return next.copy(macros = basisMacros.map { rescale(it, base, newGrams) })
+        return next.copy(macros = basisMacros.rescaled(base, newGrams))
     }
 
     /** Switches the weight unit. The same weight, so nothing rescales. */
@@ -100,6 +114,9 @@ data class FoodEntryEdit(
             Field.FAT -> macros.copy(fatG = text)
             Field.CARBS -> macros.copy(carbsG = text)
             Field.FIBER -> macros.copy(fiberG = text)
+            Field.SATURATED_FAT -> macros.copy(saturatedFatG = text)
+            Field.SUGAR -> macros.copy(sugarG = text)
+            Field.SODIUM -> macros.copy(sodiumMg = text)
         }
         return copy(macros = next, basisMacros = next, basisGrams = grams)
     }
@@ -119,6 +136,9 @@ data class FoodEntryEdit(
             fatG = whole(macros.fatG) ?: 0,
             carbsG = whole(macros.carbsG) ?: 0,
             fiberG = whole(macros.fiberG) ?: 0,
+            saturatedFatG = NutrientDetailsText.parse(macros.saturatedFatG),
+            sugarG = NutrientDetailsText.parse(macros.sugarG),
+            sodiumMg = NutrientDetailsText.parse(macros.sodiumMg),
         )
         return if (byWeight) {
             common.copy(servings = 1.0, amountGrams = grams ?: return null)
@@ -131,7 +151,9 @@ data class FoodEntryEdit(
         fun from(entry: FoodEntry, unit: ServingUnit): FoodEntryEdit {
             val macros = MacroText(
                 entry.calories.toString(), entry.proteinG.toString(), entry.fatG.toString(),
-                entry.carbsG.toString(), entry.fiberG.toString()
+                entry.carbsG.toString(), entry.fiberG.toString(),
+                NutrientDetailsText.field(entry.saturatedFatG), NutrientDetailsText.field(entry.sugarG),
+                NutrientDetailsText.field(entry.sodiumMg),
             )
             val grams = entry.amountGrams
             return FoodEntryEdit(
@@ -154,6 +176,21 @@ data class FoodEntryEdit(
             val value = text.toDoubleOrNull() ?: return text
             if (!positive(fromGrams) || !positive(toGrams)) return text
             return (value * toGrams / fromGrams).roundToInt().toString()
+        }
+
+        /**
+         * Saturated fat, sugar or sodium scaled from one weight to another:
+         * grams to one decimal, milligrams whole, rounding once from the basis.
+         * Blank stays blank.
+         */
+        internal fun rescaleDetail(text: String, fromGrams: Double, toGrams: Double, milligrams: Boolean): String {
+            if (text.isBlank()) return text
+            val value = text.toDoubleOrNull() ?: return text
+            if (!positive(fromGrams) || !positive(toGrams)) return text
+            val scaled = value * toGrams / fromGrams
+            return NutrientDetailsText.field(
+                if (milligrams) ShareNutrients.roundMilligrams(scaled) else ShareNutrients.roundGrams(scaled)
+            )
         }
 
         private fun whole(text: String): Int? =

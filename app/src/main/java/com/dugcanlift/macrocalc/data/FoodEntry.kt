@@ -1,6 +1,9 @@
 package com.dugcanlift.macrocalc.data
 
 import com.dugcanlift.kit.DayKey
+import com.dugcanlift.kit.NutrientDetails
+import com.dugcanlift.kit.ShareNutrientTotals
+import com.dugcanlift.kit.ShareNutrients
 import org.json.JSONObject
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -43,8 +46,20 @@ data class FoodEntry(
     val fiberG: Int = 0,
     val date: String = todayKey(),
     val loggedAt: Long = System.currentTimeMillis(),
-    val meal: String = ""
+    val meal: String = "",
+    /**
+     * Saturated fat, sugar and sodium, on the same basis as the macros above:
+     * per serving, or the totals for [amountGrams] when that is set. Tracked
+     * and shown, never targeted. Null is "not recorded", never zero -- most
+     * foods typed by hand will not have them, and a day's total must not read
+     * those as foods with no sodium in them.
+     */
+    val saturatedFatG: Double? = null,
+    val sugarG: Double? = null,
+    val sodiumMg: Double? = null
 ) {
+    val details: NutrientDetails get() = NutrientDetails(saturatedFatG, sugarG, sodiumMg)
+
     /**
      * The meal this belongs to. Falls back to the time it was logged, so
      * entries saved before meals existed still sort sensibly.
@@ -83,6 +98,15 @@ fun List<FoodEntry>.totals(): DayTotals = DayTotals(
     fiberG = sumOf { it.totalFiberG }
 )
 
+/**
+ * A day's saturated fat, sugar and sodium, each totalled over only the foods
+ * that recorded it, with how many did. Null when none recorded any. Built by
+ * the kit's [ShareNutrients.dayTotals], so what the screen says and what a
+ * coach's link carries as `fx` are the same numbers, rounded the same way.
+ */
+fun List<FoodEntry>.nutrientTotals(): ShareNutrientTotals? =
+    ShareNutrients.dayTotals(map { it.servings to it.details })
+
 fun todayKey(): String = DayKey.today()
 
 fun dateKey(millis: Long): String = DayKey.make(millis)
@@ -102,6 +126,9 @@ internal fun FoodEntry.toJson(): JSONObject = JSONObject().apply {
     put("date", date)
     put("loggedAt", loggedAt)
     put("meal", meal)
+    saturatedFatG?.let { put("saturatedFatG", it) }
+    sugarG?.let { put("sugarG", it) }
+    sodiumMg?.let { put("sodiumMg", it) }
 }
 
 /**
@@ -120,5 +147,18 @@ internal fun foodEntryFromJson(o: JSONObject): FoodEntry = FoodEntry(
     fiberG = o.optInt("fiberG", 0),
     date = o.optString("date", todayKey()),
     loggedAt = o.optLong("loggedAt", 0L),
-    meal = o.optString("meal", "")
+    meal = o.optString("meal", ""),
+    saturatedFatG = optNutrient(o, "saturatedFatG"),
+    sugarG = optNutrient(o, "sugarG"),
+    sodiumMg = optNutrient(o, "sodiumMg")
 )
+
+/**
+ * One of saturated fat, sugar or sodium from a stored or backed-up record.
+ * Absent, null, negative or not a finite number all read as not recorded --
+ * never as zero.
+ */
+internal fun optNutrient(o: JSONObject, key: String): Double? {
+    if (!o.has(key) || o.isNull(key)) return null
+    return (o.opt(key) as? Number)?.toDouble()?.takeIf { it.isFinite() && it >= 0.0 }
+}

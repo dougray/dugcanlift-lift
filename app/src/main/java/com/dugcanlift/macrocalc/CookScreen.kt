@@ -38,11 +38,12 @@ import androidx.compose.ui.unit.dp
 import com.dugcanlift.kit.CaptionRecipe
 import com.dugcanlift.kit.IngredientParser
 import com.dugcanlift.kit.RecipeIngredient
-import com.dugcanlift.kit.RecipeNutrition
 import com.dugcanlift.kit.Split
 import com.dugcanlift.kit.trimZeros
 import com.dugcanlift.macrocalc.data.CookSampleData
 import com.dugcanlift.macrocalc.data.Meal
+import com.dugcanlift.macrocalc.data.NutrientDetailsText
+import com.dugcanlift.macrocalc.data.recipeNutritionFromText
 import com.dugcanlift.macrocalc.data.PlannedMeal
 import com.dugcanlift.macrocalc.data.Recipe
 import com.dugcanlift.macrocalc.data.RecipeRepository
@@ -157,6 +158,9 @@ private fun RecipesSection(repo: RecipeRepository) {
                                     "F ${nutrition.fatG.trimZeros()}",
                             style = MaterialTheme.typography.bodySmall
                         )
+                        NutrientDetailsText.line(nutrition?.details)?.let { line ->
+                            Text(text = "$line per serving", style = MaterialTheme.typography.bodySmall)
+                        }
 
                         if (recipe.ingredients.isNotEmpty()) {
                             Text(
@@ -231,6 +235,9 @@ private fun RecipeEditorDialog(
     var carbs by remember { mutableStateOf(existing?.nutritionPerServing?.carbsG?.trimZeros() ?: "") }
     var fat by remember { mutableStateOf(existing?.nutritionPerServing?.fatG?.trimZeros() ?: "") }
     var fiber by remember { mutableStateOf(existing?.nutritionPerServing?.fiberG?.trimZeros() ?: "") }
+    var saturatedFat by remember { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.saturatedFatG)) }
+    var sugar by remember { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sugarG)) }
+    var sodium by remember { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sodiumMg)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -356,6 +363,22 @@ private fun RecipeEditorDialog(
                 NumberField(value = fat, onValueChange = { fat = it }, label = "Fat (g)")
                 Spacer(modifier = Modifier.height(8.dp))
                 NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fibre (g)")
+                Spacer(modifier = Modifier.height(8.dp))
+                NumberField(value = saturatedFat, onValueChange = { saturatedFat = it }, label = "Saturated fat (g)")
+                Spacer(modifier = Modifier.height(8.dp))
+                NumberField(value = sugar, onValueChange = { sugar = it }, label = "Sugar (g)")
+                Spacer(modifier = Modifier.height(8.dp))
+                NumberField(value = sodium, onValueChange = { sodium = it }, label = "Sodium (mg)")
+                val macrosBlank = listOf(calories, protein, carbs, fat, fiber).all { it.isBlank() }
+                val detailsTyped = listOf(saturatedFat, sugar, sodium).any { it.isNotBlank() }
+                if (macrosBlank && detailsTyped) {
+                    Text(
+                        text = "Saturated fat, sugar and sodium are saved with the macros " +
+                            "above \u2014 add at least one macro to keep them.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
 
                 if (existing != null) {
                     Spacer(modifier = Modifier.height(12.dp))
@@ -384,7 +407,7 @@ private fun RecipeEditorDialog(
                         ingredientText = ingredientText,
                         stepText = stepText,
                         calories = calories, protein = protein, carbs = carbs, fat = fat,
-                        fiber = fiber
+                        fiber = fiber, saturatedFat = saturatedFat, sugar = sugar, sodium = sodium
                     )
                     scope.launch {
                         if (existing == null) repo.addRecipe(recipe) else repo.updateRecipe(recipe)
@@ -408,7 +431,10 @@ private fun buildRecipe(
     protein: String,
     carbs: String,
     fat: String,
-    fiber: String
+    fiber: String,
+    saturatedFat: String,
+    sugar: String,
+    sodium: String
 ): Recipe {
     val ingredients: List<RecipeIngredient> = ingredientText
         .lines()
@@ -418,18 +444,12 @@ private fun buildRecipe(
 
     val steps = stepText.lines().map { it.trim() }.filter { it.isNotEmpty() }
 
-    // Null unless something was actually typed — an untouched form must not
-    // write zeros, which would later log as a zero-calorie meal.
-    val typed = listOf(calories, protein, carbs, fat, fiber).map { it.trim().toDoubleOrNull() }
-    val nutrition = if (typed.all { it == null }) null else RecipeNutrition(
-        calories = typed[0] ?: 0.0,
-        proteinG = typed[1] ?: 0.0,
-        carbsG = typed[2] ?: 0.0,
-        fatG = typed[3] ?: 0.0,
-        // Fibre was absent here, so every save rebuilt the figure without it
-        // and silently zeroed whatever the recipe had -- including a figure
-        // read off a page by the JSON-LD importer.
-        fiberG = typed[4] ?: 0.0,
+    // Every field the figure holds is passed back in. Fibre was once absent
+    // here, so every save rebuilt the figure without it and silently zeroed
+    // whatever the recipe had -- and saturated fat, sugar and sodium would go
+    // the same way if they were left out.
+    val nutrition = recipeNutritionFromText(
+        calories, protein, carbs, fat, fiber, saturatedFat, sugar, sodium,
         // Likewise `estimated`: rebuilding the figure reset the flag, so an
         // imported recipe stopped admitting it was an estimate the first time
         // anyone opened it. Editing a number does not make it a measurement.
