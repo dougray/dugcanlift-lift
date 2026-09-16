@@ -125,9 +125,16 @@ object BackupStore {
 
         var added = 0
 
+        // An older iPhone file carries sugar and sodium only here, keyed by
+        // record id; read them when the common field is missing.
+        val ios = root.optJSONObject("ext")?.optJSONObject("ios")
+
         data.optJSONArray("food")?.let { array ->
             val incoming = (0 until array.length()).mapNotNull {
-                runCatching { foodEntryFromJson(array.getJSONObject(it)) }.getOrNull()
+                runCatching {
+                    val entry = foodEntryFromJson(array.getJSONObject(it))
+                    withIosDetails(entry, iosExtras(ios?.optJSONObject("food"), entry.id))
+                }.getOrNull()
             }
             added += FoodRepository.get(context).restoreMissing(incoming)
         }
@@ -157,7 +164,10 @@ object BackupStore {
         // checked against recipes arriving in this same file.
         val incomingRecipes = data.optJSONArray("recipes")?.let { array ->
             (0 until array.length()).mapNotNull {
-                runCatching { recipeForRestore(array.getJSONObject(it)) }.getOrNull()
+                runCatching {
+                    val recipe = recipeForRestore(array.getJSONObject(it))
+                    withIosDetails(recipe, iosExtras(ios?.optJSONObject("recipes"), recipe.id))
+                }.getOrNull()
             }
         }.orEmpty()
         val incomingPlan = data.optJSONArray("plan")?.let { array ->
@@ -240,6 +250,41 @@ object BackupStore {
         return recipe.copy(ingredients = recipe.ingredients.map { cached ->
             IngredientParser.parse(cached.rawText).copy(optional = cached.optional, note = cached.note)
         })
+    }
+
+    /**
+     * The `ext.ios.<section>` record for [id], matched case-insensitively
+     * because iOS writes ids in upper case and a file may have been through a
+     * client that lowered them.
+     */
+    internal fun iosExtras(section: JSONObject?, id: String): JSONObject? {
+        if (section == null) return null
+        section.optJSONObject(id)?.let { return it }
+        val key = section.keys().asSequence().firstOrNull { it.equals(id, ignoreCase = true) } ?: return null
+        return section.optJSONObject(key)
+    }
+
+    /**
+     * Sugar and sodium from an iPhone file's `ext.ios.food` when the common
+     * fields are missing. Before BACKUP-FORMAT gave them common names, iOS
+     * wrote them only there; the common field wins whenever both exist.
+     * iOS never recorded saturated fat, so there is nothing to fall back to.
+     */
+    internal fun withIosDetails(entry: FoodEntry, extras: JSONObject?): FoodEntry =
+        if (extras == null) entry else entry.copy(
+            sugarG = entry.sugarG ?: optNutrient(extras, "sugarG"),
+            sodiumMg = entry.sodiumMg ?: optNutrient(extras, "sodiumMg")
+        )
+
+    /** The same fallback for a recipe, from `ext.ios.recipes`. A recipe with
+     *  no macros has nowhere to hold them, so it is left as it is. */
+    internal fun withIosDetails(recipe: Recipe, extras: JSONObject?): Recipe {
+        val nutrition = recipe.nutritionPerServing
+        if (extras == null || nutrition == null) return recipe
+        return recipe.copy(nutritionPerServing = nutrition.copy(
+            sugarG = nutrition.sugarG ?: optNutrient(extras, "sugarG"),
+            sodiumMg = nutrition.sodiumMg ?: optNutrient(extras, "sodiumMg")
+        ))
     }
 
     /**

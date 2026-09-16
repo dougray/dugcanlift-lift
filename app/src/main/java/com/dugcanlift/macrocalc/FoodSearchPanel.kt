@@ -32,6 +32,7 @@ import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodSearch
 import com.dugcanlift.macrocalc.data.FoodSearchResult
 import com.dugcanlift.macrocalc.data.Nutriments
+import com.dugcanlift.macrocalc.data.NutrientDetailsText
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -235,6 +236,13 @@ private fun AmountEntryDialog(
                             "C ${it.carbsG} - Fib ${it.fiberG}",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    NutrientDetailsText.line(it.details)?.let { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         },

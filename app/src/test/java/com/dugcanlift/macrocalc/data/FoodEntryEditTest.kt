@@ -140,4 +140,64 @@ class FoodEntryEditTest {
         assertEquals("300", form.macros.calories)
         assertEquals(300, form.applyTo(chicken)!!.calories)
     }
+
+    // MARK: - Saturated fat, sugar and sodium
+
+    /** 60 g of crisps: totals for that weight, as the add form stores them. */
+    private val crisps = FoodEntry(
+        id = "crisps-1",
+        name = "Crisps",
+        servings = 1.0,
+        amountGrams = 60.0,
+        calories = 320, proteinG = 4, fatG = 20, carbsG = 30, fiberG = 2,
+        date = "2026-09-15",
+        loggedAt = 1_789_000_000_000L,
+        meal = "SNACK",
+        saturatedFatG = 1.8, sodiumMg = 330.0
+    )
+
+    @Test fun `opens them, blank for the one never recorded`() {
+        val form = edit(crisps)
+        assertEquals("1.8", form.macros.saturatedFatG)
+        assertEquals("", form.macros.sugarG)
+        assertEquals("330", form.macros.sodiumMg)
+    }
+
+    @Test fun `saving untouched keeps them exactly`() {
+        assertEquals(crisps, edit(crisps).applyTo(crisps))
+        assertEquals(chicken, edit(chicken).applyTo(chicken))
+    }
+
+    @Test fun `editing the weight rescales them like the macros`() {
+        val saved = edit(crisps).withAmount("25").applyTo(crisps)!!
+        assertEquals(133, saved.calories)
+        assertEquals("1.8 x 25/60 = 0.75, to one decimal", 0.8, saved.saturatedFatG!!, 0.0)
+        assertEquals("330 x 25/60 = 137.5, to a whole milligram", 138.0, saved.sodiumMg!!, 0.0)
+        assertNull("blank is never rescaled into a number", saved.sugarG)
+    }
+
+    @Test fun `rescaling them starts from the basis, so it never drifts`() {
+        val form = edit(crisps).withAmount("1").withAmount("7").withAmount("60")
+        assertEquals("1.8", form.macros.saturatedFatG)
+        assertEquals("330", form.macros.sodiumMg)
+    }
+
+    @Test fun `one typed by hand is the total for the weight beside it`() {
+        val form = edit(crisps).withMacro(FoodEntryEdit.Field.SUGAR, "0.5").withAmount("120")
+        assertEquals("1", form.macros.sugarG)
+        assertEquals("660", form.macros.sodiumMg)
+    }
+
+    @Test fun `clearing one saves it as not recorded, never zero`() {
+        val saved = edit(crisps).withMacro(FoodEntryEdit.Field.SODIUM, "").applyTo(crisps)!!
+        assertNull(saved.sodiumMg)
+        assertEquals(1.8, saved.saturatedFatG!!, 0.0)
+    }
+
+    @Test fun `by servings they stay per serving and servings multiplies them`() {
+        val bar = legacy.copy(sugarG = 9.0, sodiumMg = 150.0)
+        val saved = edit(bar).withAmount("3").applyTo(bar)!!
+        assertEquals(9.0, saved.sugarG!!, 0.0)
+        assertEquals(450.0, listOf(saved).nutrientTotals()!!.sodiumMg!!, 0.0)
+    }
 }

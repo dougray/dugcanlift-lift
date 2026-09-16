@@ -16,6 +16,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.dugcanlift.macrocalc.data.NutrientDetailsText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -101,4 +103,65 @@ fun NameField(
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
     )
+}
+/**
+ * A day's saturated fat, sugar and sodium as plain rows: label, total, and how
+ * many of the day's foods the total covers when that is not all of them. No
+ * bars -- there is no goal to fill one against. Draws nothing when no food
+ * recorded any of the three.
+ */
+@Composable
+fun NutrientDetailRows(rows: List<NutrientDetailsText.Row>) {
+    rows.forEach { row ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = row.label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = row.value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * The saturated fat, sugar and sodium fields, behind a "More nutrients" toggle
+ * so the food form does not grow for everyone who only counts macros. [label]
+ * builds each field's label from its name and unit, so the form can say what
+ * basis the number is on the same way its macro fields do.
+ */
+@Composable
+fun MoreNutrientsFields(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    label: (name: String, unit: String) -> String,
+    saturatedFat: String,
+    onSaturatedFat: (String) -> Unit,
+    sugar: String,
+    onSugar: (String) -> Unit,
+    sodium: String,
+    onSodium: (String) -> Unit
+) {
+    Spacer(modifier = Modifier.height(4.dp))
+    TextButton(onClick = onToggle) {
+        Text(if (expanded) "Fewer nutrients" else "More nutrients")
+    }
+    if (expanded) {
+        Text(
+            text = "Saturated fat, sugar and sodium. Optional \u2014 leave blank if the label doesn't say.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        NumberField(value = saturatedFat, onValueChange = onSaturatedFat, label = label("Saturated fat", "g"))
+        Spacer(modifier = Modifier.height(12.dp))
+        NumberField(value = sugar, onValueChange = onSugar, label = label("Sugar", "g"))
+        Spacer(modifier = Modifier.height(12.dp))
+        NumberField(value = sodium, onValueChange = onSodium, label = label("Sodium", "mg"))
+    }
 }

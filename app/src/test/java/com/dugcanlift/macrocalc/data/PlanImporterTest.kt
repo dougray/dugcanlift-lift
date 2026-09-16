@@ -1,6 +1,9 @@
 package com.dugcanlift.macrocalc.data
 
 import androidx.test.core.app.ApplicationProvider
+import com.dugcanlift.kit.NutrientDetails
+import com.dugcanlift.kit.PlanDecodeResult
+import com.dugcanlift.kit.PlanLinkCodec
 import com.dugcanlift.kit.PlanMeal
 import com.dugcanlift.kit.PlanPayload
 import com.dugcanlift.kit.PlanRecipe
@@ -10,6 +13,7 @@ import com.dugcanlift.kit.PlanWorkout
 import com.dugcanlift.kit.PlanWorkoutExercise
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -125,5 +129,53 @@ class PlanImporterTest {
         val exercise = routine.exercises.first()
         assertEquals(4, exercise.targetSets)
         assertEquals(100.0, exercise.targetWeightLb) // tie between 100 and 110 (2 each) -> first occurrence wins
+    }
+
+    // MARK: - Saturated fat, sugar and sodium (PLAN-FORMAT `ux`)
+
+    @Test
+    fun `a plan recipe's ux arrives in the imported recipe's nutrition`() = runTest {
+        val payload = PlanPayload(
+            coachName = "Doug",
+            recipes = listOf(PlanRecipe(
+                name = "Beef Chilli", servings = 4.0,
+                nutritionPerServing = com.dugcanlift.kit.RecipeNutrition(calories = 450.0, proteinG = 35.0),
+                nutrientDetailsPerServing = NutrientDetails(saturatedFatG = 6.5, sugarG = null, sodiumMg = 820.0)
+            )),
+            meals = listOf(PlanMeal(date = "2026-09-18", mealSlot = 2, recipeIndex = 0, servings = 1.0)),
+            workouts = emptyList(),
+            sessions = emptyList(),
+            rawJson = """{"v":1,"t":"plan","l":"x","n":"Doug","test":"ux-payload-1"}"""
+        )
+        PlanImporter.accept(payload, context)
+
+        val nutrition = RecipeRepository.get(context).recipes.value.single().nutritionPerServing!!
+        assertEquals(6.5, nutrition.saturatedFatG!!, 0.0)
+        assertNull(nutrition.sugarG)
+        assertEquals(820.0, nutrition.sodiumMg!!, 0.0)
+
+        val entry = RecipeRepository.get(context).plan.value.single().toFoodEntry()!!
+        assertEquals("a logged planned meal carries them", 820.0, entry.sodiumMg!!, 0.0)
+    }
+
+    @Test
+    fun `ux decoded from a real plan link reaches the recipe`() = runTest {
+        val json = """{"v":1,"t":"plan","l":"x","n":"Doug","r":[{"n":"Oats","s":1,"u":[380,14,60,8,9],"ux":[1.5,12]}],"m":[]}"""
+        val fragment = "1u" + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(json.toByteArray())
+        val decoded = PlanLinkCodec.decode(fragment, expectedLifterId = "x")
+        val payload = (decoded as PlanDecodeResult.Success).payload
+        PlanImporter.accept(payload, context)
+
+        val nutrition = RecipeRepository.get(context).recipes.value.single().nutritionPerServing!!
+        assertEquals(1.5, nutrition.saturatedFatG!!, 0.0)
+        assertEquals(12.0, nutrition.sugarG!!, 0.0)
+        assertNull(nutrition.sodiumMg)
+    }
+
+    @Test
+    fun `ux without u has no macros to ride on and invents none`() {
+        val recipe = PlanRecipe(name = "Mystery", servings = 1.0,
+            nutrientDetailsPerServing = NutrientDetails(sodiumMg = 500.0))
+        assertNull(PlanImporter.withDetails(recipe))
     }
 }

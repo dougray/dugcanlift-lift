@@ -127,6 +127,7 @@ data class PlannedMeal(
         val perGram = snapshotNutritionPerGram
         if (grams != null && perGram != null) {
             val scaled = perGram.scaled(grams)
+            val details = NutrientDetailsText.scaled(perGram.details, grams)
             return FoodEntry(
                 name = recipeName,
                 servings = 1.0,
@@ -137,10 +138,15 @@ data class PlannedMeal(
                 carbsG = scaled.carbsG.roundToIntSafe(),
                 fiberG = scaled.fiberG.roundToIntSafe(),
                 date = date,
-                meal = meal
+                meal = meal,
+                saturatedFatG = details.saturatedFatG,
+                sugarG = details.sugarG,
+                sodiumMg = details.sodiumMg
             )
         }
         val perServing = snapshotNutrition ?: return null
+        // Per serving, like the macros beside them; `servings` multiplies both.
+        val details = NutrientDetailsText.scaled(perServing.details, 1.0)
         return FoodEntry(
             name = recipeName,
             servings = servings,
@@ -150,7 +156,10 @@ data class PlannedMeal(
             carbsG = perServing.carbsG.roundToIntSafe(),
             fiberG = perServing.fiberG.roundToIntSafe(),
             date = date,
-            meal = meal
+            meal = meal,
+            saturatedFatG = details.saturatedFatG,
+            sugarG = details.sugarG,
+            sodiumMg = details.sodiumMg
         )
     }
 }
@@ -231,6 +240,44 @@ fun Map<String, Double>.shoppingAmountLabel(): String =
             else "${value.trimZeros()} $unit"
         }
 
+/* ---------- editing ---------- */
+
+/**
+ * A recipe's per-serving nutrition from the editor's text fields, or null.
+ *
+ * Null unless a macro was actually typed -- an untouched form must not write
+ * zeros, which would later log as a zero-calorie meal. Saturated fat, sugar and
+ * sodium ride along when a macro is there, blank staying null; on their own
+ * they have nowhere to go, because a [RecipeNutrition] cannot exist without
+ * calories and inventing a zero for them is the very thing this refuses to do.
+ * The editor says so beside the fields.
+ */
+fun recipeNutritionFromText(
+    calories: String,
+    protein: String,
+    carbs: String,
+    fat: String,
+    fiber: String,
+    saturatedFat: String,
+    sugar: String,
+    sodium: String,
+    estimated: Boolean
+): RecipeNutrition? {
+    val typed = listOf(calories, protein, carbs, fat, fiber).map { it.trim().toDoubleOrNull() }
+    if (typed.all { it == null }) return null
+    return RecipeNutrition(
+        calories = typed[0] ?: 0.0,
+        proteinG = typed[1] ?: 0.0,
+        carbsG = typed[2] ?: 0.0,
+        fatG = typed[3] ?: 0.0,
+        fiberG = typed[4] ?: 0.0,
+        estimated = estimated,
+        saturatedFatG = NutrientDetailsText.parse(saturatedFat),
+        sugarG = NutrientDetailsText.parse(sugar),
+        sodiumMg = NutrientDetailsText.parse(sodium)
+    )
+}
+
 /* ---------- helpers ---------- */
 
 internal fun Double.roundToIntSafe(): Int =
@@ -245,6 +292,10 @@ internal fun RecipeNutrition.toJson(): JSONObject = JSONObject().apply {
     put("fatG", fatG)
     put("fiberG", fiberG)
     put("estimated", estimated)
+    // Written only when known. Absent is unknown, never zero (BACKUP-FORMAT).
+    saturatedFatG?.let { put("saturatedFatG", it) }
+    sugarG?.let { put("sugarG", it) }
+    sodiumMg?.let { put("sodiumMg", it) }
 }
 
 internal fun recipeNutritionFromJson(o: JSONObject?): RecipeNutrition? {
@@ -255,7 +306,10 @@ internal fun recipeNutritionFromJson(o: JSONObject?): RecipeNutrition? {
         carbsG = o.optDouble("carbsG", 0.0),
         fatG = o.optDouble("fatG", 0.0),
         fiberG = o.optDouble("fiberG", 0.0),
-        estimated = o.optBoolean("estimated", false)
+        estimated = o.optBoolean("estimated", false),
+        saturatedFatG = optNutrient(o, "saturatedFatG"),
+        sugarG = optNutrient(o, "sugarG"),
+        sodiumMg = optNutrient(o, "sodiumMg")
     )
 }
 

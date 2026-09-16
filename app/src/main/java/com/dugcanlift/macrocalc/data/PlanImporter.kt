@@ -3,6 +3,8 @@ package com.dugcanlift.macrocalc.data
 import android.content.Context
 import com.dugcanlift.kit.IngredientParser
 import com.dugcanlift.kit.PlanPayload
+import com.dugcanlift.kit.PlanRecipe
+import com.dugcanlift.kit.RecipeNutrition
 import com.dugcanlift.kit.PlanWorkoutExercise
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -61,7 +63,7 @@ object PlanImporter {
                 servings = pr.servings,
                 ingredients = pr.ingredients.map { IngredientParser.parse(it) },
                 steps = pr.steps,
-                nutritionPerServing = pr.nutritionPerServing
+                nutritionPerServing = withDetails(pr)
             )
         }
 
@@ -110,6 +112,23 @@ object PlanImporter {
             mealCount = validMeals.size,
             routineCount = routines.size,
             sessionCount = validSessions.size
+        )
+    }
+
+    /**
+     * The recipe's macros with the plan's `ux` -- saturated fat, sugar and
+     * sodium per serving -- on them. The kit already folds `ux` in when `u`
+     * came too; this keeps any value it did not. A plan that sent `ux` with no
+     * `u` has nowhere to put it: a recipe's nutrition cannot exist without
+     * calories, and inventing zeros for them would log a zero-calorie meal.
+     */
+    internal fun withDetails(pr: PlanRecipe): RecipeNutrition? {
+        val nutrition = pr.nutritionPerServing ?: return null
+        val ux = pr.nutrientDetailsPerServing ?: return nutrition
+        return nutrition.copy(
+            saturatedFatG = nutrition.saturatedFatG ?: ux.saturatedFatG,
+            sugarG = nutrition.sugarG ?: ux.sugarG,
+            sodiumMg = nutrition.sodiumMg ?: ux.sodiumMg
         )
     }
 
