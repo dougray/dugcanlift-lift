@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.kit.NutrientDetails
 import kotlin.math.roundToInt
 
 /**
@@ -20,6 +21,8 @@ data class Per100g(
     val fatG: Int,
     val carbsG: Int,
     val fiberG: Int,
+    /** Saturated fat, sugar and sodium per 100 g; each null when not known. */
+    val details: NutrientDetails = NutrientDetails(),
 )
 
 data class ScaledMacros(
@@ -28,6 +31,8 @@ data class ScaledMacros(
     val fatG: Int,
     val carbsG: Int,
     val fiberG: Int,
+    /** Scaled like the macros, rounded once: grams to one decimal, sodium whole. Unknown stays null. */
+    val details: NutrientDetails = NutrientDetails(),
 )
 
 /**
@@ -44,5 +49,6 @@ fun scaleFrom100g(per100: Per100g, grams: Double): ScaledMacros? {
         fatG = (per100.fatG * factor).roundToInt(),
         carbsG = (per100.carbsG * factor).roundToInt(),
         fiberG = (per100.fiberG * factor).roundToInt(),
+        details = NutrientDetailsText.scaled(per100.details, factor),
     )
 }
