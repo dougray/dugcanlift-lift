@@ -113,16 +113,15 @@ fun DashboardScreen(
         }
     }
 
+    // Never asks on its own. Health Connect's permission sheet opens only from the
+    // Steps card's button, after the card has said what LIFT reads and why: a
+    // sheet at first launch, before any explanation, is what Health Connect's
+    // policy asks apps not to do.
     LaunchedEffect(Unit) {
         if (!HealthConnectManager.isAvailable(context)) return@LaunchedEffect
         hasStepsAccess = HealthConnectManager.hasPermission(context)
         if (hasStepsAccess) {
             todaySteps = HealthConnectManager.todaysStepCount(context)
-        } else if (!settings.askedForSteps) {
-            // Once, not on every visit to Home: this effect reruns whenever the
-            // tab is shown, and a person who declined was asked again each time.
-            settings.askedForSteps = true
-            stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
         }
     }
 
@@ -203,14 +202,12 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 DashboardBar("Today", todaySteps.toInt(), stepGoal, unit = "steps")
                 Spacer(modifier = Modifier.height(4.dp))
-                Row {
-                    TextButton(onClick = { showingStepGoalEditor = true }) { Text("Edit goal") }
-                    if (!hasStepsAccess && HealthConnectManager.isAvailable(context)) {
-                        TextButton(onClick = {
-                            stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
-                        }) { Text("Read steps from Health Connect") }
-                    }
+                if (!hasStepsAccess && HealthConnectManager.isAvailable(context)) {
+                    StepsAccessExplanation(onConnect = {
+                        stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
+                    })
                 }
+                TextButton(onClick = { showingStepGoalEditor = true }) { Text("Edit goal") }
             }
         }
     }
@@ -802,3 +799,27 @@ private fun shortLabel(key: String): String = try {
 } catch (e: Exception) {
     key
 }
+
+/**
+ * What the Steps card says before LIFT asks Health Connect for anything: what it
+ * reads, why, and where the steps go. Home opens the steps permission sheet
+ * only from this button; Send to Coach's steps choice is the one other place.
+ */
+@Composable
+internal fun StepsAccessExplanation(onConnect: () -> Unit) {
+    Column {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = STEPS_ACCESS_EXPLANATION,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(onClick = onConnect) { Text("Read steps from Health Connect") }
+    }
+}
+
+internal const val STEPS_ACCESS_EXPLANATION =
+    "LIFT can show today's steps against your goal. It reads your steps and step history " +
+        "from Health Connect, and they stay on this phone unless you choose to include them " +
+        "when you send your log to a coach."

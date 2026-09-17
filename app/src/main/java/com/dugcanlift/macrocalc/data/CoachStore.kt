@@ -73,6 +73,16 @@ class CoachStore private constructor(context: Context) {
         get() = prefs.getBoolean(KEY_LAST_ROUTE, false)
         set(value) = prefs.edit().putBoolean(KEY_LAST_ROUTE, value).apply()
 
+    /**
+     * Put daily step totals from Health Connect in the link. Off until the person
+     * turns it on: Health Connect data goes to someone else only with explicit
+     * consent, and the card names it in what the email includes. Steps are not
+     * even read for Send to Coach while this is off.
+     */
+    var sendSteps: Boolean
+        get() = prefs.getBoolean(KEY_SEND_STEPS, false)
+        set(value) = prefs.edit().putBoolean(KEY_SEND_STEPS, value).apply()
+
     val isConfigured: Boolean get() = email.isNotBlank()
 
     /* ---------- profile ---------- */
@@ -138,6 +148,7 @@ class CoachStore private constructor(context: Context) {
         private const val KEY_WEEKS = "weeks"
         private const val KEY_ITEMISED = "itemised_food"
         private const val KEY_LAST_ROUTE = "send_last_route"
+        private const val KEY_SEND_STEPS = "send_steps"
         private const val KEY_PROFILE = "profile"
         private const val KEY_WEIGHTS = "bodyweights"
 

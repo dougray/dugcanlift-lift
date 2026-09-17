@@ -36,17 +36,7 @@ class SettingsStore private constructor(context: Context) {
         }
         set(value) { prefs.edit().putString(KEY_SERVING_UNIT, value.name).apply() }
 
-    /**
-     * Whether the dashboard has already asked for Health Connect steps access
-     * on its own. It asks once; after that only the Steps card's button asks,
-     * so someone who declines is not prompted every time Home opens.
-     */
-    var askedForSteps: Boolean
-        get() = prefs.getBoolean(KEY_ASKED_FOR_STEPS, false)
-        set(value) { prefs.edit().putBoolean(KEY_ASKED_FOR_STEPS, value).apply() }
-
     companion object {
-        private const val KEY_ASKED_FOR_STEPS = "asked_for_steps"
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
         private const val KEY_SERVING_UNIT = "serving_unit"

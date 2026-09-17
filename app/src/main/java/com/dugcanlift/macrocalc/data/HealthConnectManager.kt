@@ -60,12 +60,13 @@ object HealthConnectManager {
     )
 
     /**
-     * What the grant sheet asks for at the read-only step-count call site
-     * ([DashboardScreen]'s first-launch prompt). Deliberately does NOT
+     * What the grant sheet asks for at the read-only step-count call sites
+     * (the Steps card's button, after its explanation, and Send to Coach's
+     * steps choice). Neither opens on its own. Deliberately does NOT
      * include [writePermissions]: those cover write-exercise-route consent,
      * which must only ever be requested at the point of use
      * (`OutdoorReviewScreen`'s on-demand request), never on an unrelated
-     * first launch with no user gesture behind it (I-6 in the final-review
+     * screen with no export behind it (I-6 in the final-review
      * fix wave — this was accidentally widened to include write permissions
      * during Task 5). History is bundled in but deliberately kept out of
      * [permissions]: it is what lets a step history reach further back than
