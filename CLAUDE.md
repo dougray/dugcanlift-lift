@@ -51,6 +51,51 @@ signing fingerprint alongside Coach's, so a broken or missing entry for
 either app shows up as autoVerify silently falling back to the
 disambiguation sheet for that app specifically, not both.
 
+## Recording a route needs no background location
+
+The manifest does **not** declare `ACCESS_BACKGROUND_LOCATION`, and nothing asks
+for "Allow all the time". Play requires a declaration form and a video for that
+permission and often rejects it; this app does not need it. A recording keeps
+going with the screen locked or another app open because the Start tap
+(`OutdoorRecordingScreen.kt`) calls `LocationTracker.start`, which starts
+`LocationRecordingService` — `foregroundServiceType="location"`, passed again to
+`startForeground` on API 29+ — while the app is visible. A location foreground
+service started from the foreground keeps "while in use" access for as long as
+it runs.
+
+The condition is the whole rule: **start a recording only while the app is on
+screen.** A start from a broadcast, a notification action, a widget or a restart
+after process death would get no location, and the fix is not to declare
+background location. The permission flow is fine location (coarse alone does
+not unlock Start) plus `POST_NOTIFICATIONS` in one dialog, then Start.
+`LocationPermissionsManifestTest` pins the manifest; the manifest is a declared
+input of the unit test task, so a manifest-only change reruns it.
+
+Checked on the `dcl_pixel` emulator (API 36): the location dialog offers only
+"While using the app"; after Start, with `geo fix` points fed every few seconds,
+Home then `KEYCODE_SLEEP` for 60 s, `dumpsys location` showed the GPS
+registration still delivering (18 to 31 fixes while asleep) and the live
+distance went from 0.06 to 0.28 mi, the route drawn unbroken.
+
+## Releases
+
+A pushed `v*` tag runs `.github/workflows/release.yml`. Tests and lint run on a
+GitHub-hosted runner; the `sign` job then waits for approval on the `release`
+environment and runs on the self-hosted signer, where the keystore lives. It
+builds `:app:assembleRelease :app:bundleRelease` in one Gradle run with the one
+signing config, and publishes both to the tag's GitHub Release:
+
+- **`lift-android.apk`** — the sideload download the website links to. Keep its
+  name; checked with `apksigner verify --print-certs`.
+- **`lift-android.aab`** — the App Bundle for Google Play, which accepts only
+  `.aab`. An AAB has a JAR signature that `apksigner` does not read, so it is
+  checked with `jarsigner -verify -strict` (only exit bit 4, "self-signed", is
+  allowed) and `keytool -printcert -jarfile` (exactly one signer).
+
+Both must carry `RELEASE_CERT_SHA256` or nothing is published, and `SHA256SUMS`
+lists both files. Locally, with no `keystore.properties`,
+`./gradlew :app:bundleRelease` builds an unsigned bundle.
+
 ## Large screens
 
 Layout follows the **window's width**, never the device: Material 3's classes,

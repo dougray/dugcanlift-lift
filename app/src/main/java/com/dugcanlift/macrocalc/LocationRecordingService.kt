@@ -23,6 +23,10 @@ import androidx.core.app.NotificationCompat
  * this is all one process. This service exists solely so the OS grants that
  * promotion in the first place.
  *
+ * Because it is started while the app is visible (the Start tap), its
+ * `location` type keeps "while in use" location access for as long as it
+ * runs — which is why the app needs no `ACCESS_BACKGROUND_LOCATION`.
+ *
  * `targetSdk 37` (confirmed against the installed `android-37.0` SDK, which
  * still defines `ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION` and the
  * `startForeground(id, notification, type)` overload used below) requires

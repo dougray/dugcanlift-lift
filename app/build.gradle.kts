@@ -76,6 +76,13 @@ android {
     }
 }
 
+// LocationPermissionsManifestTest reads the source manifest directly, so a
+// manifest-only change has to make the unit tests out of date.
+tasks.withType<Test>().configureEach {
+    inputs.file("src/main/AndroidManifest.xml")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation("androidx.core:core-splashscreen:1.2.0")
