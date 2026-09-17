@@ -122,48 +122,25 @@ training, food totals or items, steps, bodyweight, goal, profile (sex, age,
 height if entered), outdoor activities and bests, and the trimmed last route
 only when opted in.
 
-## Background location declaration
+## No background location declaration
 
-Play requires a declaration form, a short video, and an in-app prominent
-disclosure for `ACCESS_BACKGROUND_LOCATION` (declared in `AndroidManifest.xml`).
-
-**Draft declaration text** (the "core functionality" field):
-
-> LIFT records the GPS route of a run, walk or hike that the user starts. Location
-> is used only between the user tapping Start and tapping Finish. Background
-> location keeps that recording going when the phone locks or the user switches
-> to another app mid-activity, which is how runners carry a phone; without it the
-> route stops at the moment the screen turns off. A foreground service with an
-> ongoing "Recording your route" notification runs for the whole recording. Location is
-> stored on the device, is never sent to the developer, and is never collected
-> when no recording is in progress. Background location is optional: a user who
-> declines can still record with the app open.
-
-The notification is `LocationRecordingService.kt`, a
-`foregroundServiceType="location"` service in `AndroidManifest.xml`.
-
-**Video:** show starting a run, the disclosure card, granting "Allow all the
-time" in Settings, locking the phone, the ongoing notification, and the finished
-route. Not recorded yet.
-
-**Prominent disclosure — likely a gap.** The in-app prompt
-(`OutdoorRecordingScreen.kt`, `showBackgroundPrompt`) reads "To keep recording
-when your phone locks or you switch apps, allow ... for location in Settings."
-Play's policy asks the disclosure to say the app *collects location data*, what
-for, and that it happens *when the app is closed or not in use*. The current
-wording may be rejected; suggested wording:
-
-> LIFT collects location data to record your run, walk or hike route even when
-> the app is closed or not in use, for as long as a recording is running. It
-> stays on your phone.
-
-This is now the text of the in-app prompt shown before the system asks
-(`OutdoorRecordingScreen.kt`, the background-location card).
+The app does not declare `ACCESS_BACKGROUND_LOCATION`, so Play's background
+location declaration form, video and prominent-disclosure requirement do not
+apply. A recording still keeps going with the phone locked or another app
+open: the Start tap starts `LocationRecordingService.kt`, a
+`foregroundServiceType="location"` service, while the app is visible, and a
+location foreground service started from the foreground keeps "while in use"
+location access for as long as it runs. `LocationPermissionsManifestTest`
+fails if the permission comes back. If Play Console's permissions page still
+shows background location, check the merged manifest of the uploaded bundle
+for a library adding it.
 
 ## Other declarations Play Console will ask for
 
 - **Foreground service type `location`** (`FOREGROUND_SERVICE_LOCATION`): a
-  declaration of the user-visible task (recording a route) and a video.
+  declaration of the user-visible task (recording a route the user started,
+  with the ongoing "Recording your route" notification) and a video: start a
+  run, lock the phone, show the notification, and the finished route.
 - **Health Connect**: the health apps declaration and the Health Connect
   permissions form, justifying each of the six health permissions above. The
   rationale screen Health Connect requires exists (`PermissionsRationaleActivity`,
@@ -194,5 +171,4 @@ This is now the text of the in-app prompt shown before the system asks
   (no ads), and **app access** (no login needed).
 - **Closed testing** requirement for new personal developer accounts (a set
   number of testers for a set period before production access).
-- The background location video, the prominent disclosure wording above, and
-  the Health Connect declarations.
+- The foreground service video and the Health Connect declarations.
