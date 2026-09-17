@@ -13,6 +13,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
+import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -226,14 +231,7 @@ fun OutdoorRecordingScreen(
         )
     } else null
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(text = "Record a route", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
-
+    val activityChips: @Composable () -> Unit = {
         if (!isRecordingActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutdoorActivityType.entries.forEach { option ->
@@ -246,10 +244,9 @@ fun OutdoorRecordingScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
 
-        RoutePolylineCanvas(routePoints = routePoints, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(16.dp))
-
+    val details: @Composable () -> Unit = {
         if (isRecordingActive && liveActivity != null) {
             OutdoorStatRow(label = "Time", value = liveActivity.formattedDuration())
             OutdoorStatRow(label = "Distance", value = liveActivity.formattedDistanceMiles())
@@ -326,9 +323,9 @@ fun OutdoorRecordingScreen(
                 }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.weight(1f))
-
+    val actions: @Composable () -> Unit = {
         if (isRecordingActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
@@ -373,6 +370,15 @@ fun OutdoorRecordingScreen(
             }
         }
     }
+
+    RouteScreenLayout(
+        modifier = modifier,
+        title = "Record a route",
+        route = { canvasModifier -> RoutePolylineCanvas(routePoints = routePoints, modifier = canvasModifier) },
+        top = activityChips,
+        details = details,
+        actions = actions
+    )
 }
 
 /** Shared by [OutdoorRecordingScreen] (live) and `OutdoorReviewScreen` (finished route). */
@@ -386,6 +392,62 @@ internal fun OutdoorStatRow(label: String, value: String) {
         Text(text = value, style = MaterialTheme.typography.bodyLarge)
     }
     Spacer(modifier = Modifier.height(4.dp))
+}
+
+/**
+ * The recording and review screens' shared shape. On a phone (a pane under 600 dp) it is the
+ * column both screens always drew: title, [top], the square route, [details], and [actions] pinned
+ * to the bottom. From 600 dp -- a tablet, an unfolded foldable, a phone turned sideways, where a
+ * square the width of the window would push everything else off the screen -- the route sits
+ * beside the numbers, as large as the height allows, and only the numbers scroll.
+ */
+@Composable
+internal fun RouteScreenLayout(
+    modifier: Modifier,
+    title: String,
+    route: @Composable (Modifier) -> Unit,
+    top: @Composable () -> Unit = {},
+    details: @Composable () -> Unit,
+    actions: @Composable () -> Unit
+) {
+    MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (!AdaptiveLayout.routeBesideStats(paneWidth)) {
+                top()
+                route(Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(16.dp))
+                details()
+                Spacer(modifier = Modifier.weight(1f))
+                actions()
+            } else {
+                Row(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(AdaptiveLayout.PANE_GAP_DP.dp)
+                ) {
+                    // No size of its own: the square takes the pane's width or its height,
+                    // whichever runs out first.
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
+                        route(Modifier)
+                    }
+                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                            top()
+                            details()
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        actions()
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**

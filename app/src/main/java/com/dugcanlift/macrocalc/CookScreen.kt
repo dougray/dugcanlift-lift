@@ -10,6 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import com.dugcanlift.macrocalc.data.ShoppingListLine
+import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
+import com.dugcanlift.macrocalc.ui.adaptive.GridRow
+import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
+import com.dugcanlift.macrocalc.ui.adaptive.columnMajor
+import com.dugcanlift.macrocalc.ui.adaptive.rowMajor
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -86,20 +93,28 @@ fun CookScreen(modifier: Modifier = Modifier) {
 
     var section by rememberSaveable { mutableStateOf(CookSection.RECIPES) }
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        ChipRow(
-            options = CookSection.entries,
-            selected = section,
-            label = { it.label },
-            onSelect = { section = it }
-        )
+    // Each section decides its own columns from the width it is actually given (ui/adaptive).
+    MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
+        val contentWidth = AdaptiveLayout.contentWidth(paneWidth)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = AdaptiveLayout.sideGutter(paneWidth).dp, vertical = 16.dp)
+        ) {
+            ChipRow(
+                options = CookSection.entries,
+                selected = section,
+                label = { it.label },
+                onSelect = { section = it }
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        when (section) {
-            CookSection.RECIPES -> RecipesSection(repo)
-            CookSection.PLAN -> PlanSection(repo)
-            CookSection.SHOPPING -> ShoppingSection(repo)
+            when (section) {
+                CookSection.RECIPES -> RecipesSection(repo, contentWidth)
+                CookSection.PLAN -> PlanSection(repo, contentWidth)
+                CookSection.SHOPPING -> ShoppingSection(repo, contentWidth)
+            }
         }
     }
 }
@@ -107,14 +122,21 @@ fun CookScreen(modifier: Modifier = Modifier) {
 /* ---------- recipes ---------- */
 
 @Composable
-private fun RecipesSection(repo: RecipeRepository) {
+private fun RecipesSection(repo: RecipeRepository, contentWidth: Float) {
     val scope = rememberCoroutineScope()
     val recipes by repo.recipes.collectAsState()
-    var editing by remember { mutableStateOf<Recipe?>(null) }
-    var creating by remember { mutableStateOf(false) }
+    // By id and saveable, so an open editor outlives the activity being recreated.
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editing = editingId?.let { id -> recipes.firstOrNull { it.id == id } }
+    var creating by rememberSaveable { mutableStateOf(false) }
+    val columns = AdaptiveLayout.cardColumns(contentWidth)
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = { creating = true },
+            modifier = if (columns == 1) Modifier.fillMaxWidth()
+            else Modifier.widthIn(max = AdaptiveLayout.MAX_WIDE_BUTTON_DP.dp).fillMaxWidth()
+        ) {
             Text("New recipe")
         }
 
@@ -127,49 +149,21 @@ private fun RecipesSection(repo: RecipeRepository) {
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {
-            recipes.sortedBy { it.name.lowercase() }.forEach { recipe ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    onClick = { editing = recipe }, border = dclCardBorder()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = recipe.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = servingsLabel(recipe.servings),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        val nutrition = recipe.nutritionPerServing
-                        Text(
-                            // Deliberately not "0 kcal". An unknown that renders
-                            // as zero becomes a zero-calorie dinner in a day total.
-                            text = if (nutrition == null) "Macros not set" else
-                                "${nutrition.calories.trimZeros()} kcal  " +
-                                    "P ${nutrition.proteinG.trimZeros()}  " +
-                                    "C ${nutrition.carbsG.trimZeros()}  " +
-                                    "F ${nutrition.fatG.trimZeros()}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        NutrientDetailsText.line(nutrition?.details)?.let { line ->
-                            Text(text = "$line per serving", style = MaterialTheme.typography.bodySmall)
-                        }
-
-                        if (recipe.ingredients.isNotEmpty()) {
-                            Text(
-                                text = "${recipe.ingredients.size} ingredient" +
-                                    if (recipe.ingredients.size == 1) "" else "s",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+            val sorted = recipes.sortedBy { it.name.lowercase() }
+            if (columns == 1) {
+                sorted.forEach { recipe ->
+                    RecipeCard(
+                        recipe = recipe,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        onClick = { editingId = recipe.id }
+                    )
+                }
+            } else {
+                rowMajor(sorted, columns).forEach { row ->
+                    GridRow(cells = row, columns = columns) { recipe ->
+                        RecipeCard(recipe = recipe, modifier = Modifier.fillMaxSize(), onClick = { editingId = recipe.id })
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
         }
@@ -190,7 +184,51 @@ private fun RecipesSection(repo: RecipeRepository) {
         RecipeEditorDialog(repo = repo, existing = null) { creating = false }
     }
     editing?.let { recipe ->
-        RecipeEditorDialog(repo = repo, existing = recipe) { editing = null }
+        RecipeEditorDialog(repo = repo, existing = recipe) { editingId = null }
+    }
+}
+
+@Composable
+private fun RecipeCard(recipe: Recipe, modifier: Modifier, onClick: () -> Unit) {
+    Card(modifier = modifier, onClick = onClick, border = dclCardBorder()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = recipe.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = servingsLabel(recipe.servings),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            val nutrition = recipe.nutritionPerServing
+            Text(
+                // Deliberately not "0 kcal". An unknown that renders
+                // as zero becomes a zero-calorie dinner in a day total.
+                text = if (nutrition == null) "Macros not set" else
+                    "${nutrition.calories.trimZeros()} kcal  " +
+                        "P ${nutrition.proteinG.trimZeros()}  " +
+                        "C ${nutrition.carbsG.trimZeros()}  " +
+                        "F ${nutrition.fatG.trimZeros()}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            NutrientDetailsText.line(nutrition?.details)?.let { line ->
+                Text(text = "$line per serving", style = MaterialTheme.typography.bodySmall)
+            }
+
+            if (recipe.ingredients.isNotEmpty()) {
+                Text(
+                    text = "${recipe.ingredients.size} ingredient" +
+                        if (recipe.ingredients.size == 1) "" else "s",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
     }
 }
 
@@ -211,33 +249,33 @@ private fun RecipeEditorDialog(
     // entry — the real Serving Size preference lives in Settings.
     val servingUnit = remember { SettingsStore.get(context).servingUnit }
 
-    var name by remember { mutableStateOf(existing?.name ?: "") }
-    var servings by remember { mutableStateOf((existing?.servings ?: 1.0).trimZeros()) }
-    var totalWeightText by remember {
+    var name by rememberSaveable { mutableStateOf(existing?.name ?: "") }
+    var servings by rememberSaveable { mutableStateOf((existing?.servings ?: 1.0).trimZeros()) }
+    var totalWeightText by rememberSaveable {
         mutableStateOf(
             existing?.totalWeightGrams
                 ?.let { servingUnit.fromGrams(it).trimZeros() }
                 ?: ""
         )
     }
-    var ingredientText by remember {
+    var ingredientText by rememberSaveable {
         mutableStateOf(existing?.ingredients.orEmpty().joinToString("\n") { it.rawText })
     }
-    var stepText by remember { mutableStateOf(existing?.steps.orEmpty().joinToString("\n")) }
+    var stepText by rememberSaveable { mutableStateOf(existing?.steps.orEmpty().joinToString("\n")) }
     // Paste-a-recipe, offered only on a new recipe: pasting over a recipe that
     // already exists would replace work rather than start from it.
-    var pasting by remember { mutableStateOf(false) }
-    var pasteText by remember { mutableStateOf("") }
-    var splitAdvice by remember { mutableStateOf<String?>(null) }
+    var pasting by rememberSaveable { mutableStateOf(false) }
+    var pasteText by rememberSaveable { mutableStateOf("") }
+    var splitAdvice by rememberSaveable { mutableStateOf<String?>(null) }
 
-    var calories by remember { mutableStateOf(existing?.nutritionPerServing?.calories?.trimZeros() ?: "") }
-    var protein by remember { mutableStateOf(existing?.nutritionPerServing?.proteinG?.trimZeros() ?: "") }
-    var carbs by remember { mutableStateOf(existing?.nutritionPerServing?.carbsG?.trimZeros() ?: "") }
-    var fat by remember { mutableStateOf(existing?.nutritionPerServing?.fatG?.trimZeros() ?: "") }
-    var fiber by remember { mutableStateOf(existing?.nutritionPerServing?.fiberG?.trimZeros() ?: "") }
-    var saturatedFat by remember { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.saturatedFatG)) }
-    var sugar by remember { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sugarG)) }
-    var sodium by remember { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sodiumMg)) }
+    var calories by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.calories?.trimZeros() ?: "") }
+    var protein by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.proteinG?.trimZeros() ?: "") }
+    var carbs by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.carbsG?.trimZeros() ?: "") }
+    var fat by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.fatG?.trimZeros() ?: "") }
+    var fiber by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.fiberG?.trimZeros() ?: "") }
+    var saturatedFat by rememberSaveable { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.saturatedFatG)) }
+    var sugar by rememberSaveable { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sugarG)) }
+    var sodium by rememberSaveable { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sodiumMg)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -470,7 +508,7 @@ private fun buildRecipe(
 /* ---------- plan ---------- */
 
 @Composable
-private fun PlanSection(repo: RecipeRepository) {
+private fun PlanSection(repo: RecipeRepository, contentWidth: Float) {
     val context = LocalContext.current
     val foodRepo = remember { FoodRepository.get(context) }
     val scope = rememberCoroutineScope()
@@ -478,7 +516,7 @@ private fun PlanSection(repo: RecipeRepository) {
     val recipes by repo.recipes.collectAsState()
     val plan by repo.plan.collectAsState()
 
-    var picking by remember { mutableStateOf<Pair<String, Meal>?>(null) }
+    var picking by rememberSaveable { mutableStateOf<Pair<String, Meal>?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         if (recipes.isEmpty()) {
@@ -489,51 +527,40 @@ private fun PlanSection(repo: RecipeRepository) {
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        weekDays().forEach { day ->
-            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), border = dclCardBorder()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(dayLabel(day), style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Meal.entries.forEach { meal ->
-                        val forSlot = plan.filter { it.date == day && it.mealOrDefault == meal }
-
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Text(
-                                text = meal.label,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.width(84.dp)
-                            )
-
-                            if (forSlot.isEmpty()) {
-                                TextButton(
-                                    onClick = { picking = day to meal },
-                                    enabled = recipes.isNotEmpty()
-                                ) { Text("Add") }
-                            } else {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    forSlot.forEach { planned ->
-                                        PlannedRow(
-                                            planned = planned,
-                                            onLog = {
-                                                scope.launch {
-                                                    val entry = planned.toFoodEntry() ?: return@launch
-                                                    // Write the entry first, then
-                                                    // record it: that id is the only
-                                                    // thing stopping a second tap
-                                                    // logging the same dinner twice.
-                                                    foodRepo.add(entry)
-                                                    repo.markLogged(planned.id, entry.id)
-                                                }
-                                            },
-                                            onRemove = { scope.launch { repo.unplan(planned.id) } }
-                                        )
-                                    }
-                                }
-                            }
-                        }
+        val columns = AdaptiveLayout.planDayColumns(contentWidth)
+        val dayCard: @Composable (String, Modifier) -> Unit = { day, cardModifier ->
+            PlanDayCard(
+                day = day,
+                // A week's seven columns are too narrow for the meal label beside its recipes.
+                stacked = columns > 2,
+                plan = plan,
+                canAdd = recipes.isNotEmpty(),
+                modifier = cardModifier,
+                onAdd = { meal -> picking = day to meal },
+                onLog = { planned ->
+                    scope.launch {
+                        val entry = planned.toFoodEntry() ?: return@launch
+                        // Write the entry first, then
+                        // record it: that id is the only
+                        // thing stopping a second tap
+                        // logging the same dinner twice.
+                        foodRepo.add(entry)
+                        repo.markLogged(planned.id, entry.id)
                     }
+                },
+                onRemove = { planned -> scope.launch { repo.unplan(planned.id) } }
+            )
+        }
+        if (columns == 1) {
+            weekDays().forEach { day ->
+                dayCard(day, Modifier.fillMaxWidth().padding(bottom = 12.dp))
+            }
+        } else {
+            rowMajor(weekDays(), columns).forEach { row ->
+                GridRow(cells = row, columns = columns, gap = if (columns > 2) 8f else AdaptiveLayout.GRID_GAP_DP) { day ->
+                    dayCard(day, Modifier.fillMaxSize())
                 }
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
     }
@@ -550,8 +577,77 @@ private fun PlanSection(repo: RecipeRepository) {
     }
 }
 
+/**
+ * One day of the plan. [stacked] puts each meal's label above its recipes instead of beside them,
+ * for the week's seven narrow columns; the phone and two-column layouts keep the label beside.
+ */
 @Composable
-private fun PlannedRow(planned: PlannedMeal, onLog: () -> Unit, onRemove: () -> Unit) {
+private fun PlanDayCard(
+    day: String,
+    stacked: Boolean,
+    plan: List<PlannedMeal>,
+    canAdd: Boolean,
+    modifier: Modifier,
+    onAdd: (Meal) -> Unit,
+    onLog: (PlannedMeal) -> Unit,
+    onRemove: (PlannedMeal) -> Unit
+) {
+    Card(modifier = modifier, border = dclCardBorder()) {
+        Column(modifier = Modifier.padding(if (stacked) 12.dp else 16.dp)) {
+            Text(dayLabel(day), style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Meal.entries.forEach { meal ->
+                val forSlot = plan.filter { it.date == day && it.mealOrDefault == meal }
+
+                val slot: @Composable (Modifier) -> Unit = { slotModifier ->
+                    if (forSlot.isEmpty()) {
+                        TextButton(
+                            onClick = { onAdd(meal) },
+                            enabled = canAdd
+                        ) { Text("Add") }
+                    } else {
+                        Column(modifier = slotModifier) {
+                            forSlot.forEach { planned ->
+                                PlannedRow(
+                                    planned = planned,
+                                    onLog = { onLog(planned) },
+                                    onRemove = { onRemove(planned) },
+                                    narrow = stacked
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (stacked) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(text = meal.label, style = MaterialTheme.typography.bodySmall)
+                        slot(Modifier.fillMaxWidth())
+                    }
+                } else {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(
+                            text = meal.label,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.width(84.dp)
+                        )
+                        slot(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlannedRow(
+    planned: PlannedMeal,
+    onLog: () -> Unit,
+    onRemove: () -> Unit,
+    /** In a week's narrow column: the two actions stack rather than breaking "Remove" in two. */
+    narrow: Boolean = false
+) {
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
         Text(planned.recipeName, style = MaterialTheme.typography.bodyMedium)
 
@@ -570,14 +666,20 @@ private fun PlannedRow(planned: PlannedMeal, onLog: () -> Unit, onRemove: () -> 
             )
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        val actions: @Composable () -> Unit = {
             when {
                 planned.isLogged ->
                     Text("Logged", style = MaterialTheme.typography.bodySmall)
                 planned.snapshotNutrition != null ->
-                    TextButton(onClick = onLog) { Text("Log it") }
+                    TextButton(onClick = onLog) { Text("Log it", maxLines = 1) }
             }
-            TextButton(onClick = onRemove) { Text("Remove") }
+            TextButton(onClick = onRemove) { Text("Remove", maxLines = 1) }
+        }
+        if (narrow) {
+            // One above the other: side by side they need more than a week's column has.
+            Column { actions() }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) { actions() }
         }
     }
 }
@@ -591,7 +693,7 @@ private fun RecipePickerDialog(
     // at its default and lets amountGrams carry the actual quantity.
     onPick: (Recipe, Double, Double?) -> Unit
 ) {
-    var servings by remember { mutableStateOf("1") }
+    var servings by rememberSaveable { mutableStateOf("1") }
     // Set when a gram-capable recipe row is tapped, to show the amount-entry
     // step before calling onPick. A recipe without nutritionPerGram never
     // sets this — it goes straight to onPick with today's servings behavior.
@@ -660,7 +762,7 @@ private fun RecipeAmountEntryDialog(
 ) {
     val context = LocalContext.current
     val unit = remember { SettingsStore.get(context).servingUnit }
-    var amountText by remember { mutableStateOf("") }
+    var amountText by rememberSaveable { mutableStateOf("") }
 
     val enteredAmount = amountText.toDoubleOrNull()
     val grams = enteredAmount?.let { unit.toGrams(it) }
@@ -712,7 +814,7 @@ private fun RecipeAmountEntryDialog(
 /* ---------- shopping ---------- */
 
 @Composable
-private fun ShoppingSection(repo: RecipeRepository) {
+private fun ShoppingSection(repo: RecipeRepository, contentWidth: Float) {
     val scope = rememberCoroutineScope()
     val recipes by repo.recipes.collectAsState()
     val plan by repo.plan.collectAsState()
@@ -733,37 +835,30 @@ private fun ShoppingSection(repo: RecipeRepository) {
             return@Column
         }
 
-        lines.forEach { line ->
-            val isChecked = line.key in checked
-            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), border = dclCardBorder()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = isChecked,
-                        onCheckedChange = { scope.launch { repo.setChecked(line.key, it) } }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = line.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textDecoration =
-                                if (isChecked) TextDecoration.LineThrough else TextDecoration.None
+        val columns = AdaptiveLayout.shoppingColumns(contentWidth)
+        if (columns == 1) {
+            lines.forEach { line ->
+                ShoppingLineCard(
+                    line = line,
+                    isChecked = line.key in checked,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    onCheckedChange = { scope.launch { repo.setChecked(line.key, it) } }
+                )
+            }
+        } else {
+            // Read down each column, in the list's own order. Two columns of short lines drift
+            // apart across a whole tablet, so they stay within reading distance.
+            Column(modifier = Modifier.widthIn(max = AdaptiveLayout.READABLE_DP.dp * 1.3f)) {
+                columnMajor(lines, columns).forEach { row ->
+                    GridRow(cells = row, columns = columns, gap = 8f) { line ->
+                        ShoppingLineCard(
+                            line = line,
+                            isChecked = line.key in checked,
+                            modifier = Modifier.fillMaxSize(),
+                            onCheckedChange = { scope.launch { repo.setChecked(line.key, it) } }
                         )
-                        if (line.amounts.isNotEmpty()) {
-                            Text(
-                                text = line.amounts.shoppingAmountLabel(),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        // Ingredients that never parsed, verbatim, so nothing
-                        // silently drops off the list you shop from.
-                        line.unparsed.forEach { raw ->
-                            Text(raw, style = MaterialTheme.typography.bodySmall)
-                        }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
@@ -772,6 +867,46 @@ private fun ShoppingSection(repo: RecipeRepository) {
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(onClick = { scope.launch { repo.clearChecked() } }) {
                 Text("Clear ticks")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShoppingLineCard(
+    line: ShoppingListLine,
+    isChecked: Boolean,
+    modifier: Modifier,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Card(modifier = modifier, border = dclCardBorder()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = isChecked,
+                onCheckedChange = onCheckedChange
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = line.displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textDecoration =
+                        if (isChecked) TextDecoration.LineThrough else TextDecoration.None
+                )
+                if (line.amounts.isNotEmpty()) {
+                    Text(
+                        text = line.amounts.shoppingAmountLabel(),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                // Ingredients that never parsed, verbatim, so nothing
+                // silently drops off the list you shop from.
+                line.unparsed.forEach { raw ->
+                    Text(raw, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
