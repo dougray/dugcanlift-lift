@@ -11,7 +11,12 @@ import com.dugcanlift.kit.PlanDecodeResult
 import kotlinx.coroutines.launch
 
 @Composable
-fun PlanPreviewDialog(result: PlanDecodeResult, onDismiss: () -> Unit) {
+fun PlanPreviewDialog(
+    result: PlanDecodeResult,
+    onDismiss: () -> Unit,
+    /** Called once the plan is in, before Done: the link is answered. */
+    onImported: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var importResult by remember { mutableStateOf<PlanImportResult?>(null) }
@@ -31,6 +36,7 @@ fun PlanPreviewDialog(result: PlanDecodeResult, onDismiss: () -> Unit) {
                             scope.launch {
                                 try {
                                     importResult = PlanImporter.accept(result.payload, context)
+                                    onImported()
                                 } finally {
                                     importing = false
                                 }

@@ -59,6 +59,7 @@ import com.dugcanlift.macrocalc.data.FoodRepository
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.planBetween
 import com.dugcanlift.macrocalc.data.shoppingAmountLabel
+import com.dugcanlift.macrocalc.data.cookDisplay
 import com.dugcanlift.macrocalc.data.todayKey
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -726,7 +727,7 @@ private fun RecipePickerDialog(
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Text(recipe.name, modifier = Modifier.weight(1f))
                             recipe.nutritionPerServing?.let {
-                                Text("${(it.calories * multiplier).trimZeros()} kcal")
+                                Text("${(it.calories * multiplier).cookDisplay()} kcal")
                             }
                         }
                     }
@@ -936,7 +937,7 @@ private fun isDebuggable(context: android.content.Context): Boolean =
     (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
 private fun servingsLabel(value: Double): String =
-    if (value == 1.0) "1 serving" else "${value.trimZeros()} servings"
+    if (value == 1.0) "1 serving" else "${value.cookDisplay()} servings"
 
 private val DAY_KEY_FORMAT: SimpleDateFormat
     get() = SimpleDateFormat("yyyy-MM-dd", Locale.US)

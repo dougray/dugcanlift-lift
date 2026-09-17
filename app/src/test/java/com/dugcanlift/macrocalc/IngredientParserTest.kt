@@ -5,6 +5,7 @@ import com.dugcanlift.macrocalc.data.Meal
 import com.dugcanlift.macrocalc.data.PlannedMeal
 import com.dugcanlift.macrocalc.data.Recipe
 import com.dugcanlift.macrocalc.data.ShoppingList
+import com.dugcanlift.macrocalc.data.cookDisplay
 import com.dugcanlift.macrocalc.data.shoppingAmountLabel
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -69,5 +70,47 @@ class IngredientParserTest {
 
         val lines = ShoppingList.build(listOf(meal), mapOf(recipe.id to recipe))
         assertEquals(250.0, lines[0].amounts["g"]!!, 0.0001)
+    }
+
+    /**
+     * One serving planned from a three-serving recipe. The amounts are exact
+     * thirds and stay that way; only the label rounds, as LIFT web's `trimNum`
+     * does. It printed "1.6666666666666665" and "416.66666666666663 g".
+     */
+    @Test
+    fun `an uneven split prints two decimals and keeps the exact amount`() {
+        val recipe = Recipe(
+            name = "Frittata",
+            servings = 3.0,
+            ingredients = listOf(
+                IngredientParser.parse("5 eggs"),
+                IngredientParser.parse("1250 g potatoes"),
+                IngredientParser.parse("300 g spinach")
+            )
+        )
+        val meal = PlannedMeal(recipeId = recipe.id, recipeName = recipe.name, servings = 1.0)
+
+        val lines = ShoppingList.build(listOf(meal), mapOf(recipe.id to recipe)).associateBy { it.key }
+
+        assertEquals(5.0 * (1.0 / 3.0), lines.getValue("eggs").amounts[IngredientParser.COUNT_UNIT]!!, 0.0)
+        assertEquals(1250.0 * (1.0 / 3.0), lines.getValue("potatoes").amounts["g"]!!, 0.0)
+        assertEquals("1.67", lines.getValue("eggs").amounts.shoppingAmountLabel())
+        assertEquals("416.67 g", lines.getValue("potatoes").amounts.shoppingAmountLabel())
+        assertEquals("100 g", lines.getValue("spinach").amounts.shoppingAmountLabel())
+    }
+
+    /** LIFT web's `trimNum`: integers bare, otherwise at most two decimals. */
+    @Test
+    fun `cook amounts format like LIFT web`() {
+        assertEquals("2", 2.0.cookDisplay())
+        assertEquals("0", 0.0.cookDisplay())
+        assertEquals("0", 0.001.cookDisplay())
+        assertEquals("0.5", 0.5.cookDisplay())
+        assertEquals("0.33", (1.0 / 3.0).cookDisplay())
+        assertEquals("3", 2.999.cookDisplay())
+        assertEquals("1234567.5", 1234567.5.cookDisplay())
+        assertEquals("437.5", (175.0 * 2.5).cookDisplay())
+        assertEquals("2 cloves + 30.5 g",
+            mapOf("g" to 30.5, "cloves" to 2.0).shoppingAmountLabel())
     }
 }
