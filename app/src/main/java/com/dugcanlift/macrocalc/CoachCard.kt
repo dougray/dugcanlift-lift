@@ -1,6 +1,8 @@
 package com.dugcanlift.macrocalc
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.health.connect.client.PermissionController
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,22 +65,35 @@ fun CoachCard(
     var weeks by remember { mutableStateOf(store.weeks) }
     var itemised by remember { mutableStateOf(store.itemisedFood) }
     var sendRoute by remember { mutableStateOf(store.sendLastRoute) }
+    var sendSteps by remember { mutableStateOf(store.sendSteps) }
     var sizeNote by remember { mutableStateOf("") }
+
+    val healthConnectAvailable = remember { HealthConnectManager.isAvailable(context) }
+    var hasStepsAccess by remember { mutableStateOf(false) }
+    // Bumped when the permission sheet returns, so the steps are read again.
+    var accessChecks by remember { mutableIntStateOf(0) }
 
     // Step history is read from Health Connect rather than stored here, so it
     // is whatever Health Connect believes right now — including steps logged
-    // by a watch this app never sees. Empty when the permission was declined,
-    // which costs the step lines and nothing else.
+    // by a watch this app never sees. Read only while "Send" is chosen: steps
+    // are Health Connect data, and they go to a coach only with that opt-in.
     var steps by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
 
-    LaunchedEffect(weeks, editing) {
-        if (editing) return@LaunchedEffect
-        steps = HealthConnectManager.dailyStepCounts(context, weeks * 7)
+    val stepsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract()
+    ) { accessChecks++ }
+
+    LaunchedEffect(weeks, editing, sendSteps, accessChecks) {
+        if (editing || !healthConnectAvailable) return@LaunchedEffect
+        hasStepsAccess = HealthConnectManager.hasPermission(context)
+        steps = if (sendSteps && hasStepsAccess) {
+            HealthConnectManager.dailyStepCounts(context, weeks * 7)
+        } else emptyMap()
     }
 
     // Recomputed rather than guessed: the person deserves to know how long the
     // email is before they send one their coach's mail app might mangle.
-    LaunchedEffect(weeks, itemised, sendRoute, sessions, entries, steps, outdoor, editing) {
+    LaunchedEffect(weeks, itemised, sendRoute, sendSteps, sessions, entries, steps, outdoor, editing) {
         if (editing) return@LaunchedEffect
         val link = CoachShare.buildLink(store, settings, goal, sessions, entries, steps, outdoor)
         val kb = link.length / 1024.0
@@ -122,6 +138,50 @@ fun CoachCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth()
                 )
+                // Steps come from Health Connect, and Health Connect data goes to
+                // someone else only with explicit consent: so it is a choice,
+                // off until chosen, and named below in what the email includes.
+                if (healthConnectAvailable) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = "Your daily steps", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !sendSteps,
+                            onClick = { sendSteps = false; store.sendSteps = false },
+                            label = { Text("Don't send") }
+                        )
+                        FilterChip(
+                            selected = sendSteps,
+                            onClick = {
+                                sendSteps = true
+                                store.sendSteps = true
+                                if (!hasStepsAccess) {
+                                    stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
+                                }
+                            },
+                            label = { Text("Send") }
+                        )
+                    }
+                    Text(
+                        text = if (sendSteps && !hasStepsAccess)
+                            "LIFT isn't allowed to read steps from Health Connect, so none will go. " +
+                                "Tap Send again to allow it."
+                        else "Daily step totals from Health Connect for the weeks you send. " +
+                            "They are read only when you choose Send.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = CoachShare.includedSummary(
+                        store, goal, stepsAvailable = healthConnectAvailable && hasStepsAccess
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
@@ -199,6 +259,50 @@ fun CoachCard(
                         "and last 200 m cut off so it never shows where you start from.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Steps come from Health Connect, and Health Connect data goes to
+                // someone else only with explicit consent: so it is a choice,
+                // off until chosen, and named below in what the email includes.
+                if (healthConnectAvailable) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = "Your daily steps", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !sendSteps,
+                            onClick = { sendSteps = false; store.sendSteps = false },
+                            label = { Text("Don't send") }
+                        )
+                        FilterChip(
+                            selected = sendSteps,
+                            onClick = {
+                                sendSteps = true
+                                store.sendSteps = true
+                                if (!hasStepsAccess) {
+                                    stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
+                                }
+                            },
+                            label = { Text("Send") }
+                        )
+                    }
+                    Text(
+                        text = if (sendSteps && !hasStepsAccess)
+                            "LIFT isn't allowed to read steps from Health Connect, so none will go. " +
+                                "Tap Send again to allow it."
+                        else "Daily step totals from Health Connect for the weeks you send. " +
+                            "They are read only when you choose Send.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = CoachShare.includedSummary(
+                        store, goal, stepsAvailable = healthConnectAvailable && hasStepsAccess
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

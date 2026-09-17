@@ -85,21 +85,24 @@ requests whatsoever.
   recording a Run or Hike, to plot your route and calculate distance and
   elevation gain. Location is never collected at any other time and never
   leaves your device.
-- **Background location (`ACCESS_BACKGROUND_LOCATION`)** — optional. Lets a
-  recording keep tracking your route if your phone locks or you switch to
-  another app mid-run. You can decline it and still record — the recording
-  just stops if you lock your phone or leave the app. Used only during an
-  active recording, never otherwise.
+- **No background location.** LIFT does not ask for "Allow all the time".
+  A recording keeps tracking your route when your phone locks or you switch
+  to another app because it runs as a foreground service, started when you
+  tap Start, which Android lets use the location access you already granted
+  for as long as the recording lasts.
 - **Foreground service / foreground service location
   (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`)** — Android requires
   an app to run a foreground service, with a persistent notification, to keep
-  receiving location updates while backgrounded. This is what shows the
+  receiving location updates while the screen is off or another app is open. This is what shows the
   ongoing "Recording your route" notification during a Run or Hike.
 - **Notifications (`POST_NOTIFICATIONS`)** — used to show that same "Recording
   your route" notification while a recording is in progress.
-- **Health Connect (step count, read-only)** — used to show today's steps on
-  the dashboard. Read-only for step data: it stays between Health Connect and
-  the app, on your device, and is never sent anywhere.
+- **Health Connect (steps and step history, read-only)** — used to show today's
+  steps on the dashboard, and, only if you turn on **Your daily steps** in Send
+  to Coach, to put daily step totals in the log you email your coach. The app
+  asks for this only when you tap **Read steps from Health Connect** on the
+  Steps card, after the card explains it. Steps are not stored by the app and
+  are never sent anywhere else.
 - **Health Connect (write: `WRITE_EXERCISE`, `WRITE_EXERCISE_ROUTE`,
   `WRITE_DISTANCE`, `WRITE_ELEVATION_GAINED`)** — when you finish a Run or
   Hike and choose to export it, the app can write that activity to Health
@@ -117,12 +120,16 @@ own email app with it written out. You pick the recipient and you press send;
 the app uploads nothing itself, and the log rides in the part of the link that
 browsers never send to a web server.
 
-The link carries your training, food totals or items, steps, bodyweight, goal,
-and, for runs, walks and hikes, each activity's date, time, distance and climb
+The card lists what the email includes before you send it. The link carries
+your name, sex, age and height when you have entered them, your training, food
+totals or items, bodyweight, goal, and, for runs, walks and hikes, each activity's date, time, distance and climb
 plus your personal bests. It carries **no GPS route** unless you turn on **Your
 last route**, which is off until you do. With it on, the link includes the route
 of your newest activity with the first and last 200 m removed, so it does not
-show where you started or finished, and thinned to at most 150 points.
+show where you started or finished, and thinned to at most 150 points. It
+carries **no steps** unless you turn on **Your daily steps**, which is also off
+until you do; with it on, the link includes each day's step total from Health
+Connect.
 
 ## Analytics, advertising, and tracking
 
