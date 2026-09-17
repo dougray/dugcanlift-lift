@@ -301,11 +301,11 @@ internal fun RecipeNutrition.toJson(): JSONObject = JSONObject().apply {
 internal fun recipeNutritionFromJson(o: JSONObject?): RecipeNutrition? {
     if (o == null) return null
     return RecipeNutrition(
-        calories = o.optDouble("calories", 0.0),
-        proteinG = o.optDouble("proteinG", 0.0),
-        carbsG = o.optDouble("carbsG", 0.0),
-        fatG = o.optDouble("fatG", 0.0),
-        fiberG = o.optDouble("fiberG", 0.0),
+        calories = o.finiteDouble("calories", 0.0),
+        proteinG = o.finiteDouble("proteinG", 0.0),
+        carbsG = o.finiteDouble("carbsG", 0.0),
+        fatG = o.finiteDouble("fatG", 0.0),
+        fiberG = o.finiteDouble("fiberG", 0.0),
         estimated = o.optBoolean("estimated", false),
         saturatedFatG = optNutrient(o, "saturatedFatG"),
         sugarG = optNutrient(o, "sugarG"),
@@ -326,9 +326,9 @@ internal fun RecipeIngredient.toJson(): JSONObject = JSONObject().apply {
 internal fun recipeIngredientFromJson(o: JSONObject): RecipeIngredient = RecipeIngredient(
     rawText = o.optString("rawText", ""),
     item = o.optStringOrNull("item"),
-    qty = o.optDoubleOrNull("qty"),
+    qty = o.finiteDoubleOrNull("qty"),
     unit = o.optStringOrNull("unit"),
-    grams = o.optDoubleOrNull("grams"),
+    grams = o.finiteDoubleOrNull("grams"),
     optional = o.optBoolean("optional", false),
     note = o.optStringOrNull("note")
 )
@@ -352,17 +352,17 @@ internal fun Recipe.toJson(): JSONObject = JSONObject().apply {
 internal fun recipeFromJson(o: JSONObject): Recipe = Recipe(
     id = o.optString("id", UUID.randomUUID().toString()),
     name = o.optString("name", ""),
-    servings = o.optDouble("servings", 1.0),
-    totalWeightGrams = o.optDoubleOrNull("totalWeightGrams"),
+    servings = o.finiteDouble("servings", 1.0),
+    totalWeightGrams = o.finiteDoubleOrNull("totalWeightGrams"),
     ingredients = o.optJSONArray("ingredients").mapObjects(::recipeIngredientFromJson),
     steps = o.optJSONArray("steps").mapStrings(),
     nutritionPerServing = recipeNutritionFromJson(o.optJSONObject("nutritionPerServing")),
     sourceUrl = o.optStringOrNull("sourceUrl"),
     sourceAuthor = o.optStringOrNull("sourceAuthor"),
     sourceTranscript = o.optStringOrNull("sourceTranscript"),
-    prepMinutes = o.optIntOrNull("prepMinutes"),
-    cookMinutes = o.optIntOrNull("cookMinutes"),
-    importedAt = o.optLong("importedAt", System.currentTimeMillis())
+    prepMinutes = o.finiteIntOrNull("prepMinutes"),
+    cookMinutes = o.finiteIntOrNull("cookMinutes"),
+    importedAt = o.finiteLong("importedAt", System.currentTimeMillis())
 )
 
 internal fun PlannedMeal.toJson(): JSONObject = JSONObject().apply {
@@ -383,8 +383,8 @@ internal fun plannedMealFromJson(o: JSONObject): PlannedMeal = PlannedMeal(
     recipeId = o.optString("recipeId", ""),
     date = o.optString("date", todayKey()),
     meal = o.optString("meal", Meal.DINNER.name),
-    servings = o.optDouble("servings", 1.0),
-    amountGrams = o.optDoubleOrNull("amountGrams"),
+    servings = o.finiteDouble("servings", 1.0),
+    amountGrams = o.finiteDoubleOrNull("amountGrams"),
     recipeName = o.optString("recipeName", ""),
     snapshotNutrition = recipeNutritionFromJson(o.optJSONObject("snapshotNutrition")),
     snapshotNutritionPerGram = recipeNutritionFromJson(o.optJSONObject("snapshotNutritionPerGram")),
@@ -400,7 +400,7 @@ internal fun plannedMealFromJson(o: JSONObject): PlannedMeal = PlannedMeal(
  */
 fun recipeFromWireJson(o: JSONObject): Recipe = Recipe(
     name = o.optString("name", "").ifBlank { "Untitled recipe" },
-    servings = o.optDouble("servings", 1.0),
+    servings = o.finiteDouble("servings", 1.0),
     ingredients = o.optJSONArray("ingredients").mapObjects(::recipeIngredientFromJson),
     steps = o.optJSONArray("steps").mapStrings(),
     // Absent means unknown. Do not substitute zeros.
@@ -408,20 +408,14 @@ fun recipeFromWireJson(o: JSONObject): Recipe = Recipe(
     sourceUrl = o.optStringOrNull("sourceURL"),
     sourceAuthor = o.optStringOrNull("sourceAuthor"),
     sourceTranscript = o.optStringOrNull("sourceTranscript"),
-    prepMinutes = o.optIntOrNull("prepMinutes"),
-    cookMinutes = o.optIntOrNull("cookMinutes")
+    prepMinutes = o.finiteIntOrNull("prepMinutes"),
+    cookMinutes = o.finiteIntOrNull("cookMinutes")
 )
 
 /* ---------- json helpers ---------- */
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key)) null else optString(key, "").takeIf { it.isNotEmpty() }
-
-private fun JSONObject.optDoubleOrNull(key: String): Double? =
-    if (isNull(key)) null else optDouble(key).takeIf { !it.isNaN() }
-
-private fun JSONObject.optIntOrNull(key: String): Int? =
-    if (isNull(key)) null else if (has(key)) optInt(key) else null
 
 internal fun <T> JSONArray?.mapObjects(transform: (JSONObject) -> T): List<T> {
     if (this == null) return emptyList()

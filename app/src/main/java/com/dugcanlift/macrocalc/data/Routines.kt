@@ -77,15 +77,12 @@ internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
     id = o.optString("id", UUID.randomUUID().toString()),
     name = o.optString("name", ""),
     equipment = o.optString("equipment", ""),
-    targetSets = o.optInt("targetSets", 3),
-    targetReps = if (o.has("targetReps") && !o.isNull("targetReps")) o.optInt("targetReps") else null,
-    targetWeightLb = if (o.has("targetWeightLb") && !o.isNull("targetWeightLb"))
-        o.optDouble("targetWeightLb") else null,
-    targetRpe = if (o.has("targetRpe") && !o.isNull("targetRpe")) o.optDouble("targetRpe") else null,
-    targetDurationSec = if (o.has("targetDurationSec") && !o.isNull("targetDurationSec"))
-        o.optInt("targetDurationSec") else null,
-    targetDistanceMeters = if (o.has("targetDistanceMeters") && !o.isNull("targetDistanceMeters"))
-        o.optDouble("targetDistanceMeters") else null,
+    targetSets = o.finiteInt("targetSets", 3),
+    targetReps = o.finiteIntOrNull("targetReps"),
+    targetWeightLb = o.finiteDoubleOrNull("targetWeightLb"),
+    targetRpe = o.finiteDoubleOrNull("targetRpe"),
+    targetDurationSec = o.finiteIntOrNull("targetDurationSec"),
+    targetDistanceMeters = o.finiteDoubleOrNull("targetDistanceMeters"),
     note = o.optString("note", "")
 )
 
@@ -106,7 +103,7 @@ internal fun routineFromJson(o: JSONObject): Routine {
         name = o.optString("name", ""),
         folder = o.optString("folder", ""),
         exercises = exercises,
-        createdAt = o.optLong("createdAt", 0L)
+        createdAt = o.finiteLong("createdAt", 0L)
     )
 }
 

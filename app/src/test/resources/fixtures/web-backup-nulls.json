@@ -1,0 +1,516 @@
+{
+ "v": 1,
+ "app": "lift",
+ "saved": "2026-09-17",
+ "data": {
+  "goal": {
+   "calories": 2300,
+   "proteinG": 150,
+   "fatG": 75,
+   "carbsG": 250,
+   "fiberG": 30
+  },
+  "food": [
+   {
+    "id": "dc071d9e-f34d-4caa-a1f3-6066eb3b6a15",
+    "name": "Greek yogurt with berries and granola",
+    "servings": 1,
+    "calories": 471,
+    "proteinG": 37,
+    "fatG": 10,
+    "carbsG": 60,
+    "fiberG": 6,
+    "saturatedFatG": 3.1,
+    "sugarG": 28,
+    "sodiumMg": 110,
+    "amountGrams": null,
+    "date": "2026-07-24",
+    "loggedAt": 1784895180000,
+    "meal": "BREAKFAST"
+   },
+   {
+    "id": "a10f52c6-ba57-48a7-a10c-7d26f11b25d8",
+    "name": "Turkey and avocado wrap",
+    "servings": 1,
+    "calories": 644,
+    "proteinG": 44,
+    "fatG": 25,
+    "carbsG": 55,
+    "fiberG": 7,
+    "saturatedFatG": 5.1,
+    "sugarG": 4,
+    "sodiumMg": 1020,
+    "amountGrams": null,
+    "date": "2026-07-24",
+    "loggedAt": 1784912580000,
+    "meal": "LUNCH"
+   },
+   {
+    "id": "1132c8d3-9337-4a6d-a9ea-0ba38ee80e49",
+    "name": "Beef chilli",
+    "servings": 1,
+    "calories": 504,
+    "proteinG": 41,
+    "fatG": 21,
+    "carbsG": 35,
+    "fiberG": 9,
+    "saturatedFatG": 7,
+    "sugarG": 8,
+    "sodiumMg": 720,
+    "amountGrams": null,
+    "date": "2026-07-24",
+    "loggedAt": 1784937840000,
+    "meal": "DINNER"
+   }
+  ],
+  "workouts": [
+   {
+    "id": "e6ab7188-a04e-4788-a273-f792a45fdbea",
+    "date": "2026-07-25",
+    "name": "Lower B",
+    "note": "",
+    "startedAt": 1785018600000,
+    "exercises": [
+     {
+      "id": "65d90909-f57c-4c69-ac91-67dc370bcf27",
+      "name": "Barbell Deadlift",
+      "equipment": "Barbell",
+      "note": "",
+      "sets": [
+       {
+        "id": "bfb2649c-fff1-460c-a5d5-3ee27667ab36",
+        "weightLb": 275,
+        "reps": 4
+       },
+       {
+        "id": "5fbeeead-dd32-4a04-af14-3eb891e8c019",
+        "weightLb": 275,
+        "reps": 4
+       },
+       {
+        "id": "fea50ae4-9acf-4e4a-a55f-4958d5b04885",
+        "weightLb": 275,
+        "reps": 4
+       },
+       {
+        "id": "a02f793c-37ea-4010-a2ee-2e7311e9d931",
+        "weightLb": 275,
+        "reps": 4,
+        "rpe": 8.5
+       }
+      ]
+     },
+     {
+      "id": "4f2dbf81-6d2c-4f8c-aced-5bc542006c65",
+      "name": "Dumbbell Lunges",
+      "equipment": "Dumbbell",
+      "note": "",
+      "sets": [
+       {
+        "id": "dc2b0476-8863-4098-aac4-024f55c50b5a",
+        "weightLb": 40,
+        "reps": 10
+       },
+       {
+        "id": "b002d2b6-a1ab-41e5-a7c5-f3f87e5aa0ed",
+        "weightLb": 40,
+        "reps": 10
+       },
+       {
+        "id": "70a5c5ed-c851-4c7b-a071-793e19bcb37f",
+        "weightLb": 40,
+        "reps": 10
+       }
+      ]
+     },
+     {
+      "id": "c64bf3d3-001b-4506-aa5b-b3042f1cf213",
+      "name": "Lying Leg Curls",
+      "equipment": "Machine",
+      "note": "",
+      "sets": [
+       {
+        "id": "f3c77028-c217-4fe2-a938-4cf6f2ddd8c5",
+        "weightLb": 90,
+        "reps": 12
+       },
+       {
+        "id": "41d2a24a-0d34-47ea-ad5e-915f9aadc1f0",
+        "weightLb": 90,
+        "reps": 12
+       },
+       {
+        "id": "bfe99420-537e-41e5-a1f3-f0f937ec2a9d",
+        "weightLb": 90,
+        "reps": 11
+       }
+      ]
+     },
+     {
+      "id": "64ed469f-23d2-46c3-a85a-4960a256ef5f",
+      "name": "Standing Calf Raises",
+      "equipment": "Machine",
+      "note": "",
+      "sets": [
+       {
+        "id": "98cbd706-515b-4ecc-a96b-9407ffa5fc96",
+        "weightLb": 140,
+        "reps": 15
+       },
+       {
+        "id": "f54bbf8c-e64e-4fd2-a81e-d966d2b3e6d1",
+        "weightLb": 140,
+        "reps": 15
+       },
+       {
+        "id": "74dd60e2-eb56-4d3e-abde-c1fec47b2f48",
+        "weightLb": 140,
+        "reps": 15
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "settings": {
+   "focus": "BODYBUILDING",
+   "stepGoal": 10000
+  },
+  "steps": {
+   "2026-07-24": 7838,
+   "2026-07-25": 7396,
+   "2026-07-26": 9316
+  },
+  "coach": {
+   "email": "coach@example.com",
+   "you": "Jordan Reyes",
+   "id": "6f1c2a9e-3b7d-4c21-9a55-0d8e4f7b2c13",
+   "weeks": 8,
+   "itemised": true,
+   "route": true
+  },
+  "profile": {
+   "sex": "male",
+   "age": 34,
+   "heightIn": 70
+  },
+  "weights": {
+   "2026-07-24": 201.4,
+   "2026-07-25": 201,
+   "2026-07-26": 201.8
+  },
+  "recipes": [
+   {
+    "id": "d45949b8-4be6-4710-ac87-c5b898dcfae2",
+    "name": "Beef chilli",
+    "servings": 4,
+    "totalWeightGrams": 1850,
+    "ingredients": [
+     {
+      "rawText": "500 g lean beef mince"
+     },
+     {
+      "rawText": "400 g kidney beans"
+     },
+     {
+      "rawText": "400 g chopped tomatoes"
+     },
+     {
+      "rawText": "1 onion"
+     },
+     {
+      "rawText": "2 cloves garlic"
+     },
+     {
+      "rawText": "1 tbsp chilli powder"
+     },
+     {
+      "rawText": "1 tsp ground cumin"
+     },
+     {
+      "rawText": "150 g red bell pepper"
+     }
+    ],
+    "steps": [
+     "Brown the mince in a large pot and drain.",
+     "Add onion, garlic and pepper; soften for 5 minutes.",
+     "Stir in spices, tomatoes and beans.",
+     "Simmer 40 minutes, stirring now and then."
+    ],
+    "nutritionPerServing": {
+     "calories": 438,
+     "proteinG": 36,
+     "carbsG": 30,
+     "fatG": 18,
+     "fiberG": 9,
+     "saturatedFatG": 7,
+     "sugarG": 8,
+     "sodiumMg": 720,
+     "estimated": false
+    },
+    "prepMinutes": 15,
+    "cookMinutes": 45,
+    "importedAt": 1787029200000
+   },
+   {
+    "id": "23013a08-5f87-4157-ad87-d891ab3de406",
+    "name": "Overnight oats with whey",
+    "servings": 1,
+    "totalWeightGrams": null,
+    "ingredients": [
+     {
+      "rawText": "60 g rolled oats"
+     },
+     {
+      "rawText": "30 g whey protein"
+     },
+     {
+      "rawText": "200 ml milk"
+     },
+     {
+      "rawText": "80 g blueberries"
+     },
+     {
+      "rawText": "1 tsp chia seeds"
+     }
+    ],
+    "steps": [
+     "Mix everything in a jar.",
+     "Refrigerate overnight.",
+     "Top with berries in the morning."
+    ],
+    "nutritionPerServing": {
+     "calories": 465,
+     "proteinG": 38,
+     "carbsG": 54,
+     "fatG": 11,
+     "fiberG": 7,
+     "saturatedFatG": 2.2,
+     "sugarG": 14,
+     "sodiumMg": 180,
+     "estimated": false
+    },
+    "prepMinutes": 5,
+    "cookMinutes": null,
+    "importedAt": 1787029200000
+   }
+  ],
+  "plan": [
+   {
+    "id": "19e91f6c-99cf-4cce-ae71-d13000542fb2",
+    "recipeId": "23013a08-5f87-4157-ad87-d891ab3de406",
+    "recipeName": "Overnight oats with whey",
+    "date": "2026-09-17",
+    "meal": "BREAKFAST",
+    "servings": 1,
+    "amountGrams": null,
+    "snapshotNutrition": {
+     "calories": 465,
+     "proteinG": 38,
+     "carbsG": 54,
+     "fatG": 11,
+     "fiberG": 7,
+     "saturatedFatG": 2.2,
+     "sugarG": 14,
+     "sodiumMg": 180,
+     "estimated": false
+    },
+    "snapshotNutritionPerGram": null,
+    "loggedFoodEntryId": null
+   },
+   {
+    "id": "91f51cd6-d83f-4285-a8ab-df605bea5b08",
+    "recipeId": "d45949b8-4be6-4710-ac87-c5b898dcfae2",
+    "recipeName": "Beef chilli",
+    "date": "2026-09-17",
+    "meal": "DINNER",
+    "servings": 1.5,
+    "amountGrams": null,
+    "snapshotNutrition": {
+     "calories": 438,
+     "proteinG": 36,
+     "carbsG": 30,
+     "fatG": 18,
+     "fiberG": 9,
+     "saturatedFatG": 7,
+     "sugarG": 8,
+     "sodiumMg": 720,
+     "estimated": false
+    },
+    "snapshotNutritionPerGram": null,
+    "loggedFoodEntryId": null
+   },
+   {
+    "id": "b2da54b3-8d19-491f-a147-0c2905fedb3b",
+    "recipeId": "23013a08-5f87-4157-ad87-d891ab3de406",
+    "recipeName": "Overnight oats with whey",
+    "date": "2026-09-18",
+    "meal": "BREAKFAST",
+    "servings": 1,
+    "amountGrams": null,
+    "snapshotNutrition": {
+     "calories": 465,
+     "proteinG": 38,
+     "carbsG": 54,
+     "fatG": 11,
+     "fiberG": 7,
+     "saturatedFatG": 2.2,
+     "sugarG": 14,
+     "sodiumMg": 180,
+     "estimated": false
+    },
+    "snapshotNutritionPerGram": null,
+    "loggedFoodEntryId": null
+   }
+  ],
+  "routines": [
+   {
+    "id": "46e32949-ce8c-432e-a472-a3ba65da0c87",
+    "name": "Upper A",
+    "folder": "Upper/Lower 4-day",
+    "createdAt": 1784437200000,
+    "exercises": [
+     {
+      "id": "c9e9578d-25fb-4ff4-ae26-78631f58844e",
+      "name": "Barbell Bench Press - Medium Grip",
+      "equipment": "Barbell",
+      "targetSets": 4,
+      "targetReps": 6,
+      "targetWeightLb": 185,
+      "targetRpe": null,
+      "targetDurationSec": null,
+      "targetDistanceMeters": null,
+      "note": ""
+     },
+     {
+      "id": "273cc173-bfb0-4f4e-a279-56e5268af1e3",
+      "name": "Bent Over Barbell Row",
+      "equipment": "Barbell",
+      "targetSets": 4,
+      "targetReps": 8,
+      "targetWeightLb": 155,
+      "targetRpe": null,
+      "targetDurationSec": null,
+      "targetDistanceMeters": null,
+      "note": ""
+     },
+     {
+      "id": "2fb92700-8c6b-4e70-ae70-ec310e79a6da",
+      "name": "Standing Military Press",
+      "equipment": "Barbell",
+      "targetSets": 3,
+      "targetReps": 8,
+      "targetWeightLb": 105,
+      "targetRpe": null,
+      "targetDurationSec": null,
+      "targetDistanceMeters": null,
+      "note": ""
+     },
+     {
+      "id": "526e46cf-cd78-448f-abb3-3eb8eb54ff8b",
+      "name": "Wide-Grip Lat Pulldown",
+      "equipment": "Cable",
+      "targetSets": 3,
+      "targetReps": 10,
+      "targetWeightLb": 150,
+      "targetRpe": null,
+      "targetDurationSec": null,
+      "targetDistanceMeters": null,
+      "note": ""
+     },
+     {
+      "id": "617d851f-0d2c-46d3-ac8b-364eff6817de",
+      "name": "Triceps Pushdown",
+      "equipment": "Cable",
+      "targetSets": 3,
+      "targetReps": 12,
+      "targetWeightLb": 60,
+      "targetRpe": null,
+      "targetDurationSec": null,
+      "targetDistanceMeters": null,
+      "note": ""
+     }
+    ]
+   },
+   {
+    "id": "2c37b1c8-682b-4871-aa87-14123429c536",
+    "name": "Conditioning finisher",
+    "folder": "Conditioning",
+    "createdAt": 1786165200000,
+    "exercises": [
+     {
+      "id": "b1939b84-c3d1-472e-a79a-a6ce94c17803",
+      "name": "Rowing, Stationary",
+      "equipment": "Machine",
+      "targetSets": 1,
+      "targetReps": null,
+      "targetWeightLb": null,
+      "targetRpe": null,
+      "targetDurationSec": 600,
+      "targetDistanceMeters": 2000,
+      "note": "Steady, conversational pace"
+     },
+     {
+      "id": "9509de36-049a-4365-ae36-18addd1c773b",
+      "name": "Plank",
+      "equipment": "Body Only",
+      "targetSets": 3,
+      "targetReps": null,
+      "targetWeightLb": null,
+      "targetRpe": null,
+      "targetDurationSec": 45,
+      "targetDistanceMeters": null,
+      "note": ""
+     }
+    ]
+   }
+  ],
+  "outdoor": [
+   {
+    "id": "2d727f75-9417-4762-aba6-8ab3c8714d1c",
+    "activityType": "WALK",
+    "startedAtEpochMs": 1784894700000,
+    "endedAtEpochMs": 1784896659640,
+    "distanceMeters": 2842.6,
+    "elevationGainMeters": 3,
+    "routePoints": [
+     {
+      "latitude": 47.664496,
+      "longitude": -122.340509,
+      "altitudeMeters": 40,
+      "recordedAtEpochMs": 1784894700000,
+      "horizontalAccuracyMeters": 6
+     },
+     {
+      "latitude": 47.664644,
+      "longitude": -122.340499,
+      "altitudeMeters": 40.2,
+      "recordedAtEpochMs": 1784894710965,
+      "horizontalAccuracyMeters": 6
+     },
+     {
+      "latitude": 47.664778,
+      "longitude": -122.340493,
+      "altitudeMeters": 40.3,
+      "recordedAtEpochMs": 1784894722425,
+      "horizontalAccuracyMeters": 8
+     },
+     {
+      "latitude": 47.664909,
+      "longitude": -122.340489,
+      "altitudeMeters": 40.5,
+      "recordedAtEpochMs": 1784894733550,
+      "horizontalAccuracyMeters": 5
+     },
+     {
+      "latitude": 47.66505,
+      "longitude": -122.340497,
+      "altitudeMeters": 40.7,
+      "recordedAtEpochMs": 1784894744570,
+      "horizontalAccuracyMeters": 9
+     }
+    ]
+   }
+  ]
+ }
+}
