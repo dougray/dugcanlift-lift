@@ -85,15 +85,15 @@ requests whatsoever.
   recording a Run or Hike, to plot your route and calculate distance and
   elevation gain. Location is never collected at any other time and never
   leaves your device.
-- **Background location (`ACCESS_BACKGROUND_LOCATION`)** — optional. Lets a
-  recording keep tracking your route if your phone locks or you switch to
-  another app mid-run. You can decline it and still record — the recording
-  just stops if you lock your phone or leave the app. Used only during an
-  active recording, never otherwise.
+- **No background location.** LIFT does not ask for "Allow all the time".
+  A recording keeps tracking your route when your phone locks or you switch
+  to another app because it runs as a foreground service, started when you
+  tap Start, which Android lets use the location access you already granted
+  for as long as the recording lasts.
 - **Foreground service / foreground service location
   (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`)** — Android requires
   an app to run a foreground service, with a persistent notification, to keep
-  receiving location updates while backgrounded. This is what shows the
+  receiving location updates while the screen is off or another app is open. This is what shows the
   ongoing "Recording your route" notification during a Run or Hike.
 - **Notifications (`POST_NOTIFICATIONS`)** — used to show that same "Recording
   your route" notification while a recording is in progress.

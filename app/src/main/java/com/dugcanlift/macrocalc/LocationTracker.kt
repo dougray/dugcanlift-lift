@@ -31,8 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * A run has to keep recording after the phone locks or the user switches
  * apps, which on Android means a foreground service with a persistent
- * notification — there is no way around that ceremony for background
- * location. [LocationRecordingService] exists purely to hold that
+ * notification. [LocationRecordingService] exists purely to hold that
  * notification and the process's foreground priority; the actual
  * `LocationManager` registration lives here, in the same process, because
  * splitting "receive location updates" and "hold the OS's attention" across
@@ -40,10 +39,15 @@ import kotlinx.coroutines.flow.asStateFlow
  * single-process app like this one.
  *
  * Permission handling is deliberately NOT this class's job beyond a plain
- * granted/not-granted check in [start]. `ACCESS_BACKGROUND_LOCATION` needs
- * its own separate runtime-permission step the OS won't let a caller combine
- * with the foreground location request — that flow belongs to the recording
- * screen (a later task), not here.
+ * granted/not-granted check in [start]; the recording screen asks for it.
+ *
+ * The app does not declare `ACCESS_BACKGROUND_LOCATION` and does not need
+ * it, on one condition: [start] must be called while the app is visible
+ * (today, only from the recording screen's Start tap). A
+ * `foregroundServiceType="location"` service started from the foreground
+ * keeps the process's "while in use" location access after the screen locks
+ * or the user leaves the app. Started from the background, the service would
+ * get no location — so never add a background entry point to [start].
  */
 class LocationTracker private constructor(context: Context) {
 

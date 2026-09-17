@@ -92,17 +92,18 @@ import kotlin.math.min
  *     (Task 4) would silently reject every fix past 50m, and COARSE fixes on
  *     Android 12+ are obfuscated well past that, so recording would run and
  *     drain battery while producing an empty route.
- *  2. `ACCESS_BACKGROUND_LOCATION`, always a separate step: the OS drops a
- *     combined request with #1 entirely. Below Android 10 it isn't a real
- *     permission (foreground implies background) so it's treated as already
- *     granted. On Android 10 the normal runtime dialog still offers "Allow
- *     all the time" directly. On Android 11+ Google removed that option from
- *     the in-app dialog, so the only way to grant it is the app's own
- *     location settings page — there is no result callback for that, so
- *     [rememberLocationPermissionRefresher] re-checks on every `ON_RESUME`
- *     instead. Declining or skipping this step does not block Start —
- *     recording still works in a degraded foreground-only mode that stops if
- *     the phone locks — it only changes the message shown.
+ *
+ * There is deliberately no second step for `ACCESS_BACKGROUND_LOCATION`, and
+ * the app does not declare it. Recording keeps going with the screen locked
+ * or another app open without it: [LocationTracker.start] runs only from the
+ * Start tap (or the permission dialog's result, which returns to this visible
+ * screen), and starts [LocationRecordingService] — a
+ * `foregroundServiceType="location"` service — right then. A location
+ * foreground service started while the app is visible keeps "while in use"
+ * access for as long as it runs. Never start a recording from anywhere the
+ * app is not on screen (a broadcast, a notification action, a restart after
+ * process death): that start would get no location at all, and fixing it by
+ * declaring background location brings back Play's declaration and video.
  */
 @Composable
 fun OutdoorRecordingScreen(
@@ -126,25 +127,15 @@ fun OutdoorRecordingScreen(
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusNeedsSettings by remember { mutableStateOf(false) }
-    var showBackgroundPrompt by remember { mutableStateOf(false) }
-    var skippedBackgroundPrompt by remember { mutableStateOf(false) }
 
     var hasFineLocation by remember { mutableStateOf(hasFineLocationPermission(context)) }
-    var hasBackgroundLocation by remember { mutableStateOf(hasBackgroundLocationPermission(context)) }
 
     fun refreshPermissions() {
         hasFineLocation = hasFineLocationPermission(context)
-        hasBackgroundLocation = hasBackgroundLocationPermission(context)
-        // The Settings-page grant flow (see requestBackgroundLocation) has no
-        // result callback, so this is the only place that finds out the user
-        // came back with background location now granted. Without clearing
-        // the prompt here, a user who does exactly what was asked is stuck on
-        // the same "Allow / Continue without it" card with no Start button.
-        if (hasBackgroundLocation) showBackgroundPrompt = false
     }
 
-    // Settings-page grants for background location have no result callback,
-    // so pick the change up whenever this screen resumes.
+    // "Open Settings" (precise location denied, or latched "don't ask again")
+    // has no result callback, so pick a grant up whenever this screen resumes.
     rememberLocationPermissionRefresher { refreshPermissions() }
 
     val isRecordingActive = startedAtEpochMs != null
@@ -155,7 +146,6 @@ fun OutdoorRecordingScreen(
     val routePoints by tracker.routePoints.collectAsState()
 
     fun startTracking() {
-        showBackgroundPrompt = false
         val started = tracker.start(selectedActivityType)
         statusNeedsSettings = false
         statusMessage = if (started) {
@@ -172,11 +162,6 @@ fun OutdoorRecordingScreen(
         val fineGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
         val coarseGranted = result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         when {
-            fineGranted && !hasBackgroundLocation && !skippedBackgroundPrompt -> {
-                statusMessage = null
-                statusNeedsSettings = false
-                showBackgroundPrompt = true
-            }
             fineGranted -> {
                 statusMessage = null
                 statusNeedsSettings = false
@@ -197,18 +182,10 @@ fun OutdoorRecordingScreen(
         }
     }
 
-    val backgroundPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) {
-        refreshPermissions()
-        startTracking()
-    }
-
     fun onStartClicked() {
         statusMessage = null
         when {
             !hasFineLocation -> requestForegroundLocation(context, foregroundPermissionLauncher)
-            !hasBackgroundLocation && !skippedBackgroundPrompt -> showBackgroundPrompt = true
             else -> startTracking()
         }
     }
@@ -252,15 +229,6 @@ fun OutdoorRecordingScreen(
             OutdoorStatRow(label = "Distance", value = liveActivity.formattedDistanceMiles())
             OutdoorStatRow(label = "Pace", value = liveActivity.formattedPace())
             OutdoorStatRow(label = "Elevation", value = liveActivity.formattedElevationGainFeet())
-            if (!hasBackgroundLocation) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Background location isn't granted — recording will stop if you lock " +
-                        "your phone or switch apps.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             if (providerDisabled) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -280,44 +248,6 @@ fun OutdoorRecordingScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         TextButton(onClick = { openAppLocationSettings(context) }) {
                             Text("Open Settings")
-                        }
-                    }
-                }
-            }
-        }
-
-        if (showBackgroundPrompt) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    val label = backgroundPermissionSettingsLabel(context)
-                    Text(
-                        // Play's prominent-disclosure wording for background location:
-                        // what is collected, that it happens when the app is closed or
-                        // not in use, and what it is for. It must come before the
-                        // system prompt, which is why it is here and not after.
-                        text = "LIFT collects location data to record your run, walk or hike " +
-                            "route even when the app is closed or not in use, for as long as " +
-                            "a recording is running. It stays on your phone." +
-                            if (label != null) {
-                                "\n\nTo allow it, choose \"$label\" for location in Settings."
-                            } else {
-                                ""
-                            },
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = {
-                            requestBackgroundLocation(context, backgroundPermissionLauncher)
-                        }) {
-                            Text("Allow")
-                        }
-                        OutlinedButton(onClick = {
-                            skippedBackgroundPrompt = true
-                            startTracking()
-                        }) {
-                            Text("Continue without it")
                         }
                     }
                 }
@@ -364,7 +294,7 @@ fun OutdoorRecordingScreen(
                     Text("Finish")
                 }
             }
-        } else if (!showBackgroundPrompt) {
+        } else {
             Button(onClick = { onStartClicked() }, modifier = Modifier.fillMaxWidth()) {
                 Text("Start ${selectedActivityType.displayName}")
             }
@@ -561,20 +491,6 @@ private fun hasFineLocationPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
         PackageManager.PERMISSION_GRANTED
 
-private fun hasBackgroundLocationPermission(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
-    return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED
-}
-
-/** Only available API 30+; null below that (no settings-redirect path exists pre-R). */
-private fun backgroundPermissionSettingsLabel(context: Context): String? =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        context.packageManager.backgroundPermissionOptionLabel?.toString()
-    } else {
-        null
-    }
-
 private fun requestForegroundLocation(
     context: Context,
     launcher: androidx.activity.result.ActivityResultLauncher<Array<String>>
@@ -589,26 +505,6 @@ private fun requestForegroundLocation(
     launcher.launch(permissions.toTypedArray())
 }
 
-/**
- * Below Android 10 there's nothing to request (foreground implies
- * background). On Android 10 exactly, the normal runtime dialog still offers
- * "Allow all the time", so [launcher] (a plain `RequestPermission` launcher)
- * works. On Android 11+ that option was removed from the in-app dialog
- * entirely, so the only way to actually grant it is the app's own location
- * settings page.
- */
-private fun requestBackgroundLocation(
-    context: Context,
-    launcher: androidx.activity.result.ActivityResultLauncher<String>
-) {
-    when {
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> Unit
-        Build.VERSION.SDK_INT == Build.VERSION_CODES.Q ->
-            launcher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        else -> openAppLocationSettings(context)
-    }
-}
-
 private fun openAppLocationSettings(context: Context) {
     context.startActivity(
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
@@ -616,8 +512,8 @@ private fun openAppLocationSettings(context: Context) {
 }
 
 /**
- * Settings-page grants for `ACCESS_BACKGROUND_LOCATION` (Android 11+, see
- * this file's top doc comment) have no `ActivityResultLauncher` callback —
+ * A location grant made on the app's Settings page (after "Open Settings")
+ * has no `ActivityResultLauncher` callback —
  * the user backs out of Settings straight back into this screen with no
  * signal beyond the activity resuming. Re-checking permission state on every
  * `ON_RESUME` is the standard pattern for that gap.
