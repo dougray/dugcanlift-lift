@@ -6,8 +6,9 @@ import org.json.JSONObject
  * Optional numbers from a stored record or a backup file.
  *
  * `JSONObject` has no nullable getters, and its fallbacks hide two traps.
- * `has(key)` is true for `"amountGrams": null` -- which LIFT web writes on every
- * food -- and `optDouble(key)` then returns NaN. And `optDouble` coerces a string,
+ * `has(key)` is true for `"amountGrams": null` -- a shape a hand-built or
+ * third-party backup can carry, even though LIFT web omits the key -- and
+ * `optDouble(key)` then returns NaN. And `optDouble` coerces a string,
  * so `"NaN"` or `"Infinity"` in a file becomes a non-finite Double. Either one is
  * stored quietly and then throws "Forbidden numeric value" the next time the
  * record is written, which is the write straight after a restore.
