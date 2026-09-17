@@ -155,6 +155,9 @@ object CoachShare {
     ): SharePayload {
         val span = store.weeks * 7
         val days = lastDays(span, nowMs)
+        // Enforced here, not only in the card: whatever a caller passes, steps
+        // from Health Connect leave the phone only with the person's opt-in.
+        val sentSteps = stepsToSend(store, steps)
         val start = days.first()
         val weights = store.bodyweights()
         // Unfinished recordings go in too; OutdoorShare skips them itself.
@@ -224,7 +227,7 @@ object CoachShare {
                 sessionName = sessionName,
                 focus = if (hasExercises) settings.focus.name else null,
                 bodyweightLb = weights[key],
-                steps = steps[key],
+                steps = sentSteps[key],
                 exercises = exercises,
                 foodTotals = foodTotals,
                 food = food,
@@ -284,6 +287,53 @@ object CoachShare {
         Meal.SNACK -> 3
     }
 
+    private fun stepsToSend(store: CoachStore, steps: Map<String, Long>): Map<String, Long> =
+        if (store.sendSteps) steps else emptyMap()
+
+    /* ---------- what the person is told before they send ---------- */
+
+    /**
+     * One sentence naming what the email carries, shown above Send to Coach so
+     * the person knows before they tap it. It follows [buildSharePayload] item
+     * for item and reads the same choices, so it cannot promise less than goes:
+     * a profile field, bodyweight or goal is named only when there is one to
+     * send, and steps only when [CoachStore.sendSteps] is on and Health Connect
+     * can supply them ([stepsAvailable]).
+     *
+     * The lifter id is left out on purpose: it is a random tag that tells the
+     * coach app two links came from the same person, and says nothing about them.
+     */
+    fun includedSummary(store: CoachStore, goal: MacroResult?, stepsAvailable: Boolean): String {
+        val items = mutableListOf<String>()
+        if (store.lifterName.isNotBlank()) items += "your name"
+        val profile = store.profile
+        val profileParts = listOfNotNull(
+            "sex".takeIf { !profile?.sex.isNullOrBlank() },
+            "age".takeIf { (profile?.age ?: 0) > 0 },
+            "height".takeIf { (profile?.heightIn ?: 0.0) > 0 }
+        )
+        if (profileParts.isNotEmpty()) items += joinWithAnd(profileParts)
+        if (store.bodyweights().isNotEmpty()) items += "bodyweight"
+        if (goal != null) items += "your calorie and macro goal"
+        items += "every workout set"
+        items += if (store.itemisedFood) "every food you logged" else "daily food totals"
+        items += "your runs, walks and hikes"
+        if (store.sendLastRoute) items += "the trimmed map of your last route"
+        if (store.sendSteps && stepsAvailable) items += "daily steps from Health Connect"
+        // Semicolons between items, because items such as "sex, age and height"
+        // carry their own commas.
+        val list = if (items.size <= 2) joinWithAnd(items)
+            else items.dropLast(1).joinToString("; ") + "; and " + items.last()
+        return "The email includes $list."
+    }
+
+    private fun joinWithAnd(items: List<String>): String = when (items.size) {
+        0 -> ""
+        1 -> items[0]
+        2 -> "${items[0]} and ${items[1]}"
+        else -> items.dropLast(1).joinToString(", ") + " and " + items.last()
+    }
+
     /* ---------- the part the coach reads without tapping ---------- */
 
     fun weekSummary(
@@ -319,7 +369,8 @@ object CoachShare {
             )
         }
 
-        val weekSteps = week.mapNotNull { steps[it] }
+        val sentSteps = stepsToSend(store, steps)
+        val weekSteps = week.mapNotNull { sentSteps[it] }
         if (weekSteps.isNotEmpty()) {
             lines.add("Steps      ${formatNumber((weekSteps.sum() / weekSteps.size).toInt())} a day" +
                 "  over ${weekSteps.size} day${if (weekSteps.size == 1) "" else "s"}")
