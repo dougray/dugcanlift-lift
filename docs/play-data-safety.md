@@ -178,9 +178,10 @@ This is now the text of the in-app prompt shown before the system asks
 
 - **A Play Console developer account** (one-time fee, identity verification) and
   the app created in it.
-- **An Android App Bundle.** `release.yml` builds and publishes an APK
-  (`./gradlew :app:assembleRelease`, `lift-android.apk`); Play requires an AAB
-  (`bundleRelease`) for new apps.
+- ~~**An Android App Bundle.**~~ Done: `release.yml` builds `bundleRelease`
+  alongside the APK, checks both carry the release certificate, and attaches
+  `lift-android.aab` to the GitHub Release next to `lift-android.apk`. That
+  `.aab` is the file to upload to Play.
 - **Play App Signing enrolment**, and a decision about the upload key versus the
   existing release key, whose fingerprint `release.yml` and the site's
   `.well-known/assetlinks.json` both pin. Enrolling changes the signing
