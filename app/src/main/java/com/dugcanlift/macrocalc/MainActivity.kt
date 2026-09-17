@@ -28,7 +28,6 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -48,6 +47,9 @@ import com.dugcanlift.macrocalc.ui.theme.DugCanLiftCalcTheme
 class MainActivity : ComponentActivity() {
     private val pendingPlan = mutableStateOf<PlanDecodeResult?>(null)
 
+    /** Reads a plan link once, so a recreation never asks about it again. */
+    private val planLinks = PlanLinkPrompt()
+
     // A plain property (not a delegated `by`) so `onNewIntent` can update it
     // directly — `AppTabs` observes it via `State<Int?>` and re-selects the
     // tab on every change, not just on the initial composition. Without
@@ -61,12 +63,15 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handlePlanIntent(intent)
-        // Lets the ongoing route-recording notification (LocationRecordingService)
-        // bring the user back to the Train tab instead of leaving a live
-        // recording with no way back into its UI — see M-22 in the
-        // final-review fix wave.
-        pendingOpenTab.value = extractOpenTab(intent)
+        planLinks.onCreate(intent, savedInstanceState)?.let(::askAboutPlan)
+        if (savedInstanceState == null) {
+            // Lets the ongoing route-recording notification (LocationRecordingService)
+            // bring the user back to the Train tab instead of leaving a live
+            // recording with no way back into its UI — see M-22 in the
+            // final-review fix wave. Once only, for the same reason: a recreation
+            // must not pull the person back to Train from wherever they went.
+            pendingOpenTab.value = extractOpenTab(intent)
+        }
         setContent {
             DugCanLiftCalcTheme {
                 // Status and navigation bar icons follow the appearance actually
@@ -87,6 +92,9 @@ class MainActivity : ComponentActivity() {
                         AppTabs(
                             modifier = Modifier.padding(innerPadding),
                             pendingPlan = pendingPlan,
+                            onPlanDismissed = ::dismissPlan,
+                            // Accepted: the dialog stays up to say so, but the link is answered.
+                            onPlanImported = planLinks::answered,
                             openTab = pendingOpenTab
                         )
                     }
@@ -100,15 +108,24 @@ class MainActivity : ComponentActivity() {
         // Keep getIntent()/this.intent current for any other code in this Activity that reads it —
         // without this it would keep returning the intent the Activity was originally launched with.
         setIntent(intent)
-        handlePlanIntent(intent)
+        planLinks.onNewIntent(intent)?.let(::askAboutPlan)
         pendingOpenTab.value = extractOpenTab(intent)
     }
 
-    private fun handlePlanIntent(intent: Intent?) {
-        val uri = intent?.data ?: return
-        val fragment = uri.fragment ?: return
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        planLinks.save(outState)
+    }
+
+    private fun askAboutPlan(fragment: String) {
         val lifterId = CoachStore.get(this).lifterId
         pendingPlan.value = PlanLinkCodec.decode(fragment, lifterId)
+    }
+
+    /** The plan dialog closed: declined, dismissed, or Done after importing. */
+    private fun dismissPlan() {
+        planLinks.answered()
+        pendingPlan.value = null
     }
 
     private fun extractOpenTab(intent: Intent?): Int? =
@@ -126,7 +143,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppTabs(
     modifier: Modifier = Modifier,
-    pendingPlan: MutableState<PlanDecodeResult?>,
+    pendingPlan: State<PlanDecodeResult?>,
+    onPlanDismissed: () -> Unit,
+    onPlanImported: () -> Unit,
     openTab: State<Int?> = remember { mutableStateOf(null) }
 ) {
     val context = LocalContext.current
@@ -150,7 +169,7 @@ private fun AppTabs(
     BackHandler(enabled = showCalculator) { showCalculator = false }
 
     pendingPlan.value?.let { result ->
-        PlanPreviewDialog(result = result, onDismiss = { pendingPlan.value = null })
+        PlanPreviewDialog(result = result, onDismiss = onPlanDismissed, onImported = onPlanImported)
     }
 
     val titles = listOf("Home", "Food", "Cook", "Train")
