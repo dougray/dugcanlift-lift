@@ -1,4 +1,4 @@
-LIFT is a nutrition and training tracker that works offline and keeps your data on your phone. No accounts, no ads, no analytics, no cloud sync.
+LIFT is a nutrition and training tracker that keeps your data on your phone. No accounts, no ads, no analytics, no cloud sync. Everything except food search works offline.
 
 DASHBOARD
 Opens on today: calories and macros against your goal, steps against a daily goal, what you've trained and what you've eaten. Below that, a week of stats and charts, and per-exercise progression showing your top weight and estimated one-rep max over your last ten sessions of any lift. Days you didn't log show as gaps, not zeros. Choose System, Light or Dark appearance.
@@ -19,12 +19,14 @@ OUTDOOR
 Record a run, walk or hike with GPS: time, distance, pace, elevation gain and the route, drawn as you go. Recording continues with the screen off, with a notification while it does. Review a finished activity and export it to Health Connect with its route. See your last route and personal bests for each activity type.
 
 COACH
-Send to Coach writes an email in your own email app with your log in a link: 4, 8 or 12 weeks or 6 months, daily food totals or every item, and your runs, walks and hikes. Your last route goes only if you turn it on, with its first and last 200 m cut off. A coach's plan link opens in the app to preview, then accept or decline.
+Send to Coach writes an email in your own email app with your log in a link: 4, 8 or 12 weeks or 6 months, daily food totals or every item, and your runs, walks and hikes. The card lists what the email includes before you send. Your daily steps from Health Connect and your last route go only if you turn them on, the route with its first and last 200 m cut off. A coach's plan link opens in the app to preview, then accept or decline.
 
 YOUR DATA
 Save a backup file - food, training, recipes, meal plan, and outdoor history with full GPS routes - wherever you choose, and restore it on this phone or another. Restoring only adds what the phone doesn't already have.
 
 PRIVACY
-Nothing leaves your phone unless you use a feature that sends it: a food search term or barcode goes to Open Food Facts when you search, and Send to Coach hands your log to your own email app. Full privacy policy at dugcanlift.com/app/privacy.
+Nothing leaves your phone unless you use a feature that sends it: a food search term or barcode goes to Open Food Facts when you search, Send to Coach hands your log to your own email app, and Export to Health Connect saves an activity to Health Connect on this phone. Full privacy policy at dugcanlift.com/app/privacy.
+
+LIFT is not a medical device and does not diagnose, treat, cure or prevent any medical condition. Talk to a doctor or dietitian before making big changes to how you eat or train.
 
 Licensed under the GNU Affero General Public License v3.0.

@@ -142,3 +142,23 @@ To check on the one phone AVD: `adb shell wm size 2560x1600 && adb shell wm dens
 320` (tablet landscape), `1600x2560` (portrait), `1767x2208` / `2208x1767` at 420
 (foldable inner, portrait and landscape), then **always** `wm size reset` and
 `wm density reset`.
+
+## Health Connect consent
+
+Health Connect asks for a prominent in-app disclosure before its permission
+sheet, and allows its data to reach a third party only with explicit consent.
+
+- **Nothing opens the steps permission sheet on its own.** The Steps card on
+  Home explains what LIFT reads and why (`StepsAccessExplanation`) and its
+  button is what asks. The first-launch auto-prompt is gone; do not bring it
+  back.
+- **Steps go to a coach only when `CoachStore.sendSteps` is on**, off by
+  default. `CoachShare.buildSharePayload` and `weekSummary` enforce it whatever a
+  caller passes, and the card does not even read step history while it is off.
+- **The Coach card says what the email includes before Send**
+  (`CoachShare.includedSummary`), from the same stores and choices the encoder
+  reads. A new field in the payload needs a line there too.
+  `CoachShareStepsTest` pins both rules.
+- `PermissionsRationaleActivity` (and its Android 14 `VIEW_PERMISSION_USAGE`
+  alias) opens the privacy policy the Play listing names;
+  `HealthConnectRationaleManifestTest` pins the manifest side.
