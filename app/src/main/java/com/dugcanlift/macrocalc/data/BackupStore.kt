@@ -183,11 +183,11 @@ object BackupStore {
         if (goals.get() == null) {
             data.optJSONObject("goal")?.let {
                 goals.save(MacroResult(
-                    calories = it.optInt("calories"),
-                    proteinG = it.optInt("proteinG"),
-                    fatG = it.optInt("fatG"),
-                    carbsG = it.optInt("carbsG"),
-                    fiberG = it.optInt("fiberG")))
+                    calories = it.finiteInt("calories", 0),
+                    proteinG = it.finiteInt("proteinG", 0),
+                    fatG = it.finiteInt("fatG", 0),
+                    carbsG = it.finiteInt("carbsG", 0),
+                    fiberG = it.finiteInt("fiberG", 0)))
             }
         }
 
@@ -202,16 +202,19 @@ object BackupStore {
             data.optJSONObject("profile")?.let {
                 coach.profile = LifterProfile(
                     sex = it.optString("sex"),
-                    age = it.optInt("age"),
-                    heightIn = it.optDouble("heightIn"))
+                    age = it.finiteInt("age", 0),
+                    heightIn = it.finiteDouble("heightIn", 0.0))
             }
         }
 
         data.optJSONObject("weights")?.let { incoming ->
             val existing = coach.bodyweights()
             incoming.keys().forEach { date ->
-                if (!existing.containsKey(date)) {
-                    coach.recordBodyweight(incoming.optDouble(date), date)
+                // A null or non-finite weigh-in is not a reading. Recording it
+                // would store NaN, and the next weigh-in's write would throw.
+                val lb = incoming.finiteDoubleOrNull(date)
+                if (lb != null && !existing.containsKey(date)) {
+                    coach.recordBodyweight(lb, date)
                 }
             }
         }
