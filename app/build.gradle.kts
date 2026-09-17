@@ -97,6 +97,14 @@ dependencies {
     // from this artifact, not lifecycle-runtime-ktx.
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.health.connect.client)
+    constraints {
+        // Health Connect 1.1.0 brings Guava 31.1, which has two temp-directory
+        // advisories (CVE-2020-8908, CVE-2023-2976) fixed in 32.0.0. LIFT never
+        // calls Guava itself; this only raises the version Health Connect gets.
+        implementation(libs.guava) {
+            because("Guava before 32.0.0: CVE-2020-8908, CVE-2023-2976")
+        }
+    }
     implementation("com.github.dougray:dugcanlift-kit-android:1.4.0")
     testImplementation(libs.junit)
     testImplementation(libs.json)
