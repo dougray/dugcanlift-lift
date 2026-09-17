@@ -32,10 +32,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
+import com.dugcanlift.macrocalc.ui.adaptive.rememberMovablePart
+import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -74,7 +78,7 @@ fun TodayScreen(
 
     val allEntries by repo.entries.collectAsState()
 
-    var selectedDate by remember { mutableStateOf(todayKey()) }
+    var selectedDate by rememberSaveable { mutableStateOf(todayKey()) }
     val entries = allEntries.forDate(selectedDate)
     val eaten = entries.totals()
     val detailRows = NutrientDetailsText.dayRows(entries)
@@ -88,24 +92,16 @@ fun TodayScreen(
             .take(10)
     }
 
-    var panel by remember { mutableStateOf(Panel.NONE) }
+    // Saveable, and the entry being edited by id, so an open form outlives the activity being
+    // recreated (a density or theme change; rotation and resizing do not recreate it).
+    var panel by rememberSaveable { mutableStateOf(Panel.NONE) }
     var prefill by remember { mutableStateOf<FoodEntry?>(null) }
-    var editing by remember { mutableStateOf<FoodEntry?>(null) }
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editing = editingId?.let { id -> allEntries.firstOrNull { it.id == id } }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        DateNavigator(
-            date = selectedDate,
-            onPrevious = { selectedDate = shiftDate(selectedDate, -1) },
-            onNext = { selectedDate = shiftDate(selectedDate, 1) }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
+    // Each part once, placed by width: one column exactly as on the phone, or the day's totals and
+    // the add/edit forms beside the meal list once two phone-width panes fit (ui/adaptive).
+    val summary: @Composable () -> Unit = rememberMovablePart {
         if (goal == null) {
             Text(
                 text = "Set a goal on the Calculator tab and it'll show up here.",
@@ -120,10 +116,10 @@ fun TodayScreen(
             }
         } else {
             SummaryCard(goal = goal, eaten = eaten, detailRows = detailRows)
-        }
+    }
+    }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
+    val panelArea: @Composable () -> Unit = rememberMovablePart {
         val editingEntry = editing
         if (panel == Panel.EDIT && editingEntry != null) {
             EditFoodForm(
@@ -131,11 +127,11 @@ fun TodayScreen(
                 onSave = { updated ->
                     scope.launch { repo.update(updated) }
                     panel = Panel.NONE
-                    editing = null
+                    editingId = null
                 },
                 onCancel = {
                     panel = Panel.NONE
-                    editing = null
+                    editingId = null
                 }
             )
         } else if (panel == Panel.FORM) {
@@ -215,10 +211,10 @@ fun TodayScreen(
                     }
                 }
             }
-        }
+    }
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
+    val mealList: @Composable () -> Unit = rememberMovablePart {
         if (entries.isEmpty()) {
             Text(
                 text = "Nothing logged on this day.",
@@ -255,12 +251,12 @@ fun TodayScreen(
                     EntryRow(
                         entry = entry,
                         onEdit = {
-                            editing = entry
+                            editingId = entry.id
                             panel = Panel.EDIT
                         },
                         onDelete = {
-                            if (editing?.id == entry.id) {
-                                editing = null
+                            if (editingId == entry.id) {
+                                editingId = null
                                 panel = Panel.NONE
                             }
                             scope.launch { repo.delete(entry.id) }
@@ -270,9 +266,46 @@ fun TodayScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
             }
-        }
+    }
+    }
 
-        Spacer(modifier = Modifier.height(32.dp))
+    MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
+        val twoPane = AdaptiveLayout.foodIsTwoPane(AdaptiveLayout.contentWidth(paneWidth))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AdaptiveLayout.sideGutter(paneWidth).dp, vertical = 16.dp)
+        ) {
+            DateNavigator(
+                date = selectedDate,
+                onPrevious = { selectedDate = shiftDate(selectedDate, -1) },
+                onNext = { selectedDate = shiftDate(selectedDate, 1) }
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            if (!twoPane) {
+                summary()
+                Spacer(modifier = Modifier.height(20.dp))
+                panelArea()
+                Spacer(modifier = Modifier.height(24.dp))
+                mealList()
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(AdaptiveLayout.PANE_GAP_DP.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        summary()
+                        Spacer(modifier = Modifier.height(20.dp))
+                        panelArea()
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        mealList()
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
     }
 }
 
@@ -437,33 +470,33 @@ private fun AddFoodForm(
     // fields rather than keeping the previous one's numbers.
     val context = LocalContext.current
     val settingsStore = remember { SettingsStore.get(context) }
-    var unit by remember { mutableStateOf(settingsStore.servingUnit) }
+    var unit by rememberSaveable { mutableStateOf(settingsStore.servingUnit) }
 
-    var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
+    var name by rememberSaveable(initial) { mutableStateOf(initial?.name ?: "") }
 
     // Food is logged by weight. Servings is gone as something you type; the
     // amount is a real weight in the person's own unit, and grams are what
     // gets stored. Entries logged before this keep their old multiplier.
-    var amount by remember(initial, unit) {
+    var amount by rememberSaveable(initial, unit) {
         mutableStateOf(trimAmount(unit.fromGrams(100.0)))
     }
-    var calories by remember(initial) { mutableStateOf(initial?.calories?.toString() ?: "") }
-    var protein by remember(initial) { mutableStateOf(initial?.proteinG?.toString() ?: "") }
-    var fat by remember(initial) { mutableStateOf(initial?.fatG?.toString() ?: "") }
-    var carbs by remember(initial) { mutableStateOf(initial?.carbsG?.toString() ?: "") }
-    var fiber by remember(initial) { mutableStateOf(initial?.fiberG?.toString() ?: "") }
+    var calories by rememberSaveable(initial) { mutableStateOf(initial?.calories?.toString() ?: "") }
+    var protein by rememberSaveable(initial) { mutableStateOf(initial?.proteinG?.toString() ?: "") }
+    var fat by rememberSaveable(initial) { mutableStateOf(initial?.fatG?.toString() ?: "") }
+    var carbs by rememberSaveable(initial) { mutableStateOf(initial?.carbsG?.toString() ?: "") }
+    var fiber by rememberSaveable(initial) { mutableStateOf(initial?.fiberG?.toString() ?: "") }
     // Per 100 g, like the macros above. Blank is not recorded, never zero.
-    var saturatedFat by remember(initial) { mutableStateOf("") }
-    var sugar by remember(initial) { mutableStateOf("") }
-    var sodium by remember(initial) { mutableStateOf("") }
-    var moreNutrients by remember(initial) { mutableStateOf(false) }
+    var saturatedFat by rememberSaveable(initial) { mutableStateOf("") }
+    var sugar by rememberSaveable(initial) { mutableStateOf("") }
+    var sodium by rememberSaveable(initial) { mutableStateOf("") }
+    var moreNutrients by rememberSaveable(initial) { mutableStateOf(false) }
     val per100Details = NutrientDetails(
         NutrientDetailsText.parse(saturatedFat), NutrientDetailsText.parse(sugar), NutrientDetailsText.parse(sodium)
     )
 
     // Defaults to whatever meal it currently is, so most of the time nobody
     // has to touch this.
-    var meal by remember(initial) {
+    var meal by rememberSaveable(initial) {
         mutableStateOf(
             mealForHour(
                 java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)

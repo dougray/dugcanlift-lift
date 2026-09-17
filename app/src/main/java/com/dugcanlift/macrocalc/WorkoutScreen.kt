@@ -36,6 +36,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
+import com.dugcanlift.macrocalc.ui.adaptive.rememberMovablePart
+import com.dugcanlift.macrocalc.ui.adaptive.GridRow
+import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
+import com.dugcanlift.macrocalc.ui.adaptive.rowMajor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -104,7 +111,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val scheduledSessions by scheduledSessionRepo.sessions.collectAsState()
     val outdoorActivities by outdoorRepo.activities.collectAsState()
 
-    var selectedDate by remember { mutableStateOf(todayKey()) }
+    var selectedDate by rememberSaveable { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
 
     // Full-screen takeovers for recording/reviewing a Run or Hike, following the
@@ -201,20 +208,9 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         outdoorActivities.sortedByDescending { it.startedAtEpochMs }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        WorkoutDateNavigator(
-            date = selectedDate,
-            onPrevious = { selectedDate = shiftWorkoutDate(selectedDate, -1) },
-            onNext = { selectedDate = shiftWorkoutDate(selectedDate, 1) }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+    // Each part once, placed by width: one column exactly as on the phone, or the day's lifting
+    // beside Outdoor once two phone-width panes fit, with routines as a card grid below both.
+    val focusBlock: @Composable () -> Unit = rememberMovablePart {
         Text(text = "Focus", style = MaterialTheme.typography.labelLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -232,9 +228,9 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 )
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
+    val scheduledBlock: @Composable () -> Unit = rememberMovablePart {
         scheduledSessions.onDate(selectedDate).forEach { session ->
             val scheduledRoutine = routines.firstOrNull { it.id == session.routineId }
             Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), border = dclCardBorder()) {
@@ -255,7 +251,9 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
+    }
 
+    val outdoorBlock: @Composable () -> Unit = rememberMovablePart {
         Text(text = "Outdoor", style = MaterialTheme.typography.labelLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -295,15 +293,17 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    val highlightsBlock: @Composable (sideBySide: Boolean) -> Unit = { sideBySide ->
         OutdoorHighlights(
             activities = outdoorActivities,
-            onOpen = { reviewingActivityId = it.id }
+            onOpen = { reviewingActivityId = it.id },
+            sideBySide = sideBySide
         )
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
+    val routinesBlock: @Composable (cardColumns: Int) -> Unit = { cardColumns ->
         if (routines.isNotEmpty()) {
             Text(text = "Routines", style = MaterialTheme.typography.labelLarge)
             Spacer(modifier = Modifier.height(8.dp))
@@ -315,15 +315,26 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                list.forEach { routine ->
+                val routineCard: @Composable (Routine, Modifier) -> Unit = { routine, cardModifier ->
                     RoutineCard(
                         routine = routine,
+                        modifier = cardModifier,
                         onStart = {
                             scope.launch { workouts.save(routine.toSession(selectedDate)) }
                         },
                         onDelete = { scope.launch { routineRepo.delete(routine.id) } }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                if (cardColumns == 1) {
+                    list.forEach { routine ->
+                        routineCard(routine, Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                } else {
+                    rowMajor(list, cardColumns).forEach { row ->
+                        GridRow(cells = row, columns = cardColumns) { routineCard(it, Modifier.fillMaxSize()) }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                 }
             }
 
@@ -352,21 +363,34 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                list.forEach { starter ->
+                val starterCard: @Composable (Routine, Modifier) -> Unit = { starter, cardModifier ->
                     StarterSplitCard(
                         routine = starter,
+                        modifier = cardModifier,
                         // Copied, not referenced: from here on it is an
                         // ordinary routine of theirs, editable and deletable,
                         // and nothing about it stays special.
                         onAdd = { scope.launch { routineRepo.save(starter) } }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                if (cardColumns == 1) {
+                    list.forEach { starter ->
+                        starterCard(starter, Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                } else {
+                    rowMajor(list, cardColumns).forEach { row ->
+                        GridRow(cells = row, columns = cardColumns) { starterCard(it, Modifier.fillMaxSize()) }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
         }
+    }
 
+    val sessionsBlock: @Composable () -> Unit = rememberMovablePart {
         daysSessions.forEach { session ->
             SessionCard(
                 session = session,
@@ -389,8 +413,55 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         ) {
             Text(if (daysSessions.isEmpty()) "Start empty workout" else "Add another workout")
         }
+    }
 
-        Spacer(modifier = Modifier.height(32.dp))
+    MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
+        val contentWidth = AdaptiveLayout.contentWidth(paneWidth)
+        val twoPane = AdaptiveLayout.trainIsTwoPane(contentWidth)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AdaptiveLayout.sideGutter(paneWidth).dp, vertical = 16.dp)
+        ) {
+            WorkoutDateNavigator(
+                date = selectedDate,
+                onPrevious = { selectedDate = shiftWorkoutDate(selectedDate, -1) },
+                onNext = { selectedDate = shiftWorkoutDate(selectedDate, 1) }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (!twoPane) {
+                focusBlock()
+                Spacer(modifier = Modifier.height(24.dp))
+                scheduledBlock()
+                outdoorBlock()
+                Spacer(modifier = Modifier.height(16.dp))
+                highlightsBlock(false)
+                Spacer(modifier = Modifier.height(24.dp))
+                routinesBlock(1)
+                sessionsBlock()
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(AdaptiveLayout.PANE_GAP_DP.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        focusBlock()
+                        Spacer(modifier = Modifier.height(24.dp))
+                        scheduledBlock()
+                        sessionsBlock()
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        outdoorBlock()
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                highlightsBlock(true)
+                Spacer(modifier = Modifier.height(24.dp))
+                routinesBlock(AdaptiveLayout.cardColumns(contentWidth))
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
     }
 }
 
@@ -398,9 +469,10 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 private fun RoutineCard(
     routine: Routine,
     onStart: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth()
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+    Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
             if (routine.preview.isNotBlank()) {
@@ -431,14 +503,49 @@ private fun RoutineCard(
 @Composable
 private fun OutdoorHighlights(
     activities: List<OutdoorActivity>,
-    onOpen: (OutdoorActivity) -> Unit
+    onOpen: (OutdoorActivity) -> Unit,
+    /**
+     * Last route beside Personal bests, across the width under Train's two panes, with the map
+     * drawn larger than a phone's. False is the phone's stack.
+     */
+    sideBySide: Boolean = false
 ) {
     val last = remember(activities) { OutdoorRecords.lastRoute(activities) }
     val bests = remember(activities) { OutdoorRecords.bests(activities) }
 
-    if (last != null) {
+    val bestsCard: @Composable (Modifier) -> Unit = { cardModifier ->
+        Card(modifier = cardModifier, border = dclCardBorder()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Personal bests", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                if (bests.isEmpty()) {
+                    Text(
+                        "Your last route and your best distance, time and pace show up here after your first run, walk or hike.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                bests.forEachIndexed { index, best ->
+                    if (index > 0) Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        "${best.type.displayName} · ${best.count} " + if (best.count == 1) "activity" else "activities",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        OutdoorStat("Farthest", best.longestDistanceMeters?.let(OutdoorRecords::distanceText) ?: "—")
+                        OutdoorStat("Longest", best.longestDurationMs?.let(OutdoorRecords::durationText) ?: "—")
+                        OutdoorStat("Fastest pace", best.fastestPaceSecondsPerMeter?.let(OutdoorRecords::paceText) ?: "—")
+                    }
+                }
+            }
+        }
+    }
+
+    val lastCard: @Composable (OutdoorActivity, Modifier) -> Unit = { last, cardModifier ->
         Card(
-            modifier = Modifier.fillMaxWidth().clickable { onOpen(last) },
+            modifier = cardModifier.clickable { onOpen(last) },
             border = dclCardBorder()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -448,7 +555,7 @@ private fun OutdoorHighlights(
                 RoutePolylineCanvas(
                     routePoints = last.routePoints,
                     modifier = Modifier.fillMaxWidth(),
-                    aspectRatio = 2f
+                    aspectRatio = if (sideBySide) 1.6f else 2f
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -468,35 +575,22 @@ private fun OutdoorHighlights(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(16.dp))
     }
 
-    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Personal bests", style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(8.dp))
-            if (bests.isEmpty()) {
-                Text(
-                    "Your last route and your best distance, time and pace show up here after your first run, walk or hike.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            bests.forEachIndexed { index, best ->
-                if (index > 0) Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    "${best.type.displayName} · ${best.count} " + if (best.count == 1) "activity" else "activities",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    OutdoorStat("Farthest", best.longestDistanceMeters?.let(OutdoorRecords::distanceText) ?: "—")
-                    OutdoorStat("Longest", best.longestDurationMs?.let(OutdoorRecords::durationText) ?: "—")
-                    OutdoorStat("Fastest pace", best.fastestPaceSecondsPerMeter?.let(OutdoorRecords::paceText) ?: "—")
-                }
-            }
+    if (last != null && sideBySide) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(AdaptiveLayout.PANE_GAP_DP.dp)
+        ) {
+            lastCard(last, Modifier.weight(1f).fillMaxHeight())
+            bestsCard(Modifier.weight(1f).fillMaxHeight())
         }
+    } else {
+        if (last != null) {
+            lastCard(last, Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        bestsCard(Modifier.fillMaxWidth())
     }
 }
 
@@ -560,11 +654,11 @@ private fun SessionCard(
     onDelete: () -> Unit,
     onSaveAsRoutine: (String, String) -> Unit
 ) {
-    var addingExercise by remember(session.id) { mutableStateOf(false) }
+    var addingExercise by rememberSaveable(session.id) { mutableStateOf(false) }
 
-    var savingRoutine by remember(session.id) { mutableStateOf(false) }
-    var routineName by remember(session.id) { mutableStateOf("") }
-    var routineFolder by remember(session.id) { mutableStateOf("") }
+    var savingRoutine by rememberSaveable(session.id) { mutableStateOf(false) }
+    var routineName by rememberSaveable(session.id) { mutableStateOf("") }
+    var routineFolder by rememberSaveable(session.id) { mutableStateOf("") }
 
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -682,7 +776,7 @@ private fun ExerciseBlock(
     onChange: (LoggedExercise) -> Unit,
     onRemove: () -> Unit
 ) {
-    var addingSet by remember(exercise.id) { mutableStateOf(false) }
+    var addingSet by rememberSaveable(exercise.id) { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -756,15 +850,15 @@ private fun SetForm(
     onAdd: (WorkoutSet) -> Unit,
     onCancel: () -> Unit
 ) {
-    var weight by remember { mutableStateOf(previousSet?.weightLb?.trimZero() ?: "") }
+    var weight by rememberSaveable { mutableStateOf(previousSet?.weightLb?.trimZero() ?: "") }
     // The set before is the best guess there is; the focus only has to answer
     // for the first one, where 5 and 10 are different training decisions.
-    var reps by remember {
+    var reps by rememberSaveable {
         mutableStateOf(previousSet?.reps?.toString() ?: focus.defaultReps?.toString() ?: "")
     }
-    var rpe by remember { mutableStateOf("") }
-    var time by remember { mutableStateOf("") }
-    var distance by remember { mutableStateOf(previousSet?.distanceMeters?.trimZero() ?: "") }
+    var rpe by rememberSaveable { mutableStateOf("") }
+    var time by rememberSaveable { mutableStateOf("") }
+    var distance by rememberSaveable { mutableStateOf(previousSet?.distanceMeters?.trimZero() ?: "") }
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         if (focus.showWeight) {
@@ -900,9 +994,10 @@ private fun WorkoutDateNavigator(
 @Composable
 private fun StarterSplitCard(
     routine: Routine,
-    onAdd: () -> Unit
+    onAdd: () -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth()
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+    Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(4.dp))
