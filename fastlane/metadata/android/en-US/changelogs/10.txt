@@ -1,0 +1,7 @@
+LIFT now uses the whole screen on tablets, foldables and in split screen: two columns of cards on Home, your day's food beside the totals, the week's meal plan as seven columns, and your workout beside your runs and walks. Phones look the same as before, and turning a phone sideways now gets the wider layout too.
+
+Recording a route no longer asks for "Allow all the time" location. A recording still carries on with the screen locked, because it runs as a foreground service.
+
+Steps from Health Connect are now explained before LIFT asks for them, and sending them to your coach is a choice. Send to Coach lists exactly what the email will include before you send it.
+
+Restoring a backup written by LIFT on the web no longer fails, and the shopping list rounds its amounts.
