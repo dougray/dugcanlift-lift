@@ -6,6 +6,8 @@ import com.dugcanlift.kit.RecipeNutrition
 import com.dugcanlift.kit.trimZeros
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.UUID
 
 /**
@@ -236,9 +238,28 @@ fun Map<String, Double>.shoppingAmountLabel(): String =
     entries
         .sortedBy { it.key }
         .joinToString(" + ") { (unit, value) ->
-            if (unit == IngredientParser.COUNT_UNIT) value.trimZeros()
-            else "${value.trimZeros()} $unit"
+            if (unit == IngredientParser.COUNT_UNIT) value.cookDisplay()
+            else "${value.cookDisplay()} $unit"
         }
+
+/**
+ * A computed Cook amount for a screen: at most two decimals, trailing zeros
+ * dropped. LIFT web's `trimNum` exactly (`coach/parser.js` carries the same
+ * rule), so the two builds print the same list.
+ *
+ * Scaling a recipe by planned servings rarely divides evenly -- 1 serving of a
+ * 3-serving recipe with 5 eggs is 1.6666666666666665 of them -- and the kit's
+ * [trimZeros] prints a fraction exactly as the Double holds it. Display only:
+ * the amount itself is never rounded, so adding lines together stays exact.
+ */
+fun Double.cookDisplay(): String {
+    if (!isFinite()) return toString()
+    val rounded = BigDecimal.valueOf(this).setScale(2, RoundingMode.HALF_UP)
+    // Zero is checked apart: stripTrailingZeros has left "0.00" as it was on
+    // some runtimes.
+    if (rounded.signum() == 0) return "0"
+    return rounded.stripTrailingZeros().toPlainString()
+}
 
 /* ---------- editing ---------- */
 
