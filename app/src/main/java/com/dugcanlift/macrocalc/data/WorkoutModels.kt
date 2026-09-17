@@ -137,11 +137,11 @@ internal fun WorkoutSet.toJson(): JSONObject = JSONObject().apply {
 
 internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
     id = o.optString("id", UUID.randomUUID().toString()),
-    weightLb = o.optDoubleOrNull("weightLb"),
-    reps = o.optIntOrNull("reps"),
-    rpe = o.optDoubleOrNull("rpe"),
-    durationSec = o.optIntOrNull("durationSec"),
-    distanceMeters = o.optDoubleOrNull("distanceMeters")
+    weightLb = o.finiteDoubleOrNull("weightLb"),
+    reps = o.finiteIntOrNull("reps"),
+    rpe = o.finiteDoubleOrNull("rpe"),
+    durationSec = o.finiteIntOrNull("durationSec"),
+    distanceMeters = o.finiteDoubleOrNull("distanceMeters")
 )
 
 internal fun LoggedExercise.toJson(): JSONObject = JSONObject().apply {
@@ -186,16 +186,6 @@ internal fun workoutSessionFromJson(o: JSONObject): WorkoutSession {
         name = o.optString("name", ""),
         note = o.optString("note", ""),
         exercises = exercises,
-        startedAt = o.optLong("startedAt", 0L)
+        startedAt = o.finiteLong("startedAt", 0L)
     )
 }
-
-/**
- * JSONObject has no nullable getters — optInt returns 0 for a missing key,
- * which would turn "no reps recorded" into "zero reps". These preserve null.
- */
-private fun JSONObject.optDoubleOrNull(key: String): Double? =
-    if (has(key) && !isNull(key)) optDouble(key).takeIf { !it.isNaN() } else null
-
-private fun JSONObject.optIntOrNull(key: String): Int? =
-    if (has(key) && !isNull(key)) optInt(key) else null

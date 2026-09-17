@@ -62,25 +62,23 @@ internal fun outdoorActivityFromJson(o: JSONObject): OutdoorActivity {
         (0 until pointsArray.length()).mapNotNull { i ->
             val p = pointsArray.optJSONObject(i) ?: return@mapNotNull null
             RoutePoint(
-                latitude = p.optDouble("latitude", 0.0),
-                longitude = p.optDouble("longitude", 0.0),
-                altitudeMeters = p.optDouble("altitudeMeters", 0.0),
-                recordedAtEpochMs = p.optLong("recordedAtEpochMs", 0L),
-                horizontalAccuracyMeters = p.optDouble("horizontalAccuracyMeters", 0.0),
-                verticalAccuracyMeters = p.optDouble("verticalAccuracyMeters", 0.0)
+                latitude = p.finiteDouble("latitude", 0.0),
+                longitude = p.finiteDouble("longitude", 0.0),
+                altitudeMeters = p.finiteDouble("altitudeMeters", 0.0),
+                recordedAtEpochMs = p.finiteLong("recordedAtEpochMs", 0L),
+                horizontalAccuracyMeters = p.finiteDouble("horizontalAccuracyMeters", 0.0),
+                verticalAccuracyMeters = p.finiteDouble("verticalAccuracyMeters", 0.0)
             )
         }
     return OutdoorActivity(
         id = o.optString("id", UUID.randomUUID().toString()),
         activityType = runCatching { OutdoorActivityType.valueOf(o.optString("activityType", "RUN")) }
             .getOrDefault(OutdoorActivityType.RUN),
-        startedAtEpochMs = o.optLong("startedAtEpochMs", 0L),
-        endedAtEpochMs = if (o.has("endedAtEpochMs") && !o.isNull("endedAtEpochMs"))
-            o.optLong("endedAtEpochMs") else null,
-        distanceMeters = o.optDouble("distanceMeters", 0.0),
-        elevationGainMeters = o.optDouble("elevationGainMeters", 0.0),
-        activeCalories = if (o.has("activeCalories") && !o.isNull("activeCalories"))
-            o.optDouble("activeCalories") else null,
+        startedAtEpochMs = o.finiteLong("startedAtEpochMs", 0L),
+        endedAtEpochMs = o.finiteLongOrNull("endedAtEpochMs"),
+        distanceMeters = o.finiteDouble("distanceMeters", 0.0),
+        elevationGainMeters = o.finiteDouble("elevationGainMeters", 0.0),
+        activeCalories = o.finiteDoubleOrNull("activeCalories"),
         routePoints = points,
         healthConnectRecordId = if (o.has("healthConnectRecordId") && !o.isNull("healthConnectRecordId"))
             o.optString("healthConnectRecordId") else null

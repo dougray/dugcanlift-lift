@@ -88,8 +88,8 @@ class CoachStore private constructor(context: Context) {
                 val o = JSONObject(raw)
                 LifterProfile(
                     sex = o.optString("sex", ""),
-                    age = o.optInt("age", 0),
-                    heightIn = o.optDouble("heightIn", 0.0)
+                    age = o.finiteInt("age", 0),
+                    heightIn = o.finiteDouble("heightIn", 0.0)
                 )
             } catch (e: Exception) {
                 null
