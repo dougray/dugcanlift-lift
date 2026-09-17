@@ -2,13 +2,10 @@ package com.dugcanlift.macrocalc
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -89,74 +86,68 @@ fun OutdoorReviewScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(text = currentActivity.activityType.displayName, style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
+    RouteScreenLayout(
+        modifier = modifier,
+        title = currentActivity.activityType.displayName,
+        route = { canvasModifier -> RoutePolylineCanvas(routePoints = currentActivity.routePoints, modifier = canvasModifier) },
+        details = {
+            OutdoorStatRow(label = "Time", value = currentActivity.formattedDuration())
+            OutdoorStatRow(label = "Distance", value = currentActivity.formattedDistanceMiles())
+            OutdoorStatRow(label = "Pace", value = currentActivity.formattedPace())
+            OutdoorStatRow(label = "Elevation", value = currentActivity.formattedElevationGainFeet())
 
-        RoutePolylineCanvas(routePoints = currentActivity.routePoints, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        OutdoorStatRow(label = "Time", value = currentActivity.formattedDuration())
-        OutdoorStatRow(label = "Distance", value = currentActivity.formattedDistanceMiles())
-        OutdoorStatRow(label = "Pace", value = currentActivity.formattedPace())
-        OutdoorStatRow(label = "Elevation", value = currentActivity.formattedElevationGainFeet())
+            if (currentActivity.healthConnectRecordId != null) {
+                Text(
+                    text = "Exported to Health Connect",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Button(
+                    onClick = {
+                        when {
+                            !HealthConnectManager.isAvailable(context) ->
+                                exportError = "Health Connect isn't available on this device."
+                            !hasWritePermission ->
+                                healthConnectPermissionLauncher.launch(HealthConnectManager.writePermissions)
+                            else -> exportNow()
+                        }
+                    },
+                    enabled = !isExporting,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isExporting) "Exporting…" else "Export to Health Connect")
+                }
+            }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (currentActivity.healthConnectRecordId != null) {
-            Text(
-                text = "Exported to Health Connect",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        } else {
-            Button(
-                onClick = {
-                    when {
-                        !HealthConnectManager.isAvailable(context) ->
-                            exportError = "Health Connect isn't available on this device."
-                        !hasWritePermission ->
-                            healthConnectPermissionLauncher.launch(HealthConnectManager.writePermissions)
-                        else -> exportNow()
-                    }
-                },
-                enabled = !isExporting,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isExporting) "Exporting…" else "Export to Health Connect")
+            exportError?.let { message ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        },
+        actions = {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            repository.delete(currentActivity.id)
+                            onDiscard()
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Discard")
+                }
+                Button(onClick = onDone, modifier = Modifier.weight(1f)) {
+                    Text("Done")
+                }
             }
         }
-
-        exportError?.let { message ->
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(
-                onClick = {
-                    scope.launch {
-                        repository.delete(currentActivity.id)
-                        onDiscard()
-                    }
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Discard")
-            }
-            Button(onClick = onDone, modifier = Modifier.weight(1f)) {
-                Text("Done")
-            }
-        }
-    }
+    )
 }

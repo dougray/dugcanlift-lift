@@ -35,7 +35,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.widthIn
+import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
+import com.dugcanlift.macrocalc.ui.adaptive.rememberMovablePart
+import com.dugcanlift.macrocalc.ui.adaptive.MasonryColumns
+import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -143,24 +149,9 @@ fun DashboardScreen(
     val weekCalories = weekEntries.totals().calories
     val weekVolume = weekSessions.sumOf { it.volumeLb }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "LIFT",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+    // Each card once, placed by width: a single column exactly as the phone has always drawn it,
+    // or packed two-up (ui/adaptive/WindowLayout.kt) once two phone-width columns fit.
+    val goalCard: @Composable () -> Unit = rememberMovablePart {
         if (goal == null) {
             Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -203,9 +194,9 @@ fun DashboardScreen(
                 }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
+    val stepsCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "Steps", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
@@ -222,21 +213,9 @@ fun DashboardScreen(
                 }
             }
         }
+    }
 
-        if (showingStepGoalEditor) {
-            StepGoalDialog(
-                initial = stepGoal,
-                onSave = { value ->
-                    stepGoal = value
-                    settings.stepGoal = value
-                    showingStepGoalEditor = false
-                },
-                onDismiss = { showingStepGoalEditor = false }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+    val trainingCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "Training", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
@@ -265,9 +244,9 @@ fun DashboardScreen(
                 }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
+    val fuelCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(text = "Fuel so far today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
@@ -282,271 +261,273 @@ fun DashboardScreen(
                 NutrientDetailsText.dayRows(allEntries.forDate(today)).forEach { StatRow(it.label, it.value) }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(text = "Last 7 days workouts", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                StatRow("Workouts", "${weekSessions.size}")
-                StatRow(
-                    "Total volume",
-                    if (weekVolume > 0) "${weekVolume.roundToInt()} lb" else "-"
-                )
-                StatRow("Total sets", "${weekSessions.sumOf { it.setCount }}")
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                LineChart(
-                    series = listOf(
-                        ChartSeries(
-                            "Top weight",
-                            ChartColors.Weight,
-                            week.map { day -> topWeight(allSessions, day) }
-                        ),
-                        ChartSeries(
-                            "Reps",
-                            ChartColors.Reps,
-                            week.map { day -> totalReps(allSessions, day) }
-                        ),
-                        ChartSeries(
-                            "Sets",
-                            ChartColors.Sets,
-                            week.map { day -> totalSets(allSessions, day) }
-                        )
-                    ),
-                    labels = shortLabels
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-
-        // Read at composition rather than held in state: the focus is changed on
-        // the Train tab, and coming back here recomposes, which is when this card
-        // should pick the change up. The browser behaves the same way -- the
-        // chart is on Home and re-renders when Home is next drawn.
-        val focus = settings.focus
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (exerciseOptions.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
-                Text(
-                    text = "Log a workout and your lifts will chart here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        } else {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-            ) {
-                exerciseOptions.forEach { option ->
-                    FilterChip(
-                        selected = option.matchKey == selectedExercise,
-                        onClick = { selectedExercise = option.matchKey },
-                        label = { Text(option.displayName) }
-                    )
-                }
-            }
+    val workoutsSection: @Composable () -> Unit = rememberMovablePart {
+        Column {
+            Text(text = "Last 7 days workouts", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            val chosen = exerciseOptions.firstOrNull { it.matchKey == selectedExercise }
-            if (chosen != null) {
-                val history = allSessions.historyFor(chosen.name, chosen.equipment).takeLast(10)
+            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    StatRow("Workouts", "${weekSessions.size}")
+                    StatRow(
+                        "Total volume",
+                        if (weekVolume > 0) "${weekVolume.roundToInt()} lb" else "-"
+                    )
+                    StatRow("Total sets", "${weekSessions.sumOf { it.setCount }}")
 
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    LineChart(
+                        series = listOf(
+                            ChartSeries(
+                                "Top weight",
+                                ChartColors.Weight,
+                                week.map { day -> topWeight(allSessions, day) }
+                            ),
+                            ChartSeries(
+                                "Reps",
+                                ChartColors.Reps,
+                                week.map { day -> totalReps(allSessions, day) }
+                            ),
+                            ChartSeries(
+                                "Sets",
+                                ChartColors.Sets,
+                                week.map { day -> totalSets(allSessions, day) }
+                            )
+                        ),
+                        labels = shortLabels
+                    )
+                }
+            }
+        }
+    }
+
+    val progressionSection: @Composable () -> Unit = rememberMovablePart {
+        Column {
+            Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+
+            // Read at composition rather than held in state: the focus is changed on
+            // the Train tab, and coming back here recomposes, which is when this card
+            // should pick the change up. The browser behaves the same way -- the
+            // chart is on Home and re-renders when Home is next drawn.
+            val focus = settings.focus
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (exerciseOptions.isEmpty()) {
                 Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = chosen.displayName,
-                            style = MaterialTheme.typography.titleMedium
+                    Text(
+                        text = "Log a workout and your lifts will chart here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    exerciseOptions.forEach { option ->
+                        FilterChip(
+                            selected = option.matchKey == selectedExercise,
+                            onClick = { selectedExercise = option.matchKey },
+                            label = { Text(option.displayName) }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
 
-                        val best = history.mapNotNull { it.second.topWeightLb() }.maxOrNull()
-                        val latest = history.lastOrNull()?.second?.topWeightLb()
-                        val bestE1rm = history.mapNotNull { it.second.estimatedOneRepMax() }.maxOrNull()
+                Spacer(modifier = Modifier.height(12.dp))
 
-                        StatRow("Sessions", "${history.size}")
+                val chosen = exerciseOptions.firstOrNull { it.matchKey == selectedExercise }
+                if (chosen != null) {
+                    val history = allSessions.historyFor(chosen.name, chosen.equipment).takeLast(10)
 
-                        /* Which numbers matter depends on what you train for, and
-                         * this card used to answer "top weight and estimated 1RM"
-                         * for everyone — so a Hyrox or endurance user got two
-                         * dashes and a flat line.
-                         *
-                         * LineChart scales every series against ONE shared maximum
-                         * AND prints that maximum as the axis label, so a mode may
-                         * only plot series sharing a unit. Pounds against pounds is
-                         * fine; metres against minutes would pin the minutes to the
-                         * baseline under a number that describes neither. Where
-                         * nothing comparable exists, one series is the honest
-                         * answer. */
-                        val series = when (focus.chart) {
-                            FocusChart.VOLUME -> {
-                                val volumes = history.map { it.second.volumeLb }.filter { it > 0 }
-                                StatRow("Best volume", volumes.maxOrNull()?.let { "${it.roundToInt()} lb" } ?: "-")
-                                StatRow("Most recent", volumes.lastOrNull()?.let { "${it.roundToInt()} lb" } ?: "-")
-                                StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
-                                listOf(
-                                    ChartSeries(
-                                        "Volume (lb)",
-                                        ChartColors.Fat,
-                                        history.map { it.second.volumeLb.takeIf { v -> v > 0 }?.toFloat() }
+                    Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = chosen.displayName,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val best = history.mapNotNull { it.second.topWeightLb() }.maxOrNull()
+                            val latest = history.lastOrNull()?.second?.topWeightLb()
+                            val bestE1rm = history.mapNotNull { it.second.estimatedOneRepMax() }.maxOrNull()
+
+                            StatRow("Sessions", "${history.size}")
+
+                            /* Which numbers matter depends on what you train for, and
+                             * this card used to answer "top weight and estimated 1RM"
+                             * for everyone — so a Hyrox or endurance user got two
+                             * dashes and a flat line.
+                             *
+                             * LineChart scales every series against ONE shared maximum
+                             * AND prints that maximum as the axis label, so a mode may
+                             * only plot series sharing a unit. Pounds against pounds is
+                             * fine; metres against minutes would pin the minutes to the
+                             * baseline under a number that describes neither. Where
+                             * nothing comparable exists, one series is the honest
+                             * answer. */
+                            val series = when (focus.chart) {
+                                FocusChart.VOLUME -> {
+                                    val volumes = history.map { it.second.volumeLb }.filter { it > 0 }
+                                    StatRow("Best volume", volumes.maxOrNull()?.let { "${it.roundToInt()} lb" } ?: "-")
+                                    StatRow("Most recent", volumes.lastOrNull()?.let { "${it.roundToInt()} lb" } ?: "-")
+                                    StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
+                                    listOf(
+                                        ChartSeries(
+                                            "Volume (lb)",
+                                            ChartColors.Fat,
+                                            history.map { it.second.volumeLb.takeIf { v -> v > 0 }?.toFloat() }
+                                        )
                                     )
-                                )
+                                }
+
+                                FocusChart.WORK -> {
+                                    val times = history.map { it.second.totalSeconds() }.filter { it > 0 }
+                                    StatRow("Longest", times.maxOrNull()?.let { clockLabel(it) } ?: "-")
+                                    StatRow("Most recent", times.lastOrNull()?.let { clockLabel(it) } ?: "-")
+                                    StatRow("Total reps", history.sumOf { it.second.totalReps() }.takeIf { it > 0 }?.toString() ?: "-")
+                                    listOf(
+                                        ChartSeries(
+                                            "Working time (min)",
+                                            ChartColors.Fiber,
+                                            history.map { it.second.totalSeconds().takeIf { v -> v > 0 }?.let { v -> v / 60f } }
+                                        )
+                                    )
+                                }
+
+                                FocusChart.PACE -> {
+                                    val metres = history.map { it.second.totalMetres() }.filter { it > 0 }
+                                    val times = history.map { it.second.totalSeconds() }.filter { it > 0 }
+                                    StatRow("Furthest", metres.maxOrNull()?.let { distanceLabel(it) } ?: "-")
+                                    StatRow("Most recent", metres.lastOrNull()?.let { distanceLabel(it) } ?: "-")
+                                    StatRow("Longest", times.maxOrNull()?.let { clockLabel(it) } ?: "-")
+                                    listOf(
+                                        ChartSeries(
+                                            "Distance (km)",
+                                            ChartColors.Protein,
+                                            history.map { it.second.totalMetres().takeIf { v -> v > 0 }?.let { v -> v.toFloat() / 1000f } }
+                                        )
+                                    )
+                                }
+
+                                FocusChart.STRENGTH -> {
+                                    StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
+                                    StatRow("Most recent", latest?.let { "${it.roundToInt()} lb" } ?: "-")
+                                    StatRow("Best est. 1RM", bestE1rm?.let { "${it.roundToInt()} lb" } ?: "-")
+                                    listOf(
+                                        ChartSeries(
+                                            "Top weight",
+                                            ChartColors.Weight,
+                                            history.map { it.second.topWeightLb()?.toFloat() }
+                                        ),
+                                        ChartSeries(
+                                            "Est. 1RM",
+                                            ChartColors.Carbs,
+                                            history.map { it.second.estimatedOneRepMax()?.toFloat() }
+                                        )
+                                    )
+                                }
                             }
 
-                            FocusChart.WORK -> {
-                                val times = history.map { it.second.totalSeconds() }.filter { it > 0 }
-                                StatRow("Longest", times.maxOrNull()?.let { clockLabel(it) } ?: "-")
-                                StatRow("Most recent", times.lastOrNull()?.let { clockLabel(it) } ?: "-")
-                                StatRow("Total reps", history.sumOf { it.second.totalReps() }.takeIf { it > 0 }?.toString() ?: "-")
-                                listOf(
-                                    ChartSeries(
-                                        "Working time (min)",
-                                        ChartColors.Fiber,
-                                        history.map { it.second.totalSeconds().takeIf { v -> v > 0 }?.let { v -> v / 60f } }
-                                    )
-                                )
-                            }
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                            FocusChart.PACE -> {
-                                val metres = history.map { it.second.totalMetres() }.filter { it > 0 }
-                                val times = history.map { it.second.totalSeconds() }.filter { it > 0 }
-                                StatRow("Furthest", metres.maxOrNull()?.let { distanceLabel(it) } ?: "-")
-                                StatRow("Most recent", metres.lastOrNull()?.let { distanceLabel(it) } ?: "-")
-                                StatRow("Longest", times.maxOrNull()?.let { clockLabel(it) } ?: "-")
-                                listOf(
-                                    ChartSeries(
-                                        "Distance (km)",
-                                        ChartColors.Protein,
-                                        history.map { it.second.totalMetres().takeIf { v -> v > 0 }?.let { v -> v.toFloat() / 1000f } }
-                                    )
-                                )
-                            }
-
-                            FocusChart.STRENGTH -> {
-                                StatRow("Best weight", best?.let { "${it.roundToInt()} lb" } ?: "-")
-                                StatRow("Most recent", latest?.let { "${it.roundToInt()} lb" } ?: "-")
-                                StatRow("Best est. 1RM", bestE1rm?.let { "${it.roundToInt()} lb" } ?: "-")
-                                listOf(
-                                    ChartSeries(
-                                        "Top weight",
-                                        ChartColors.Weight,
-                                        history.map { it.second.topWeightLb()?.toFloat() }
-                                    ),
-                                    ChartSeries(
-                                        "Est. 1RM",
-                                        ChartColors.Carbs,
-                                        history.map { it.second.estimatedOneRepMax()?.toFloat() }
-                                    )
-                                )
-                            }
+                            // Plotted per session, not per calendar day — an exercise
+                            // trained twice a week would otherwise be mostly gaps.
+                            LineChart(
+                                series = series,
+                                labels = history.map { shortLabel(it.first) }
+                            )
                         }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Plotted per session, not per calendar day — an exercise
-                        // trained twice a week would otherwise be mostly gaps.
-                        LineChart(
-                            series = series,
-                            labels = history.map { shortLabel(it.first) }
-                        )
                     }
                 }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(24.dp))
+    val fuelingSection: @Composable () -> Unit = rememberMovablePart {
+        Column {
+            Text(text = "Last 7 days fueling", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 
-        Text(text = "Last 7 days fueling", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(12.dp))
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    StatRow("Days logged", "$daysLogged of 7")
+                    // Averaged over days actually logged, not over seven — otherwise
+                    // skipping a day looks like eating less rather than not tracking.
+                    StatRow(
+                        "Average calories",
+                        if (daysLogged == 0) "-" else "${weekCalories / daysLogged} kcal"
+                    )
 
-        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                StatRow("Days logged", "$daysLogged of 7")
-                // Averaged over days actually logged, not over seven — otherwise
-                // skipping a day looks like eating less rather than not tracking.
-                StatRow(
-                    "Average calories",
-                    if (daysLogged == 0) "-" else "${weekCalories / daysLogged} kcal"
-                )
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Calories",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LineChart(
-                    series = listOf(
-                        ChartSeries(
-                            "Calories",
-                            ChartColors.Calories,
-                            week.map { day -> dayValue(allEntries, day) { it.calories.toFloat() } }
-                        )
-                    ),
-                    labels = shortLabels
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Macros get their own chart: on a shared axis with calories,
-                // fibre would sit flat on the floor and tell you nothing.
-                Text(
-                    text = "Macros (g)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LineChart(
-                    series = listOf(
-                        ChartSeries(
-                            "Protein",
-                            ChartColors.Protein,
-                            week.map { day -> dayValue(allEntries, day) { it.proteinG.toFloat() } }
+                    Text(
+                        text = "Calories",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LineChart(
+                        series = listOf(
+                            ChartSeries(
+                                "Calories",
+                                ChartColors.Calories,
+                                week.map { day -> dayValue(allEntries, day) { it.calories.toFloat() } }
+                            )
                         ),
-                        ChartSeries(
-                            "Carbs",
-                            ChartColors.Carbs,
-                            week.map { day -> dayValue(allEntries, day) { it.carbsG.toFloat() } }
+                        labels = shortLabels
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Macros get their own chart: on a shared axis with calories,
+                    // fibre would sit flat on the floor and tell you nothing.
+                    Text(
+                        text = "Macros (g)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LineChart(
+                        series = listOf(
+                            ChartSeries(
+                                "Protein",
+                                ChartColors.Protein,
+                                week.map { day -> dayValue(allEntries, day) { it.proteinG.toFloat() } }
+                            ),
+                            ChartSeries(
+                                "Carbs",
+                                ChartColors.Carbs,
+                                week.map { day -> dayValue(allEntries, day) { it.carbsG.toFloat() } }
+                            ),
+                            ChartSeries(
+                                "Fat",
+                                ChartColors.Fat,
+                                week.map { day -> dayValue(allEntries, day) { it.fatG.toFloat() } }
+                            ),
+                            ChartSeries(
+                                "Fiber",
+                                ChartColors.Fiber,
+                                week.map { day -> dayValue(allEntries, day) { it.fiberG.toFloat() } }
+                            )
                         ),
-                        ChartSeries(
-                            "Fat",
-                            ChartColors.Fat,
-                            week.map { day -> dayValue(allEntries, day) { it.fatG.toFloat() } }
-                        ),
-                        ChartSeries(
-                            "Fiber",
-                            ChartColors.Fiber,
-                            week.map { day -> dayValue(allEntries, day) { it.fiberG.toFloat() } }
-                        )
-                    ),
-                    labels = shortLabels
-                )
+                        labels = shortLabels
+                    )
+                }
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        CoachCard(goal = goal, sessions = allSessions, entries = allEntries, outdoor = outdoorActivities)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+    val servingCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -566,9 +547,9 @@ fun DashboardScreen(
                 )
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
+    val appearanceCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -589,22 +570,103 @@ fun DashboardScreen(
                 )
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    val coachCard: @Composable () -> Unit = rememberMovablePart {
+        CoachCard(goal = goal, sessions = allSessions, entries = allEntries, outdoor = outdoorActivities)
+    }
 
+    val backupCard: @Composable () -> Unit = rememberMovablePart {
         BackupCard(onRestored = onRestored)
+    }
 
-        if (goal != null) {
-            Spacer(modifier = Modifier.height(24.dp))
-            OutlinedButton(
-                onClick = onOpenCalculator,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Recalculate my goal")
+    if (showingStepGoalEditor) {
+        StepGoalDialog(
+            initial = stepGoal,
+            onSave = { value ->
+                stepGoal = value
+                settings.stepGoal = value
+                showingStepGoalEditor = false
+            },
+            onDismiss = { showingStepGoalEditor = false }
+        )
+    }
+
+    MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
+        val columns = AdaptiveLayout.homeColumns(AdaptiveLayout.contentWidth(paneWidth))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AdaptiveLayout.sideGutter(paneWidth).dp, vertical = 16.dp)
+        ) {
+            Text(
+                text = "LIFT",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(text = "Today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (columns == 1) {
+                goalCard()
+                Spacer(modifier = Modifier.height(16.dp))
+                stepsCard()
+                Spacer(modifier = Modifier.height(16.dp))
+                trainingCard()
+                Spacer(modifier = Modifier.height(16.dp))
+                fuelCard()
+                Spacer(modifier = Modifier.height(24.dp))
+                workoutsSection()
+                Spacer(modifier = Modifier.height(24.dp))
+                progressionSection()
+                Spacer(modifier = Modifier.height(24.dp))
+                fuelingSection()
+                Spacer(modifier = Modifier.height(16.dp))
+                coachCard()
+                Spacer(modifier = Modifier.height(16.dp))
+                servingCard()
+                Spacer(modifier = Modifier.height(16.dp))
+                appearanceCard()
+                Spacer(modifier = Modifier.height(16.dp))
+                backupCard()
+            } else {
+                MasonryColumns(columns = columns) {
+                    goalCard()
+                    stepsCard()
+                    trainingCard()
+                    fuelCard()
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                MasonryColumns(columns = columns, verticalGap = 24.dp) {
+                    workoutsSection()
+                    progressionSection()
+                    fuelingSection()
+                    coachCard()
+                    servingCard()
+                    appearanceCard()
+                    backupCard()
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(32.dp))
+            if (goal != null) {
+                Spacer(modifier = Modifier.height(24.dp))
+                OutlinedButton(
+                    onClick = onOpenCalculator,
+                    modifier = if (columns == 1) Modifier.fillMaxWidth()
+                    else Modifier.align(Alignment.CenterHorizontally)
+                        .widthIn(max = AdaptiveLayout.MAX_WIDE_BUTTON_DP.dp).fillMaxWidth()
+                ) {
+                    Text("Recalculate my goal")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
     }
 }
 

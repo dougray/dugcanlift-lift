@@ -16,6 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
+import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -34,13 +37,13 @@ fun MacroCalculatorScreen(
      */
     onSaveProfile: (LifterProfile, Double) -> Unit = { _, _ -> }
 ) {
-    var sex by remember { mutableStateOf(Sex.MALE) }
-    var age by remember { mutableStateOf("") }
-    var weight by remember { mutableStateOf("") }
-    var heightFt by remember { mutableStateOf("") }
-    var heightIn by remember { mutableStateOf("") }
-    var activity by remember { mutableStateOf(Activity.MODERATE) }
-    var goal by remember { mutableStateOf(Goal.MAINTAIN) }
+    var sex by rememberSaveable { mutableStateOf(Sex.MALE) }
+    var age by rememberSaveable { mutableStateOf("") }
+    var weight by rememberSaveable { mutableStateOf("") }
+    var heightFt by rememberSaveable { mutableStateOf("") }
+    var heightIn by rememberSaveable { mutableStateOf("") }
+    var activity by rememberSaveable { mutableStateOf(Activity.MODERATE) }
+    var goal by rememberSaveable { mutableStateOf(Goal.MAINTAIN) }
 
     val result = remember(sex, age, weight, heightFt, heightIn, activity, goal) {
         val a = age.toIntOrNull()
@@ -55,111 +58,117 @@ fun MacroCalculatorScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Macro Calculator",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        ChipRow(
-            options = Sex.entries,
-            selected = sex,
-            label = { it.label },
-            onSelect = { sex = it }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        NumberField(value = age, onValueChange = { age = it }, label = "Age")
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        NumberField(value = weight, onValueChange = { weight = it }, label = "Weight (lb)")
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        NumberField(value = heightFt, onValueChange = { heightFt = it }, label = "Height (ft)")
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        NumberField(value = heightIn, onValueChange = { heightIn = it }, label = "Height (in)")
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(text = "Activity", style = MaterialTheme.typography.labelLarge)
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        ChipRow(
-            options = Activity.entries,
-            selected = activity,
-            label = { it.label },
-            onSelect = { activity = it }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(text = "Goal", style = MaterialTheme.typography.labelLarge)
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        ChipRow(
-            options = Goal.entries,
-            selected = goal,
-            label = { it.label },
-            onSelect = { goal = it }
-        )
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        if (result != null) {
-            ResultCard(result)
-            Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = {
-                    onSaveGoal(result)
-                    val enteredAge = age.toIntOrNull()
-                    val enteredWeight = weight.toDoubleOrNull()
-                    val feet = heightFt.toDoubleOrNull()
-                    if (enteredAge != null && enteredWeight != null && feet != null) {
-                        val inches = feet * 12 + (heightIn.toDoubleOrNull() ?: 0.0)
-                        onSaveProfile(
-                            LifterProfile(
-                                sex = sex.name.lowercase(),
-                                age = enteredAge,
-                                heightIn = inches
-                            ),
-                            enteredWeight
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Save as my goal") }
-        } else {
-            Text(
-                text = "Enter age, weight, and height to see your numbers.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Image(
-            painter = painterResource(id = R.drawable.dcl_logo),
-            contentDescription = "DUGCANLIFT",
+    // A form: capped at a readable width and centred on a wide window (ui/adaptive).
+    MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp),
-            contentScale = ContentScale.Fit
-        )
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    horizontal = AdaptiveLayout.sideGutter(paneWidth, AdaptiveLayout.READABLE_DP).dp,
+                    vertical = 16.dp
+                )
+        ) {
+            Text(
+                text = "Macro Calculator",
+                style = MaterialTheme.typography.headlineMedium
+            )
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            ChipRow(
+                options = Sex.entries,
+                selected = sex,
+                label = { it.label },
+                onSelect = { sex = it }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            NumberField(value = age, onValueChange = { age = it }, label = "Age")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            NumberField(value = weight, onValueChange = { weight = it }, label = "Weight (lb)")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            NumberField(value = heightFt, onValueChange = { heightFt = it }, label = "Height (ft)")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            NumberField(value = heightIn, onValueChange = { heightIn = it }, label = "Height (in)")
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(text = "Activity", style = MaterialTheme.typography.labelLarge)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            ChipRow(
+                options = Activity.entries,
+                selected = activity,
+                label = { it.label },
+                onSelect = { activity = it }
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(text = "Goal", style = MaterialTheme.typography.labelLarge)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            ChipRow(
+                options = Goal.entries,
+                selected = goal,
+                label = { it.label },
+                onSelect = { goal = it }
+            )
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            if (result != null) {
+                ResultCard(result)
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        onSaveGoal(result)
+                        val enteredAge = age.toIntOrNull()
+                        val enteredWeight = weight.toDoubleOrNull()
+                        val feet = heightFt.toDoubleOrNull()
+                        if (enteredAge != null && enteredWeight != null && feet != null) {
+                            val inches = feet * 12 + (heightIn.toDoubleOrNull() ?: 0.0)
+                            onSaveProfile(
+                                LifterProfile(
+                                    sex = sex.name.lowercase(),
+                                    age = enteredAge,
+                                    heightIn = inches
+                                ),
+                                enteredWeight
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Save as my goal") }
+            } else {
+                Text(
+                    text = "Enter age, weight, and height to see your numbers.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            Image(
+                painter = painterResource(id = R.drawable.dcl_logo),
+                contentDescription = "DUGCANLIFT",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp),
+                contentScale = ContentScale.Fit
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
