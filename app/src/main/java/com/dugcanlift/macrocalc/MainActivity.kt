@@ -9,6 +9,16 @@ import androidx.activity.enableEdgeToEdge
 import com.dugcanlift.macrocalc.ui.theme.LocalDclDark
 import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
+import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
+import com.dugcanlift.macrocalc.ui.adaptive.AppContentInsets
+import com.dugcanlift.macrocalc.ui.adaptive.LiftNavigationRail
+import com.dugcanlift.macrocalc.ui.adaptive.LocalWindowWidth
+import com.dugcanlift.macrocalc.ui.adaptive.ProvideWindowLayout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -73,11 +83,13 @@ class MainActivity : ComponentActivity() {
                     enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
                 }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    AppTabs(
-                        modifier = Modifier.padding(innerPadding),
-                        pendingPlan = pendingPlan,
-                        openTab = pendingOpenTab
-                    )
+                    ProvideWindowLayout(modifier = Modifier.fillMaxSize()) {
+                        AppTabs(
+                            modifier = Modifier.padding(innerPadding),
+                            pendingPlan = pendingPlan,
+                            openTab = pendingOpenTab
+                        )
+                    }
                 }
             }
         }
@@ -141,46 +153,75 @@ private fun AppTabs(
         PlanPreviewDialog(result = result, onDismiss = { pendingPlan.value = null })
     }
 
-    if (showCalculator) {
-        MacroCalculatorScreen(
-            modifier = modifier,
-            onSaveGoal = { result ->
-                goalStore.save(result)
-                goal = result
-                showCalculator = false
-            },
-            onSaveProfile = { profile, weightLb ->
-                coachStore.profile = profile
-                coachStore.recordBodyweight(weightLb)
-            }
-        )
-        return
-    }
-
     val titles = listOf("Home", "Food", "Cook", "Train")
 
-    Column(modifier = modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTab) {
-            titles.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = {
-                        Text(text = title, style = MaterialTheme.typography.labelLarge)
-                    }
-                )
-            }
-        }
-
-        when (selectedTab) {
-            0 -> DashboardScreen(
-                goal = goal,
-                onOpenCalculator = { showCalculator = true },
-                onRestored = { goal = goalStore.get() }
+    // Tabs along the top on a phone; a rail down the side from 600 dp (ui/adaptive/WindowLayout.kt).
+    // One tree for both, with the rail and the tab row as the only conditional parts, so crossing
+    // the width -- rotating, unfolding, resizing a split screen -- re-lays out the open screen
+    // rather than rebuilding it, and nothing typed into it is lost. [modifier] carries the
+    // Scaffold's inset padding; with a rail, the rail pads its own side and the page the others.
+    val useRail = AdaptiveLayout.usesNavigationRail(LocalWindowWidth.current)
+    Row(modifier = if (useRail) Modifier.fillMaxSize() else modifier.fillMaxSize()) {
+        if (useRail) {
+            LiftNavigationRail(
+                labels = titles,
+                selected = selectedTab,
+                onSelect = { index ->
+                    showCalculator = false
+                    selectedTab = index
+                }
             )
-            1 -> TodayScreen(goal = goal)
-            2 -> CookScreen()
-            else -> WorkoutScreen()
+        }
+        val page = Modifier.weight(1f).fillMaxHeight().then(
+            if (useRail) {
+                Modifier.windowInsetsPadding(
+                    AppContentInsets.only(WindowInsetsSides.Top + WindowInsetsSides.End + WindowInsetsSides.Bottom)
+                )
+            } else {
+                Modifier
+            }
+        )
+
+        if (showCalculator) {
+            MacroCalculatorScreen(
+                modifier = page,
+                onSaveGoal = { result ->
+                    goalStore.save(result)
+                    goal = result
+                    showCalculator = false
+                },
+                onSaveProfile = { profile, weightLb ->
+                    coachStore.profile = profile
+                    coachStore.recordBodyweight(weightLb)
+                }
+            )
+        } else {
+            Column(modifier = page) {
+                if (!useRail) {
+                    TabRow(selectedTabIndex = selectedTab) {
+                        titles.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index,
+                                onClick = { selectedTab = index },
+                                text = {
+                                    Text(text = title, style = MaterialTheme.typography.labelLarge)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                when (selectedTab) {
+                    0 -> DashboardScreen(
+                        goal = goal,
+                        onOpenCalculator = { showCalculator = true },
+                        onRestored = { goal = goalStore.get() }
+                    )
+                    1 -> TodayScreen(goal = goal)
+                    2 -> CookScreen()
+                    else -> WorkoutScreen()
+                }
+            }
         }
     }
 }

@@ -50,3 +50,50 @@ Android's tap-to-import depends on — that file also carries LIFT's release
 signing fingerprint alongside Coach's, so a broken or missing entry for
 either app shows up as autoVerify silently falling back to the
 disambiguation sheet for that app specifically, not both.
+
+## Large screens
+
+Layout follows the **window's width**, never the device: Material 3's classes,
+compact < 600 dp, medium 600–840, expanded ≥ 840 (`ui/adaptive/WindowLayout.kt`).
+`ProvideWindowLayout` measures the window once in `MainActivity` and provides
+`LocalWindowWidth`; every decision is a plain function on `AdaptiveLayout`, pinned
+by `WindowLayoutTest`. Put a new width rule there, not in a composable.
+
+- **Compact is the phone app, unchanged**: tabs along the top, one column
+  everywhere. Every split answers "one column" below 600 dp of *content* width, and
+  the compact branches emit the same cards with the same spacers as before, so a
+  phone is pixel-identical to main. Check a change there against main's
+  screenshots, not "looks fine".
+- **Medium and expanded**: a `NavigationRail` replaces the `TabRow`. The rail and the
+  tab row are the only conditional parts of `AppTabs`' tree, so crossing 600 dp
+  re-lays the open screen out rather than rebuilding it.
+- **Pages measure their pane** (`MeasuredPane`), never `LocalConfiguration`: with a
+  rail, the screen's width is wrong. A page caps at `MAX_CONTENT_DP` (1200) by
+  widening its side gutter (`sideGutter`), which is 16 dp — the phone's — below
+  that. Forms that stand alone (the calculator) cap at `READABLE_DP`; dialogs are
+  already capped by `AlertDialog`.
+- What goes multi-column, matching LIFT iOS: Home's cards in two masonry columns;
+  Food's totals and add/edit forms beside the meal list; Train's lifting beside
+  Outdoor, with Last route (map larger) beside Personal bests below and routines as
+  a card grid; Cook recipes as a card grid, the plan as two days a row and the
+  whole week in seven columns from 1000 dp, shopping in two columns read downwards.
+  Two panes need two 320 dp panes (656 dp of content), so a tablet in portrait
+  splits and an unfolded foldable in portrait (≈560 dp of content) does not.
+- Recording and reviewing a route (`RouteScreenLayout`) put the square map beside
+  the numbers from a 600 dp pane: in landscape a window-wide square would push the
+  Finish button off the screen, and those screens do not scroll.
+- Rotation, resizing and folding do not recreate the activity (`configChanges`
+  includes `smallestScreenSize`); the activity is no longer portrait-locked (the
+  barcode scanner still is). A theme or density change still recreates it, so the
+  state someone is typing into is `rememberSaveable`: the day shown, open panels
+  and editors (by id), and form fields as strings.
+- Folds are not avoided: nothing reads `FoldingFeature`. Only a half-open book
+  posture separates the window, and no LIFT screen is a list/detail split to move
+  onto the hinge.
+- Rail icons are drawn in `AdaptiveComponents.kt`; do not add material-icons for four
+  glyphs. The dumbbell and pot are Coach Android's.
+
+To check on the one phone AVD: `adb shell wm size 2560x1600 && adb shell wm density
+320` (tablet landscape), `1600x2560` (portrait), `1767x2208` / `2208x1767` at 420
+(foldable inner, portrait and landscape), then **always** `wm size reset` and
+`wm density reset`.

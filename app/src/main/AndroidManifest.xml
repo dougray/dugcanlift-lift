@@ -65,12 +65,17 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.DugCanLiftCalc">
+        <!-- Resizeable and unlocked in orientation: tablets, foldables and split screen get
+             adaptive layouts by window width (ui/adaptive/WindowLayout.kt). Size, orientation
+             and fold changes are handled in place rather than by recreating the activity: the
+             whole UI is Compose and re-lays itself out, so a half-typed food or set survives a
+             rotation or an unfold. The barcode scanner below stays portrait. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:resizeableActivity="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.App.Starting"
             android:windowSoftInputMode="adjustResize">
