@@ -5,7 +5,13 @@ import kotlin.math.roundToInt
 /** One occurrence of an exercise, reduced to a best estimated 1RM per side. Null is "that side wasn't trained". */
 data class SideSession(val date: String, val leftE1rm: Double?, val rightE1rm: Double?)
 
-/** Whether the gap has grown or shrunk across the window. [UNKNOWN] when a half of it has only one side. */
+/**
+ * Whether the gap has grown or shrunk across the window.
+ *
+ * [UNKNOWN] is LIFT web's `trend: null` — fewer than [SideBalance.MIN_FOR_TREND]
+ * sessions on a side, so there is no earlier figure honest enough to compare
+ * against. It is not "steady".
+ */
 enum class ImbalanceTrend { WIDENING, CLOSING, STEADY, UNKNOWN }
 
 /**
@@ -13,12 +19,15 @@ enum class ImbalanceTrend { WIDENING, CLOSING, STEADY, UNKNOWN }
  * estimated 1RM, as a fraction of 1.
  *
  * [stronger] is null when the two are exactly equal, which is the only time
- * there is no stronger side to name.
+ * there is no stronger side to name. [was] is the same figure over each side's
+ * *first* three sessions, which is what [trend] compares against; it is null
+ * whenever the trend is [ImbalanceTrend.UNKNOWN].
  */
 data class SideImbalance(
     val fraction: Double,
     val stronger: SetSide?,
     val trend: ImbalanceTrend,
+    val was: Double?,
     val leftSessions: Int,
     val rightSessions: Int
 ) {
@@ -53,22 +62,40 @@ data class SideImbalance(
  * The per-side maths behind the progression card, kept pure and free of
  * Compose so it can be tested directly, the way [FocusMetrics] is.
  *
- * Everything here reads estimated 1RM, because that is the one number that
- * compares 60x8 on the left against 65x6 on the right. Warmups are not marked
- * per side and do not need to be: the best set of a session is never a warmup.
+ * **This is a port of LIFT web's `lift/sides.js`, function for function**, and
+ * it is a port rather than a second opinion on purpose: three platforms
+ * printing different percentages from the same log is worse than any one of
+ * them printing a slightly better number. `imbalance` here is `imbalance`
+ * there, with the same thresholds, the same averaging and the same epsilon. If
+ * the rule changes, it changes in `sides.js` first and is ported again.
+ *
+ * Everything reads estimated 1RM, because that is the one number that compares
+ * 60x8 on the left against 65x6 on the right. Warmups are not marked per side
+ * and do not need to be: the best set of a session is never a warmup.
  */
 object SideBalance {
 
     /**
      * How many sessions each side needs before an imbalance figure is shown.
      *
-     * Three, from the spec. Two points is a line through noise, and a single
-     * heavy day on one side would otherwise read as a permanent difference.
+     * Three, from the spec. A figure drawn from one session each would move ten
+     * points on a day someone went in tired, and be read as a finding.
      */
     const val MIN_SESSIONS = 3
 
-    /** A precision, not a judgement: under a point of movement is not a direction. */
-    private const val TREND_EPSILON = 0.01
+    /**
+     * And how many before a *trend* is. With exactly three, the first three and
+     * the last three are the same sessions, so "steady" would be arithmetic
+     * rather than an observation.
+     */
+    const val MIN_FOR_TREND = 4
+
+    /**
+     * Half a percentage point. Below it the gap has not done anything — this is
+     * an estimate built out of an estimate, and `sides.js` draws the line in
+     * the same place.
+     */
+    private const val TREND_EPSILON = 0.005
 
     /** One [SideSession] per occurrence of the exercise, oldest first, as `historyFor` returns them. */
     fun sessions(history: List<Pair<String, LoggedExercise>>): List<SideSession> =
@@ -88,69 +115,89 @@ object SideBalance {
      * The imbalance across a window of sessions, or null when there is not
      * enough to say — fewer than [MIN_SESSIONS] on either side.
      *
-     * Each side's figure is its **best** estimated 1RM in the window rather
-     * than its latest, for the same reason the card's other headline is a best:
-     * one tired session is not a change in strength.
+     * Each side's figure is the **mean of its last [MIN_SESSIONS] sessions**,
+     * not its best and not its latest: `sides.js`'s rule, for the reason the
+     * threshold exists at all. One heavy day is not a change in strength, and
+     * one tired day is not either.
+     *
+     * Note "its last three *sessions*", counted on that side's own recorded
+     * ones — a day that trained only the left is not a right-side zero, it is a
+     * day the right has nothing to say about.
      */
     fun imbalance(sessions: List<SideSession>): SideImbalance? {
-        val left = sessions.mapNotNull { it.leftE1rm }
-        val right = sessions.mapNotNull { it.rightE1rm }
+        val left = recorded(sessions.map { it.leftE1rm })
+        val right = recorded(sessions.map { it.rightE1rm })
         if (left.size < MIN_SESSIONS || right.size < MIN_SESSIONS) return null
 
-        val gap = gap(left.max(), right.max()) ?: return null
+        val nowLeft = mean(left.takeLast(MIN_SESSIONS))
+        val nowRight = mean(right.takeLast(MIN_SESSIONS))
+        val fraction = gap(nowLeft, nowRight) ?: return null
+
+        val was = earlierGap(left, right)
         return SideImbalance(
-            fraction = gap.first,
-            stronger = gap.second,
-            trend = trend(sessions),
+            fraction = fraction,
+            stronger = when {
+                nowLeft == nowRight -> null
+                nowLeft > nowRight -> SetSide.LEFT
+                else -> SetSide.RIGHT
+            },
+            trend = trendFrom(fraction, was),
+            was = was,
             leftSessions = left.size,
             rightSessions = right.size
         )
     }
 
-    /** `(strong − weak) / strong` and which side is the strong one. Null if either number is unusable. */
-    private fun gap(leftBest: Double, rightBest: Double): Pair<Double, SetSide?>? {
-        val strong = maxOf(leftBest, rightBest)
-        if (!strong.isFinite() || strong <= 0.0) return null
-        val weak = minOf(leftBest, rightBest)
-        if (!weak.isFinite() || weak < 0.0) return null
-        val fraction = (strong - weak) / strong
-        val stronger = when {
-            leftBest == rightBest -> null
-            leftBest > rightBest -> SetSide.LEFT
-            else -> SetSide.RIGHT
-        }
-        return fraction to stronger
-    }
-
     /**
-     * Widening or closing, from the gap in the older half of the window against
-     * the gap in the newer half. A half with only one side in it answers
-     * [ImbalanceTrend.UNKNOWN] rather than guessing a direction.
+     * Widening or closing, from the gap over each side's first [MIN_SESSIONS]
+     * sessions against the gap over its last [MIN_SESSIONS].
      *
-     * The comparison is of the *size* of the gap, not of which side is ahead:
-     * a lifter whose weaker side overtakes has closed a gap and opened another,
+     * The comparison is of the *size* of the gap, not of which side is ahead: a
+     * lifter whose weaker side overtakes has closed one gap and opened another,
      * and calling that "widening" at the crossover would be wrong.
      */
     fun trend(sessions: List<SideSession>): ImbalanceTrend {
-        if (sessions.size < 2) return ImbalanceTrend.UNKNOWN
-        val half = sessions.size / 2
-        val older = halfGap(sessions.take(half)) ?: return ImbalanceTrend.UNKNOWN
-        val newer = halfGap(sessions.drop(half)) ?: return ImbalanceTrend.UNKNOWN
-        val change = newer - older
-        return when {
-            change > TREND_EPSILON -> ImbalanceTrend.WIDENING
-            change < -TREND_EPSILON -> ImbalanceTrend.CLOSING
-            else -> ImbalanceTrend.STEADY
-        }
-    }
-
-    private fun halfGap(sessions: List<SideSession>): Double? {
-        val left = sessions.mapNotNull { it.leftE1rm }.maxOrNull() ?: return null
-        val right = sessions.mapNotNull { it.rightE1rm }.maxOrNull() ?: return null
-        return gap(left, right)?.first
+        val left = recorded(sessions.map { it.leftE1rm })
+        val right = recorded(sessions.map { it.rightE1rm })
+        if (left.size < MIN_SESSIONS || right.size < MIN_SESSIONS) return ImbalanceTrend.UNKNOWN
+        val now = gap(mean(left.takeLast(MIN_SESSIONS)), mean(right.takeLast(MIN_SESSIONS)))
+            ?: return ImbalanceTrend.UNKNOWN
+        return trendFrom(now, earlierGap(left, right))
     }
 
     /** True once any occurrence in the window recorded a side, which is what turns the card's per-side parts on. */
     fun hasPerSideHistory(history: List<Pair<String, LoggedExercise>>): Boolean =
         history.any { it.second.hasPerSideSets }
+
+    /* ---------- the pieces, in `sides.js` order ---------- */
+
+    /** A side's usable figures. A null, a NaN or a zero is "that side wasn't trained", never a zero 1RM. */
+    private fun recorded(values: List<Double?>): List<Double> =
+        values.filter { it != null && it.isFinite() && it > 0.0 }.map { it!! }
+
+    private fun mean(values: List<Double>): Double = values.sum() / values.size
+
+    /** `(strong − weak) / strong`, or null when there is no strong side to divide by. */
+    private fun gap(left: Double, right: Double): Double? {
+        val strong = maxOf(left, right)
+        if (!strong.isFinite() || strong <= 0.0) return null
+        val weak = minOf(left, right)
+        return (strong - weak) / strong
+    }
+
+    /** The same figure over each side's first [MIN_SESSIONS], or null until both have [MIN_FOR_TREND]. */
+    private fun earlierGap(left: List<Double>, right: List<Double>): Double? {
+        if (left.size < MIN_FOR_TREND || right.size < MIN_FOR_TREND) return null
+        return gap(mean(left.take(MIN_SESSIONS)), mean(right.take(MIN_SESSIONS)))
+    }
+
+    private fun trendFrom(now: Double, was: Double?): ImbalanceTrend {
+        if (was == null) return ImbalanceTrend.UNKNOWN
+        val moved = now - was
+        return when {
+            moved > TREND_EPSILON -> ImbalanceTrend.WIDENING
+            moved < -TREND_EPSILON -> ImbalanceTrend.CLOSING
+            else -> ImbalanceTrend.STEADY
+        }
+    }
 }

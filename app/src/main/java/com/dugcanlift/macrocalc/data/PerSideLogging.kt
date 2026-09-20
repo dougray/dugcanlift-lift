@@ -64,11 +64,20 @@ object PerSideLogging {
     fun defaultSide(exercise: LoggedExercise): SetSide =
         if (exercise.setCount(SetSide.RIGHT) < exercise.setCount(SetSide.LEFT)) SetSide.RIGHT else SetSide.LEFT
 
-    /** "L 3 · R 3", the line that makes a missed side obvious. Null when neither side has a set yet. */
+    /**
+     * "L 3 · R 3", the line that makes a missed side obvious. Null until some
+     * set names a side.
+     *
+     * Sets logged before the toggle went on are still in this exercise and
+     * still real, so they are counted too — "L 3 · R 3 · 2 both", LIFT web's
+     * `countsLabel` exactly. Quietly leaving them out would make the line
+     * disagree with the rows underneath it.
+     */
     fun sideCountLabel(exercise: LoggedExercise): String? {
+        if (!exercise.hasPerSideSets) return null
         val left = exercise.setCount(SetSide.LEFT)
         val right = exercise.setCount(SetSide.RIGHT)
-        if (left == 0 && right == 0) return null
-        return "L $left · R $right"
+        val both = exercise.setCount(null)
+        return "L $left · R $right" + if (both > 0) " · $both both" else ""
     }
 }

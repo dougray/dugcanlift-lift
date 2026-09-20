@@ -82,7 +82,8 @@ feature; those sets stay both, which is honest.
   something that looks unilateral.
 - **Logging costs one extra tap.** The L/R control starts on the side with
   fewer sets for that exercise today (`PerSideLogging.defaultSide`), so it
-  alternates by itself, the header shows `L 3 · R 3`, and the form pre-fills
+  alternates by itself, the header shows `L 3 · R 3` (plus `· 2 both` where
+  sets predate the toggle, as the web's `countsLabel` does), and the form pre-fills
   from that side's last set or, failing that, from the set just logged — the
   first side's numbers, which is what most people are about to match. With the
   preference off, the set row is exactly what it was.
@@ -91,12 +92,18 @@ feature; those sets stay both, which is honest.
   equipment, because a side is a property of a set, not of the lift; it is the
   *series* drawn from those sets that are per side. L and R are never merged
   into one line, for the reason a cable pulldown is not a machine pulldown.
-- **The imbalance maths is pure** (`SideBalance`, `SideBalanceTest`):
-  `(strong − weak) / strong` on estimated 1RM, each side at its best in the
-  window, shown only when both sides have at least `MIN_SESSIONS` (3) in it,
-  plus whether the gap is widening or closing across the window's two halves.
-  A rule that decides what a number on a card says cannot live in a
-  composable's state where nothing can reach it.
+- **The imbalance maths is pure** (`SideBalance`, `SideBalanceTest`) **and it
+  is a port of LIFT web's `lift/sides.js`, function for function**:
+  `(strong − weak) / strong` on estimated 1RM, each side taken as the **mean of
+  its last three sessions** — not its best, not its latest — shown only when
+  both sides have `MIN_SESSIONS` (3) in the window, with the trend comparing
+  that against each side's first three and needing `MIN_FOR_TREND` (4) before
+  it says anything at all. Half a percentage point of movement is noise. Three
+  platforms printing different percentages from one log is worse than any of
+  them printing a slightly better number, so **the rule changes in `sides.js`
+  first and is ported again** — it is never improved here. A rule that decides
+  what a number on a card says also cannot live in a composable's state where
+  nothing can reach it.
 - **Tracked and shown, never targeted** — the discipline saturated fat, sugar
   and sodium follow. No threshold, no colour, no warning, no advice. A 10% gap
   is ordinary, and what a particular one means is a question for a trainer.
