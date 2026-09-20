@@ -1,0 +1,72 @@
+{
+ "v": 1,
+ "app": "lift",
+ "saved": "2026-09-20",
+ "data": {
+  "recipes": [],
+  "plan": [],
+  "food": [],
+  "workouts": [
+   {
+    "id": "session-main-1",
+    "date": "2026-09-18",
+    "name": "Legs",
+    "note": "",
+    "startedAt": 1789000000000,
+    "exercises": [
+     {
+      "id": "ex-main-1",
+      "name": "Bulgarian Split Squat",
+      "equipment": "Dumbbell",
+      "note": "slow eccentric",
+      "sets": [
+       {
+        "id": "set-main-1",
+        "weightLb": 60,
+        "reps": 8,
+        "rpe": 8
+       },
+       {
+        "id": "set-main-2",
+        "weightLb": 60,
+        "reps": 8
+       },
+       {
+        "id": "set-main-3",
+        "weightLb": 55,
+        "reps": 8
+       }
+      ]
+     },
+     {
+      "id": "ex-main-2",
+      "name": "Back Squat",
+      "equipment": "Barbell",
+      "note": "",
+      "sets": [
+       {
+        "id": "set-main-4",
+        "weightLb": 225,
+        "reps": 5
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "routines": [],
+  "outdoor": [],
+  "settings": {
+   "focus": "BODYBUILDING",
+   "stepGoal": 10000
+  },
+  "coach": {
+   "email": "",
+   "you": "Doug",
+   "id": "mainfix1",
+   "weeks": 4,
+   "itemised": false
+  },
+  "weights": {}
+ }
+}

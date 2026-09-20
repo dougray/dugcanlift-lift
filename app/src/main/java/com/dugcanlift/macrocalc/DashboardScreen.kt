@@ -52,6 +52,7 @@ import com.dugcanlift.macrocalc.data.NutrientDetailsText
 import com.dugcanlift.macrocalc.data.HealthConnectManager
 import com.dugcanlift.macrocalc.data.FocusChart
 import com.dugcanlift.macrocalc.data.SettingsStore
+import com.dugcanlift.macrocalc.data.SideBalance
 import com.dugcanlift.macrocalc.data.clockLabel
 import com.dugcanlift.macrocalc.data.distanceLabel
 import com.dugcanlift.macrocalc.data.totalMetres
@@ -442,6 +443,61 @@ fun DashboardScreen(
                                 series = series,
                                 labels = history.map { shortLabel(it.first) }
                             )
+
+                            /* Left and right, for a lift that is logged per side.
+                             *
+                             * Its own chart, below the one above rather than mixed
+                             * into it: the chart above is this lift as a whole, both
+                             * limbs' work together, and averaging the two sides into
+                             * one line is exactly what hides the thing being looked
+                             * for — the way one line once merged a cable pulldown
+                             * with a machine pulldown. Two-sided lifts never reach
+                             * this branch and are unchanged.
+                             *
+                             * Tracked and shown, never targeted: a number, which way
+                             * it is going, and nothing else. No threshold, no colour,
+                             * no advice. */
+                            if (SideBalance.hasPerSideHistory(history)) {
+                                val sideSessions = SideBalance.sessions(history)
+                                val imbalance = SideBalance.imbalance(sideSessions)
+
+                                Spacer(modifier = Modifier.height(20.dp))
+                                Text(
+                                    text = "Left and right",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                StatRow(
+                                    "Imbalance",
+                                    // Under three sessions a side, there is no figure
+                                    // to give — say so rather than print a number one
+                                    // heavy day decided.
+                                    imbalance?.description
+                                        ?: "Needs ${SideBalance.MIN_SESSIONS} sessions each side"
+                                )
+                                StatRow(
+                                    "Sessions each",
+                                    "L ${sideSessions.count { it.leftE1rm != null }} · " +
+                                        "R ${sideSessions.count { it.rightE1rm != null }}"
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                LineChart(
+                                    series = listOf(
+                                        ChartSeries(
+                                            "Left est. 1RM",
+                                            ChartColors.Weight,
+                                            sideSessions.map { it.leftE1rm?.toFloat() }
+                                        ),
+                                        ChartSeries(
+                                            "Right est. 1RM",
+                                            ChartColors.Carbs,
+                                            sideSessions.map { it.rightE1rm?.toFloat() }
+                                        )
+                                    ),
+                                    labels = history.map { shortLabel(it.first) }
+                                )
+                            }
                         }
                     }
                 }

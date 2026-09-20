@@ -14,6 +14,7 @@ import com.dugcanlift.kit.ShareGoal
 import com.dugcanlift.kit.ShareLinkCodec
 import com.dugcanlift.kit.SharePayload
 import com.dugcanlift.kit.ShareSet
+import com.dugcanlift.kit.ShareSide
 import com.dugcanlift.macrocalc.MacroResult
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -180,7 +181,17 @@ object CoachShare {
                                 rpe = set.rpe,
                                 durationSec = set.durationSec?.toDouble(),
                                 distanceMeters = set.distanceMeters,
-                                isWarmup = false
+                                isWarmup = false,
+                                // SHARE-FORMAT: flags bits 1-2, beside bit 0's
+                                // warmup flag. Null stays null -- a both-sided
+                                // set sends 0 flags, which the codec trims away
+                                // entirely, so a log with no per-limb sets is
+                                // the link this app has always written.
+                                side = when (set.side) {
+                                    SetSide.LEFT -> ShareSide.LEFT
+                                    SetSide.RIGHT -> ShareSide.RIGHT
+                                    null -> null
+                                }
                             )
                         }
                     )

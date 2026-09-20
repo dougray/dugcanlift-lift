@@ -56,12 +56,39 @@ enum class TrainingFocus(
 }
 
 /**
+ * Which limb performed a set.
+ *
+ * There is no `BOTH` entry on purpose: absent is both, and it is the only thing
+ * every set ever written by an older build can mean. A `BOTH` constant would
+ * invite a non-null default, and a default of either side would be a guess
+ * about training that nobody made.
+ *
+ * [wire] is BACKUP-FORMAT's spelling — a named field, so a file stays readable
+ * by a human and by a platform that has never heard of sides. [short] is the
+ * one letter the log shows.
+ */
+enum class SetSide(val wire: String, val short: String, val label: String) {
+    LEFT("left", "L", "Left"),
+    RIGHT("right", "R", "Right");
+
+    companion object {
+        /** Null for absent, blank, or anything this build does not recognise: all of them mean both. */
+        fun fromWire(value: String?): SetSide? =
+            entries.firstOrNull { it.wire.equals(value?.trim(), ignoreCase = true) }
+    }
+}
+
+/**
  * One set. Every field is optional because a set means different things
  * depending on the movement — 185 lb x 5 for a squat, 400 m in 90 s for a
  * sled push, just 12 reps for a bodyweight movement.
  *
  * Distance is stored in metres as the canonical unit and converted for
  * display, so changing display units later can't corrupt stored data.
+ *
+ * [side] is the same shape: null means both, which is what every set written
+ * before per-limb tracking means and what every set of a two-sided lift means
+ * now. Nothing ever fills it in by guessing.
  */
 data class WorkoutSet(
     val id: String = UUID.randomUUID().toString(),
@@ -69,15 +96,28 @@ data class WorkoutSet(
     val reps: Int? = null,
     val rpe: Double? = null,
     val durationSec: Int? = null,
-    val distanceMeters: Double? = null
+    val distanceMeters: Double? = null,
+    val side: SetSide? = null
 ) {
     /** Weight moved, for the sets where that means something. */
     val volumeLb: Double
         get() = if (weightLb != null && reps != null) weightLb * reps else 0.0
 
+    /**
+     * A side alone is not a set. The L/R control has a value from the moment
+     * the form opens, so counting it here would let an empty form be saved.
+     */
     val isEmpty: Boolean
         get() = weightLb == null && reps == null && rpe == null &&
             durationSec == null && distanceMeters == null
+
+    /** Epley, as [estimatedOneRepMax] takes it per exercise. Null unless this set is weight x reps. */
+    val estimatedOneRepMax: Double?
+        get() {
+            val weight = weightLb ?: return null
+            val reps = reps ?: return null
+            return if (reps <= 0) null else weight * (1.0 + reps / 30.0)
+        }
 }
 
 /**
@@ -101,10 +141,36 @@ data class LoggedExercise(
     val displayName: String
         get() = if (equipment.isBlank()) name else "$name ($equipment)"
 
-    /** What history lookups match on. */
+    /**
+     * What history lookups match on — the exercise's identity, which is still
+     * name and equipment. A side is a property of a *set*, not of the lift
+     * being trained, so a day's left and right sets stay in the one exercise
+     * and only the series drawn from them are keyed per side ([sideKey]).
+     */
     val matchKey: String
         get() = "${name.trim()}|${equipment.trim()}".lowercase(java.util.Locale.US)
+
+    /** This exercise's sets for one side. Null asks for the both-sided ones. */
+    fun sets(side: SetSide?): List<WorkoutSet> = sets.filter { it.side == side }
+
+    /** How many sets are logged per side, for the "L 3 · R 3" line. */
+    fun setCount(side: SetSide?): Int = sets.count { it.side == side }
+
+    /** True once any set of this exercise names a side. */
+    val hasPerSideSets: Boolean get() = sets.any { it.side != null }
 }
+
+/**
+ * The key a chart or a grouping uses: name, equipment **and** side.
+ *
+ * Same reasoning as equipment. A left-arm row and a right-arm row are not the
+ * same lift, and averaging them hides exactly the thing being looked for — the
+ * way one line once merged a cable pulldown with a machine pulldown.
+ */
+fun sideKey(matchKey: String, side: SetSide?): String = "$matchKey|${side?.wire ?: ""}"
+
+/** [sideKey] for a whole exercise's sets on one side. */
+fun LoggedExercise.sideKey(side: SetSide?): String = sideKey(matchKey, side)
 
 val COMMON_EQUIPMENT = listOf(
     "Barbell", "Dumbbell", "Machine", "Cable", "Smith Machine",
@@ -126,6 +192,12 @@ data class WorkoutSession(
 
 /* ---------- JSON ---------- */
 
+/**
+ * BACKUP-FORMAT's `side`: `"left"` or `"right"`, **omitted when both** — this
+ * is the file the web build and the iPhone read, and a named field is what
+ * survives a platform that has never heard of it. Omitting it also means a
+ * phone with no per-limb sets writes byte for byte the file it wrote before.
+ */
 internal fun WorkoutSet.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     weightLb?.let { put("weightLb", it) }
@@ -133,6 +205,7 @@ internal fun WorkoutSet.toJson(): JSONObject = JSONObject().apply {
     rpe?.let { put("rpe", it) }
     durationSec?.let { put("durationSec", it) }
     distanceMeters?.let { put("distanceMeters", it) }
+    side?.let { put("side", it.wire) }
 }
 
 internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
@@ -141,7 +214,10 @@ internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
     reps = o.finiteIntOrNull("reps"),
     rpe = o.finiteDoubleOrNull("rpe"),
     durationSec = o.finiteIntOrNull("durationSec"),
-    distanceMeters = o.finiteDoubleOrNull("distanceMeters")
+    distanceMeters = o.finiteDoubleOrNull("distanceMeters"),
+    // No `side`, or a spelling this build does not know, is both. A backup
+    // written before per-limb tracking restores exactly as it always did.
+    side = SetSide.fromWire(if (o.isNull("side")) null else o.optString("side", ""))
 )
 
 internal fun LoggedExercise.toJson(): JSONObject = JSONObject().apply {
