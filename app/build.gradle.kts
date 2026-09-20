@@ -112,7 +112,7 @@ dependencies {
             because("Guava before 32.0.0: CVE-2020-8908, CVE-2023-2976")
         }
     }
-    implementation("com.github.dougray:dugcanlift-kit-android:1.4.0")
+    implementation("com.github.dougray:dugcanlift-kit-android:1.5.0")
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.robolectric)
