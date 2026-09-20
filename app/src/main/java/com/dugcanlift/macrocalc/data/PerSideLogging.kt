@@ -26,6 +26,10 @@ object PerSideLogging {
     private val UNILATERAL_TERMS = listOf(
         "single arm", "one arm", "1 arm", "single handed",
         "single leg", "one leg", "1 leg", "single limb",
+        // "One-Legged Deadlift" is the same lift as "One-Leg Deadlift", and
+        // whole-word matching cannot see the shorter term inside the longer
+        // word. Listed in lift/sides.js too -- the two lists are one list.
+        "one legged", "single legged", "one armed", "single armed",
         "bulgarian", "split squat", "split squats",
         "pistol", "pistols", "lunge", "lunges",
         "step up", "step ups", "stepup", "stepups",
