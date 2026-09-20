@@ -90,4 +90,15 @@ class PerSideLoggingTest {
         assertEquals("L 1 · R 1 · 2 both", PerSideLogging.sideCountLabel(exercise(
             null, null, SetSide.LEFT, SetSide.RIGHT)))
     }
+
+    @Test
+    fun `the -ed spellings count too, as in One-Legged Deadlift`() {
+        // Whole-word matching cannot see "one leg" inside "one legged", and the
+        // bundled library has two of these. Same list as lift/sides.js.
+        for (name in listOf("Kettlebell One-Legged Deadlift", "One-Legged Cable Kickback",
+                            "Single-Legged Press", "One-Armed Row")) {
+            assertTrue(name, PerSideLogging.looksUnilateral(name))
+        }
+        assertFalse("Cold Plunge", PerSideLogging.looksUnilateral("Cold Plunge"))
+    }
 }
