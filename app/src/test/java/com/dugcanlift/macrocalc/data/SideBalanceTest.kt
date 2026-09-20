@@ -12,6 +12,13 @@ import org.junit.Test
  * All of it is pure, which is the point: a rule that decides what a number on
  * the progression card says cannot live in a composable's state where nothing
  * can reach it.
+ *
+ * The rule is LIFT web's `lift/sides.js`, ported: the mean of each side's last
+ * three sessions, three sessions a side before there is a figure and four
+ * before there is a trend, half a percentage point of movement before the gap
+ * has done anything. Three platforms printing different percentages from one
+ * log is worse than any of them printing a slightly better number, so these
+ * pin the web's answers rather than this file's own opinion.
  */
 class SideBalanceTest {
 
@@ -69,8 +76,25 @@ class SideBalanceTest {
         assertEquals(0.0, imbalance.fraction, 1e-9)
         assertEquals(0, imbalance.percent)
         assertNull(imbalance.stronger)
-        assertEquals(ImbalanceTrend.STEADY, imbalance.trend)
-        assertEquals("Even · holding steady", imbalance.description)
+        // Exactly three sessions: the first three and the last three are the
+        // same sessions, so there is no trend to state and the line says so by
+        // saying nothing.
+        assertEquals(ImbalanceTrend.UNKNOWN, imbalance.trend)
+        assertNull(imbalance.was)
+        assertEquals("Even", imbalance.description)
+    }
+
+    @Test
+    fun `a trend needs a fourth session on each side`() {
+        val three = listOf(
+            day("2026-09-01", 100.0, 90.0),
+            day("2026-09-04", 100.0, 90.0),
+            day("2026-09-08", 100.0, 90.0)
+        )
+        assertEquals(ImbalanceTrend.UNKNOWN, SideBalance.trend(SideBalance.sessions(three)))
+        val four = three + day("2026-09-11", 100.0, 90.0)
+        assertEquals(ImbalanceTrend.STEADY, SideBalance.trend(SideBalance.sessions(four)))
+        assertEquals(SideBalance.MIN_FOR_TREND, 4)
     }
 
     /* ---------- a real gap ---------- */
@@ -111,13 +135,40 @@ class SideBalanceTest {
     }
 
     @Test
-    fun `each side is its best in the window, not its latest`() {
+    fun `each side is the mean of its last three sessions, not its best in the window`() {
+        // The left holds 100 all four sessions; the right was there and then
+        // fell away. Its last three sessions average 90.78 against the left's
+        // 126.67, which is a 28% gap.
+        //
+        // Taking each side's BEST in the window instead -- the rule this file
+        // carried before it was ported from `lift/sides.js` -- would compare
+        // 126.67 against the right's best 120.33 and print 5%, a number that
+        // describes a fortnight ago. This test is the one that catches that.
+        val history = listOf(
+            day("2026-09-01", 100.0, 95.0),
+            day("2026-09-04", 100.0, 95.0),
+            day("2026-09-08", 100.0, 60.0),
+            day("2026-09-11", 100.0, 60.0)
+        )
+        val imbalance = SideBalance.imbalance(SideBalance.sessions(history))!!
+        assertEquals(0.2833, imbalance.fraction, 1e-4)
+        assertEquals(28, imbalance.percent)
+        assertEquals(SetSide.LEFT, imbalance.stronger)
+        assertEquals(ImbalanceTrend.WIDENING, imbalance.trend)
+    }
+
+    @Test
+    fun `a single tired session moves the figure, but only by its third`() {
+        // The same tired day the "best in the window" rule used to discard. It
+        // is one of three, so it moves the mean by a third of the drop rather
+        // than not at all -- 100, 100, 70 averages 90.
         val history = listOf(
             day("2026-09-01", 100.0, 90.0),
             day("2026-09-08", 100.0, 90.0),
-            day("2026-09-15", 70.0, 63.0)   // a tired day, not a change in strength
+            day("2026-09-15", 70.0, 63.0)
         )
         val imbalance = SideBalance.imbalance(SideBalance.sessions(history))!!
+        // Both sides fell by the same proportion, so the GAP is unchanged at 10%.
         assertEquals(0.10, imbalance.fraction, 1e-9)
     }
 
@@ -133,7 +184,26 @@ class SideBalanceTest {
         )
         val imbalance = SideBalance.imbalance(SideBalance.sessions(history))!!
         assertEquals(ImbalanceTrend.CLOSING, imbalance.trend)
-        assertEquals("Left 5% stronger · gap closing", imbalance.description)
+        // Last three on the right: 80, 95, 95 -> mean 114 against the left's
+        // 126.67. The first three, 80, 80, 95, were 15% behind.
+        assertEquals(0.15, imbalance.was!!, 1e-9)
+        assertEquals("Left 10% stronger · gap closing", imbalance.description)
+    }
+
+    @Test
+    fun `half a percentage point of movement is not a direction`() {
+        // The right gains a single pound in the last session: a real movement,
+        // and far too small to call. `sides.js` draws the line in the same place.
+        val history = listOf(
+            day("2026-09-01", 100.0, 90.0),
+            day("2026-09-04", 100.0, 90.0),
+            day("2026-09-08", 100.0, 90.0),
+            day("2026-09-11", 100.0, 91.0)
+        )
+        val imbalance = SideBalance.imbalance(SideBalance.sessions(history))!!
+        assertEquals(ImbalanceTrend.STEADY, imbalance.trend)
+        assertTrue("the gap did move, just not enough to name",
+            imbalance.fraction < imbalance.was!!)
     }
 
     @Test
@@ -149,7 +219,10 @@ class SideBalanceTest {
     }
 
     @Test
-    fun `a half of the window with only one side answers unknown, not a direction`() {
+    fun `a side with three sessions has a figure but no direction`() {
+        // Two days that trained only the left. They are not right-side zeros --
+        // they are days the right has nothing to say about, so the right counts
+        // three sessions, enough for the figure and one short of a trend.
         val history = listOf(
             day("2026-09-01", 100.0, null),
             day("2026-09-04", 100.0, null),
@@ -159,8 +232,9 @@ class SideBalanceTest {
         )
         val sessions = SideBalance.sessions(history)
         assertEquals(ImbalanceTrend.UNKNOWN, SideBalance.trend(sessions))
-        // And the headline still appears, because the right side has its three.
         val imbalance = SideBalance.imbalance(sessions)!!
+        assertEquals(5, imbalance.leftSessions)
+        assertEquals(3, imbalance.rightSessions)
         assertEquals("Left 10% stronger", imbalance.description)
     }
 

@@ -82,4 +82,12 @@ class PerSideLoggingTest {
         assertEquals("L 2 · R 1", PerSideLogging.sideCountLabel(exercise(
             SetSide.LEFT, SetSide.RIGHT, SetSide.LEFT)))
     }
+
+    @Test
+    fun `sets logged before the toggle went on are counted, not hidden`() {
+        // LIFT web's countsLabel exactly: the two unmarked sets are still in
+        // this exercise and still on screen underneath the line.
+        assertEquals("L 1 · R 1 · 2 both", PerSideLogging.sideCountLabel(exercise(
+            null, null, SetSide.LEFT, SetSide.RIGHT)))
+    }
 }
