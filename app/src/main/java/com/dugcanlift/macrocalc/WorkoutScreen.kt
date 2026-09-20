@@ -58,6 +58,8 @@ import com.dugcanlift.macrocalc.data.StarterSplitStore
 import com.dugcanlift.macrocalc.data.alreadyHas
 import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
+import com.dugcanlift.macrocalc.data.PerSideLogging
+import com.dugcanlift.macrocalc.data.SetSide
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.TrainingFocus
 import com.dugcanlift.macrocalc.data.WorkoutRepository
@@ -398,6 +400,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 known = known,
                 equipmentOptions = equipmentOptions,
                 lastFor = { name, equipment -> sessions.lastPerformed(name, equipment) },
+                logsPerSide = { matchKey -> settings.logsPerSide(matchKey) },
+                onLogsPerSideChange = { matchKey, value -> settings.setLogsPerSide(matchKey, value) },
                 onChange = { scope.launch { workouts.save(it) } },
                 onDelete = { scope.launch { workouts.delete(session.id) } },
                 onSaveAsRoutine = { name, folder ->
@@ -650,6 +654,8 @@ private fun SessionCard(
     known: List<LoggedExercise>,
     equipmentOptions: List<String>,
     lastFor: (String, String) -> LoggedExercise?,
+    logsPerSide: (String) -> Boolean,
+    onLogsPerSideChange: (String, Boolean) -> Unit,
     onChange: (WorkoutSession) -> Unit,
     onDelete: () -> Unit,
     onSaveAsRoutine: (String, String) -> Unit
@@ -685,6 +691,8 @@ private fun SessionCard(
                     focus = focus,
                     previous = lastFor(exercise.name, exercise.equipment)
                         .takeIf { it?.id != exercise.id },
+                    logsPerSide = logsPerSide,
+                    onLogsPerSideChange = onLogsPerSideChange,
                     onChange = { updated ->
                         onChange(
                             session.copy(
@@ -773,10 +781,19 @@ private fun ExerciseBlock(
     exercise: LoggedExercise,
     focus: TrainingFocus,
     previous: LoggedExercise?,
+    logsPerSide: (String) -> Boolean,
+    onLogsPerSideChange: (String, Boolean) -> Unit,
     onChange: (LoggedExercise) -> Unit,
     onRemove: () -> Unit
 ) {
     var addingSet by rememberSaveable(exercise.id) { mutableStateOf(false) }
+
+    // Seeded from the stored preference, which falls back to the name's own
+    // guess only while nobody has answered. Toggling writes the answer through,
+    // so it is remembered for this lift everywhere, not for this card.
+    var perSide by rememberSaveable(exercise.matchKey) {
+        mutableStateOf(logsPerSide(exercise.matchKey))
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -807,6 +824,33 @@ private fun ExerciseBlock(
             }
         }
 
+        // Offered on every exercise, ticked to start only when the name looks
+        // unilateral. With it off the rest of this block is exactly what it was
+        // before sides existed.
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FilterChip(
+                selected = perSide,
+                onClick = {
+                    perSide = !perSide
+                    onLogsPerSideChange(exercise.matchKey, perSide)
+                },
+                label = { Text("Left and right separately", maxLines = 1) }
+            )
+            if (perSide) {
+                PerSideLogging.sideCountLabel(exercise)?.let { counts ->
+                    Spacer(modifier = Modifier.width(12.dp))
+                    // The whole point of the line: a side one set behind is visible
+                    // without counting rows.
+                    Text(
+                        text = counts,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(4.dp))
 
         exercise.sets.forEachIndexed { index, set ->
@@ -828,9 +872,20 @@ private fun ExerciseBlock(
         }
 
         if (addingSet) {
+            // The side this set starts on: whichever has fewer today, so the
+            // control alternates by itself and a pair costs one extra tap.
+            val startingSide = if (perSide) PerSideLogging.defaultSide(exercise) else null
             SetForm(
                 focus = focus,
-                previousSet = exercise.sets.lastOrNull() ?: previous?.sets?.lastOrNull(),
+                // "Same as last": this side's own last set if it has one,
+                // otherwise the set just logged — which on the second side of a
+                // pair is the first side's, the numbers most people are about
+                // to match.
+                previousSet = exercise.sets(startingSide).lastOrNull()
+                    ?: exercise.sets.lastOrNull()
+                    ?: previous?.sets?.lastOrNull { it.side == startingSide }
+                    ?: previous?.sets?.lastOrNull(),
+                startingSide = startingSide,
                 onAdd = { newSet ->
                     onChange(exercise.copy(sets = exercise.sets + newSet))
                     addingSet = false
@@ -847,9 +902,15 @@ private fun ExerciseBlock(
 private fun SetForm(
     focus: TrainingFocus,
     previousSet: WorkoutSet?,
+    /** Null means this exercise is not logged per side, and no L/R control is drawn at all. */
+    startingSide: SetSide?,
     onAdd: (WorkoutSet) -> Unit,
     onCancel: () -> Unit
 ) {
+    // Held as the enum's name rather than the enum: what rememberSaveable can
+    // put in a Bundle is what survives a rotation mid-set.
+    var sideName by rememberSaveable { mutableStateOf(startingSide?.name) }
+    val side = sideName?.let { name -> SetSide.entries.firstOrNull { it.name == name } }
     var weight by rememberSaveable { mutableStateOf(previousSet?.weightLb?.trimZero() ?: "") }
     // The set before is the best guess there is; the focus only has to answer
     // for the first one, where 5 and 10 are different training decisions.
@@ -861,6 +922,18 @@ private fun SetForm(
     var distance by rememberSaveable { mutableStateOf(previousSet?.distanceMeters?.trimZero() ?: "") }
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        if (startingSide != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SetSide.entries.forEach { option ->
+                    FilterChip(
+                        selected = side == option,
+                        onClick = { sideName = option.name },
+                        label = { Text(option.label) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         if (focus.showWeight) {
             NumberField(value = weight, onValueChange = { weight = it }, label = "Weight (lb)")
             Spacer(modifier = Modifier.height(8.dp))
@@ -889,7 +962,8 @@ private fun SetForm(
                     reps = reps.toIntOrNull(),
                     rpe = rpe.toDoubleOrNull(),
                     durationSec = parseDuration(time),
-                    distanceMeters = distance.toDoubleOrNull()
+                    distanceMeters = distance.toDoubleOrNull(),
+                    side = side
                 )
                 if (!set.isEmpty) onAdd(set)
             }) {
@@ -913,6 +987,9 @@ private fun formatSet(set: WorkoutSet): String {
     set.rpe?.let { parts += "@${it.trimZero()}" }
     set.durationSec?.let { parts += formatDuration(it) }
     set.distanceMeters?.let { parts += "${it.trimZero()} m" }
+    // "185 x 5 L". A both-sided set says nothing, because saying "both" on
+    // every bench press set would be noise on every screen.
+    set.side?.let { parts += it.short }
     return if (parts.isEmpty()) "-" else parts.joinToString(" ")
 }
 

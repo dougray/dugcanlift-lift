@@ -22,6 +22,8 @@ covered by the kit's own tests.
   sender must produce the same string, checked against LIFT web's fixtures in
   `CoachShareOutdoorTest`.
 - `IngredientParser`, `RecipeIngredient`, `RecipeNutrition`, `Double.trimZeros()`.
+- `ShareSide` + `ShareSet.side` (kit 1.5.0) — which limb a set was performed
+  with, in the set tuple's flags bits 1-2. See "Per-limb sets" below.
 - `DayKey` — local `yyyy-MM-dd` day keys. `todayKey()`/`dateKey()` in
   `data/FoodEntry.kt` are one-line wrappers over `DayKey.today()`/`DayKey.make()`
   kept under their existing names so nothing else in the app had to change.
@@ -50,6 +52,54 @@ Android's tap-to-import depends on — that file also carries LIFT's release
 signing fingerprint alongside Coach's, so a broken or missing entry for
 either app shows up as autoVerify silently falling back to the
 disambiguation sheet for that app specifically, not both.
+
+## Per-limb sets
+
+A set may name a limb. `WorkoutSet.side` is a `SetSide?`, and **null means
+both** — which is what every set written before this means, and what every set
+of a two-sided lift means now. Nothing ever fills it in by guessing, and it
+never defaults to left. No side is ever inferred for data logged before the
+feature; those sets stay both, which is honest.
+
+- **The wire is fixed by the spec, not by this app.** SHARE-FORMAT puts the
+  side in the set tuple's **flags bits 1-2** (`0` both, `1` left, `2` right),
+  beside bit 0's warmup flag — no new tuple position, so a coach app that
+  ignores flags still reads the weight, the reps and the volume. BACKUP-FORMAT
+  spells it as a **named field**, `side: "left" | "right"`, omitted when both,
+  because a backup is read by humans and by three platforms. PLAN-FORMAT is
+  unchanged in v1: a coach prescribes as before and the lifter picks the side
+  when logging. `CoachShareSideTest` and `PerLimbSetsTest` pin both, the second
+  against `fixtures/backup-main-no-sides.json`, a file `BackupStore.build` on
+  main actually wrote — do not regenerate it from this branch.
+- **A both-sided set writes nothing.** No `side` key in the backup, `0` flags in
+  the link, which the codec trims away. A phone with no per-limb sets therefore
+  writes the same file and the same link it wrote before the feature existed.
+- **Whether an exercise is logged per side is the lifter's choice**, remembered
+  by `SettingsStore.logsPerSide` under the dictionary's own key
+  (`name|equipment`). `PerSideLogging.looksUnilateral` only decides where the
+  toggle *starts*; the moment the lifter answers, the answer is stored and the
+  guess is never consulted again — including when they turn it off for
+  something that looks unilateral.
+- **Logging costs one extra tap.** The L/R control starts on the side with
+  fewer sets for that exercise today (`PerSideLogging.defaultSide`), so it
+  alternates by itself, the header shows `L 3 · R 3`, and the form pre-fills
+  from that side's last set or, failing that, from the set just logged — the
+  first side's numbers, which is what most people are about to match. With the
+  preference off, the set row is exactly what it was.
+- **Grouping keys on name, equipment *and* side** (`sideKey`). An exercise's
+  identity — what `historyFor` and `matchKey` match on — is still name and
+  equipment, because a side is a property of a set, not of the lift; it is the
+  *series* drawn from those sets that are per side. L and R are never merged
+  into one line, for the reason a cable pulldown is not a machine pulldown.
+- **The imbalance maths is pure** (`SideBalance`, `SideBalanceTest`):
+  `(strong − weak) / strong` on estimated 1RM, each side at its best in the
+  window, shown only when both sides have at least `MIN_SESSIONS` (3) in it,
+  plus whether the gap is widening or closing across the window's two halves.
+  A rule that decides what a number on a card says cannot live in a
+  composable's state where nothing can reach it.
+- **Tracked and shown, never targeted** — the discipline saturated fat, sugar
+  and sodium follow. No threshold, no colour, no warning, no advice. A 10% gap
+  is ordinary, and what a particular one means is a question for a trainer.
 
 ## Recording a route needs no background location
 

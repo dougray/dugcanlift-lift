@@ -36,6 +36,26 @@ class SettingsStore private constructor(context: Context) {
         }
         set(value) { prefs.edit().putString(KEY_SERVING_UNIT, value.name).apply() }
 
+    /**
+     * Whether this exercise is logged left and right separately, keyed the way
+     * the dictionary is (`name|equipment`).
+     *
+     * Unset means nobody has answered yet, and only then does the name decide
+     * ([PerSideLogging.looksUnilateral]). Once the lifter sets it either way
+     * that value is stored and the guess is never consulted again — including
+     * when they turn it *off* for something that looks unilateral, which is the
+     * case a "the guess unless it was turned on" shortcut gets wrong.
+     */
+    fun logsPerSide(matchKey: String): Boolean {
+        val key = PerSideLogging.prefKey(matchKey)
+        if (!prefs.contains(key)) return PerSideLogging.looksUnilateral(PerSideLogging.nameOf(matchKey))
+        return prefs.getBoolean(key, false)
+    }
+
+    fun setLogsPerSide(matchKey: String, value: Boolean) {
+        prefs.edit().putBoolean(PerSideLogging.prefKey(matchKey), value).apply()
+    }
+
     companion object {
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
