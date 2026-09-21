@@ -112,6 +112,19 @@ requests whatsoever.
   Export on a finished activity — never automatically, and never for any
   other kind of data. As with step data, this stays on-device between the app
   and Health Connect; nothing is uploaded anywhere by this app.
+- **Nearby devices / Bluetooth (`BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`; on
+  Android 11 and older `BLUETOOTH`, `BLUETOOTH_ADMIN`)** — used only if you
+  pair the LIFT watch app for Wear OS, from the Watch card on Home. The phone
+  looks for LIFT's own watch app once, to pair, and then connects only to the
+  watch you chose. What crosses that link is the day's workout (exercises,
+  sets, target weights and your last numbers for each) going to the watch, and
+  sessions you finished on the watch coming back into your log. It goes
+  directly between your phone and your watch over an encrypted Bluetooth
+  connection — no server, no account, nothing else. The scan is declared
+  `neverForLocation`: it is not used to work out where you are. On Android 11
+  and older, Android itself requires location permission and location services
+  for any Bluetooth scan; LIFT asks for nothing new there, because route
+  recording already uses that permission.
 
 ## Sending your log to a coach
 

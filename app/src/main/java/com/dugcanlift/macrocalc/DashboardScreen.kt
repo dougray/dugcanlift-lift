@@ -633,6 +633,10 @@ fun DashboardScreen(
         BackupCard(onRestored = onRestored)
     }
 
+    val watchCard: @Composable () -> Unit = rememberMovablePart {
+        WatchCard()
+    }
+
     if (showingStepGoalEditor) {
         StepGoalDialog(
             initial = stepGoal,
@@ -682,6 +686,8 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 coachCard()
                 Spacer(modifier = Modifier.height(16.dp))
+                watchCard()
+                Spacer(modifier = Modifier.height(16.dp))
                 servingCard()
                 Spacer(modifier = Modifier.height(16.dp))
                 appearanceCard()
@@ -700,6 +706,7 @@ fun DashboardScreen(
                     progressionSection()
                     fuelingSection()
                     coachCard()
+                    watchCard()
                     servingCard()
                     appearanceCard()
                     backupCard()
