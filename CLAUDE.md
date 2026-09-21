@@ -108,6 +108,48 @@ feature; those sets stay both, which is honest.
   and sodium follow. No threshold, no colour, no warning, no advice. A 10% gap
   is ordinary, and what a particular one means is a question for a trainer.
 
+## Road Food
+
+Macro-friendly picks at fast-food chains and gas stations, ranked against what
+is left of today, reached from Food ("Road Food"). Spec:
+`dugcanlift-wip-backups/lift-road-food-spec.md`.
+
+- **The ranking is a port of LIFT web's `lift/road-food.js`, function for
+  function** (`data/RoadFood.kt`, tested by `RoadFoodTest`, itself a port of
+  `road-food.test.mjs`): fits at or under what is left; a separate "A little
+  over" group up to 10% over (compared as `kcal x 10 <= left x 11`); nothing
+  beyond; protein per 100 kcal, then lower sodium, then name. No goal: protein
+  per 100 kcal alone, and the screen says so. Unknown protein or sodium ranks
+  after known, never as zero. As with `SideBalance`, **the rule changes in
+  `road-food.js` first and is ported again**.
+- **"What is left" is `remainingFor` (`data/Remaining.kt`)**, the one function
+  Home's and Food's "kcal left" read too. Do not compute it a second time.
+- **Log it** writes an ordinary `FoodEntry` for today in the chosen meal, so it
+  reaches the day's totals and Send to Coach like any food. Saturated fat, sugar
+  and sodium travel where the item lists them and stay null where it does not.
+- Tracked and shown, never targeted: sodium, sugar and saturated fat are plain
+  text on each row. No location of any kind and no new permissions: the person
+  picks the chain. Recent chains are `SettingsStore.roadFoodRecent`, not backed up.
+
+**The data, and how the real file drops in.** One file,
+`dugcanlift-kit/data/road-food.json`, the same on every platform. It goes into
+this app **unchanged** as `app/src/main/assets/road-food.json` -- that one file
+is the whole drop-in; no code changes. Until it is there:
+
+- `app/src/debug/assets/road-food-sample.json` is a fixture with obviously fake
+  names ("Sample Burger Co"), copied from LIFT web's
+  `lift/fixtures/road-food-sample.json`. It is in the **debug** source set only,
+  so no release can contain it. `RoadFoodStore` reads `road-food.json` first and
+  falls back to the sample only when that is absent, so once the real file is in
+  `main` a debug build shows it too.
+- A release without the real file shows **no Road Food button** at all
+  (`RoadFoodStore.isBundled`), rather than a screen with nothing in it.
+- `RoadFoodTest` fails if the sample ever appears under `src/main/assets`, and
+  once the real file is there it parses it and fails on any Sample/Example/
+  Fictional/Placeholder/Test name. The Road Food assets are declared inputs of
+  the unit-test task, so dropping the file in reruns it.
+- Refreshing the numbers is the same drop-in: replace the file, release as usual.
+
 ## Recording a route needs no background location
 
 The manifest does **not** declare `ACCESS_BACKGROUND_LOCATION`, and nothing asks
@@ -212,7 +254,8 @@ by `WindowLayoutTest`. Put a new width rule there, not in a composable.
   Food's totals and add/edit forms beside the meal list; Train's lifting beside
   Outdoor, with Last route (map larger) beside Personal bests below and routines as
   a card grid; Cook recipes as a card grid, the plan as two days a row and the
-  whole week in seven columns from 1000 dp, shopping in two columns read downwards.
+  whole week in seven columns from 1000 dp, shopping in two columns read downwards;
+  Road Food's chains as a card grid and a chain's ranked list beside its ordering rules.
   Two panes need two 320 dp panes (656 dp of content), so a tablet in portrait
   splits and an unfolded foldable in portrait (≈560 dp of content) does not.
 - Recording and reviewing a route (`RouteScreenLayout`) put the square map beside

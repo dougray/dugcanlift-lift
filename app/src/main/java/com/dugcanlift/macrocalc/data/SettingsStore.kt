@@ -56,7 +56,19 @@ class SettingsStore private constructor(context: Context) {
         prefs.edit().putBoolean(PerSideLogging.prefKey(matchKey), value).apply()
     }
 
+    /**
+     * Road Food's recently opened chains, most recent first, as chain ids
+     * ([RoadFood.remember] keeps the list). A convenience about one screen, not
+     * a record, so it stays on this phone and is not in the backup -- LIFT
+     * web's `lift.roadRecent` follows the same rule.
+     */
+    var roadFoodRecent: List<String>
+        get() = prefs.getString(KEY_ROAD_RECENT, null)
+            ?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
+        set(value) { prefs.edit().putString(KEY_ROAD_RECENT, value.joinToString("\n")).apply() }
+
     companion object {
+        private const val KEY_ROAD_RECENT = "road_food_recent"
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
         private const val KEY_SERVING_UNIT = "serving_unit"
