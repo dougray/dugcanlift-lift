@@ -74,14 +74,14 @@ class SideBalanceTest {
         )
         val imbalance = SideBalance.imbalance(SideBalance.sessions(history))!!
         assertEquals(0.0, imbalance.fraction, 1e-9)
-        assertEquals(0, imbalance.percent)
+        assertEquals("0", imbalance.percentText)
         assertNull(imbalance.stronger)
         // Exactly three sessions: the first three and the last three are the
         // same sessions, so there is no trend to state and the line says so by
         // saying nothing.
         assertEquals(ImbalanceTrend.UNKNOWN, imbalance.trend)
         assertNull(imbalance.was)
-        assertEquals("Even", imbalance.description)
+        assertEquals("Sides level", SideBalance.lines(SideBalance.sessions(history)).headline)
     }
 
     @Test
@@ -110,7 +110,7 @@ class SideBalanceTest {
         )
         val imbalance = SideBalance.imbalance(SideBalance.sessions(history))!!
         assertEquals(0.10, imbalance.fraction, 1e-9)
-        assertEquals(10, imbalance.percent)
+        assertEquals("10", imbalance.percentText)
         assertEquals(SetSide.LEFT, imbalance.stronger)
         assertEquals(3, imbalance.leftSessions)
         assertEquals(3, imbalance.rightSessions)
@@ -152,7 +152,7 @@ class SideBalanceTest {
         )
         val imbalance = SideBalance.imbalance(SideBalance.sessions(history))!!
         assertEquals(0.2833, imbalance.fraction, 1e-4)
-        assertEquals(28, imbalance.percent)
+        assertEquals("28.3", imbalance.percentText)
         assertEquals(SetSide.LEFT, imbalance.stronger)
         assertEquals(ImbalanceTrend.WIDENING, imbalance.trend)
     }
@@ -187,7 +187,9 @@ class SideBalanceTest {
         // Last three on the right: 80, 95, 95 -> mean 114 against the left's
         // 126.67. The first three, 80, 80, 95, were 15% behind.
         assertEquals(0.15, imbalance.was!!, 1e-9)
-        assertEquals("Left 10% stronger · gap closing", imbalance.description)
+        val lines = SideBalance.lines(SideBalance.sessions(history))
+        assertEquals("Left ahead by 10%", lines.headline)
+        assertEquals("Mean estimated 1RM of the last 3 sessions each · gap closing", lines.detail)
     }
 
     @Test
@@ -235,7 +237,69 @@ class SideBalanceTest {
         val imbalance = SideBalance.imbalance(sessions)!!
         assertEquals(5, imbalance.leftSessions)
         assertEquals(3, imbalance.rightSessions)
-        assertEquals("Left 10% stronger", imbalance.description)
+        val lines = SideBalance.lines(sessions)
+        assertEquals("Left ahead by 10%", lines.headline)
+        // No trend to judge, so no trend clause at all.
+        assertEquals("Mean estimated 1RM of the last 3 sessions each", lines.detail)
+    }
+
+    /* ---------- the words ---------- */
+
+    /*
+     * Coach web's `imbalanceLines` tests (coach/sides.test.mjs), ported: the
+     * same inputs must print the same sentences on all six apps.
+     */
+
+    private fun lines(left: List<Double?>, right: List<Double?>) = SideBalance.lines(
+        left.zip(right).mapIndexed { i, (l, r) -> SideSession("2026-09-%02d".format(i + 1), l, r) }
+    )
+
+    @Test
+    fun `the lines say what is missing rather than nothing`() {
+        val notYet = lines(listOf(100.0, null, null), listOf(100.0, 100.0, 100.0))
+        assertEquals("\u2014", notYet.headline)
+        assertEquals("Needs 3 sessions a side · 1 left, 3 right so far", notYet.detail)
+
+        val twoEach = lines(listOf(100.0, 102.0), listOf(120.0, 118.0))
+        assertEquals("Needs 3 sessions a side · 2 left, 2 right so far", twoEach.detail)
+
+        val ahead = lines(
+            listOf(80.0, 80.0, 80.0, 95.0, 95.0, 95.0),
+            listOf(100.0, 100.0, 100.0, 100.0, 100.0, 100.0)
+        )
+        assertEquals("Right ahead by 5%", ahead.headline)
+        assertEquals("Mean estimated 1RM of the last 3 sessions each · gap closing", ahead.detail)
+
+        assertEquals("Sides level", lines(List(3) { 100.0 }, List(3) { 100.0 }).headline)
+
+        // Tracked and shown, never targeted.
+        val text = listOf(notYet, ahead).joinToString(" ") { "${it.headline} ${it.detail}" }.lowercase()
+        listOf("should", "fix", "warning", "target", "too ", "concern").forEach { word ->
+            assertFalse("\"$word\" has no business in this card", text.contains(word))
+        }
+    }
+
+    @Test
+    fun `the headline is one decimal with a trailing zero dropped`() {
+        // 120 vs 100: 16.666...% -> 16.7%
+        assertEquals("Left ahead by 16.7%", lines(List(3) { 120.0 }, List(3) { 100.0 }).headline)
+        // 95.5 vs 100: 4.5%
+        assertEquals("Right ahead by 4.5%", lines(List(3) { 95.5 }, List(3) { 100.0 }).headline)
+        // 90 vs 100: exactly 10%, never "10.0%"
+        assertEquals("Right ahead by 10%", lines(List(3) { 90.0 }, List(3) { 100.0 }).headline)
+    }
+
+    @Test
+    fun `every trend has its clause`() {
+        val hundreds = List(6) { 100.0 }
+        assertEquals(
+            "Mean estimated 1RM of the last 3 sessions each · gap widening",
+            lines(listOf(96.0, 96.0, 96.0, 80.0, 80.0, 80.0), hundreds).detail
+        )
+        assertEquals(
+            "Mean estimated 1RM of the last 3 sessions each · gap steady",
+            lines(List(4) { 90.0 }, List(4) { 100.0 }).detail
+        )
     }
 
     /* ---------- grouping ---------- */

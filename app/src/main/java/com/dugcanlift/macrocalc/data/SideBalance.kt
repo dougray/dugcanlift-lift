@@ -1,6 +1,6 @@
 package com.dugcanlift.macrocalc.data
 
-import kotlin.math.roundToInt
+import kotlin.math.floor
 
 /** One occurrence of an exercise, reduced to a best estimated 1RM per side. Null is "that side wasn't trained". */
 data class SideSession(val date: String, val leftE1rm: Double?, val rightE1rm: Double?)
@@ -31,32 +31,35 @@ data class SideImbalance(
     val leftSessions: Int,
     val rightSessions: Int
 ) {
-    /** Whole percent, the only precision this number deserves. */
-    val percent: Int get() = (fraction * 100).roundToInt()
-
     /**
-     * The one line the card shows.
-     *
-     * Tracked and shown, never targeted — the discipline saturated fat, sugar
-     * and sodium follow. It states the gap and which way it is going and stops
-     * there: no threshold, no warning, no advice. A 10% difference is ordinary
-     * in most people, and what yours means is a question for a trainer.
+     * The percentage as the card prints it: one decimal, a trailing `.0`
+     * dropped -- "5", "4.5", "16.7". Rounded half up, which is what Coach web's
+     * `Math.round(percent * 1000) / 10` does; Kotlin's `round` is half-even and
+     * would print a different figure on an exact half.
      */
-    val description: String
+    val percentText: String
         get() {
-            val head = when {
-                stronger == null || percent == 0 -> "Even"
-                else -> "${stronger.label} ${percent}% stronger"
-            }
-            val tail = when (trend) {
-                ImbalanceTrend.WIDENING -> "gap widening"
-                ImbalanceTrend.CLOSING -> "gap closing"
-                ImbalanceTrend.STEADY -> "holding steady"
-                ImbalanceTrend.UNKNOWN -> null
-            }
-            return listOfNotNull(head, tail).joinToString(" · ")
+            val tenths = floor(fraction * 1000 + 0.5).toLong()
+            return if (tenths % 10 == 0L) (tenths / 10).toString()
+            else "${tenths / 10}.${tenths % 10}"
         }
 }
+
+/**
+ * What the progression card prints about a per-limb lift: a short [headline]
+ * for the Imbalance row and a quieter [detail] line saying what it was
+ * measured over.
+ *
+ * **This is Coach web's `coach/sides.js` `imbalanceLines`, word for word**, as
+ * Coach iOS, Coach Android, LIFT web and LIFT iOS print it: six apps, one
+ * sentence, so a lifter and their trainer read the same thing from one log.
+ *
+ * Tracked and shown, never targeted -- the discipline saturated fat, sugar and
+ * sodium follow. It states the gap and what it was measured over and stops
+ * there: no threshold, no warning, no advice. A 10% difference is ordinary in
+ * most people, and what yours means is a question for a trainer.
+ */
+data class ImbalanceLines(val headline: String, val detail: String)
 
 /**
  * The per-side maths behind the progression card, kept pure and free of
@@ -163,6 +166,33 @@ object SideBalance {
         val now = gap(mean(left.takeLast(MIN_SESSIONS)), mean(right.takeLast(MIN_SESSIONS)))
             ?: return ImbalanceTrend.UNKNOWN
         return trendFrom(now, earlierGap(left, right))
+    }
+
+    /**
+     * The card's two lines for this window. Below [MIN_SESSIONS] a side there
+     * is no figure, so the headline is an em dash and the detail counts what
+     * each side has -- saying what is missing beats a blank a lifter would read
+     * as "no imbalance".
+     */
+    fun lines(sessions: List<SideSession>): ImbalanceLines {
+        val imbalance = imbalance(sessions) ?: return ImbalanceLines(
+            headline = "\u2014",
+            detail = "Needs $MIN_SESSIONS sessions a side \u00b7 " +
+                "${recorded(sessions.map { it.leftE1rm }).size} left, " +
+                "${recorded(sessions.map { it.rightE1rm }).size} right so far"
+        )
+        val trend = when (imbalance.trend) {
+            ImbalanceTrend.WIDENING -> " \u00b7 gap widening"
+            ImbalanceTrend.CLOSING -> " \u00b7 gap closing"
+            ImbalanceTrend.STEADY -> " \u00b7 gap steady"
+            ImbalanceTrend.UNKNOWN -> ""
+        }
+        return ImbalanceLines(
+            headline = imbalance.stronger
+                ?.let { "${it.label} ahead by ${imbalance.percentText}%" }
+                ?: "Sides level",
+            detail = "Mean estimated 1RM of the last $MIN_SESSIONS sessions each$trend"
+        )
     }
 
     /** True once any occurrence in the window recorded a side, which is what turns the card's per-side parts on. */
