@@ -1,28 +1,34 @@
-LIFT is a nutrition and training tracker that keeps your data on your phone. No accounts, no ads, no analytics, no cloud sync. Everything except food search works offline.
+LIFT is a nutrition and training tracker that keeps your data on your phone. No accounts, no ads, no analytics, no cloud sync. Everything except food search and barcode lookup works offline.
 
 DASHBOARD
-Opens on today: calories and macros against your goal, steps against a daily goal, what you've trained and what you've eaten. Below that, a week of stats and charts, and per-exercise progression showing your top weight and estimated one-rep max over your last ten sessions of any lift. Days you didn't log show as gaps, not zeros. Choose System, Light or Dark appearance.
+Opens on today: calories and macros against your goal, steps, and what you've trained and eaten. Below that, a week of stats and charts, and progression for any lift over its last ten sessions: volume, top weight and estimated one-rep max, working time or distance, depending on your training focus. Unlogged days show as gaps, not zeros. System, Light or Dark appearance.
+
+LEFT AND RIGHT
+Log single-arm and single-leg work one side at a time: turn on "Left and right separately" for a lift (it starts on for lifts named that way, like lunges) and each set records a side. Progression charts each side on its own line and, after three sessions a side, how far apart they are; after four, whether the gap is closing. No target, no warning.
 
 MACRO CALCULATOR
-Mifflin-St Jeor from your sex, age, weight, height and activity level. Pick lose, maintain or gain, a protein target and a fat target, and save the result as your goal.
+Mifflin-St Jeor from your sex, age, weight, height and activity level. Pick lose, maintain or gain, protein and fat targets, and save it as your goal.
 
 FOOD LOG
-Log food by weight in grams or ounces, and see what an entry will count as before you save it. Entries are grouped by meal with per-meal subtotals, and fibre is tracked alongside protein, fat and carbs. Search Open Food Facts or scan a barcode, enter anything by hand, re-log a recent food in one tap, and tap any entry to change it.
+Log food by weight in grams or ounces, and see what an entry will count as before you save it. Meals get subtotals, and fibre is tracked with protein, fat and carbs. Search Open Food Facts or scan a barcode, enter anything by hand, re-log a recent food in one tap, and edit any entry.
 
 COOK
-Write recipes, or paste a recipe's text - a blog post or a video caption - and edit the split into ingredients and method. Labelled macros per serving, and the finished dish's weight so a portion can be logged by weight. Plan recipes onto the week's meals, log a planned meal in one tap, and get the week's shopping added up into one list.
+Write recipes, or paste a recipe's text from a blog or a video caption and edit it into shape. Labelled macros per serving, and the finished dish's weight so a portion can be logged by weight. Plan the week's meals, log a planned meal in one tap, and get one shopping list for the week.
 
 WORKOUT LOG
-Sessions contain exercises, exercises contain sets, and each set records weight, reps, RPE, time and distance, all optional. A training focus - bodybuilding, powerlifting, CrossFit, Hyrox, endurance or everything - decides which fields you see without ever discarding data. Equipment is tracked separately, so a cable and a machine pulldown keep separate histories. A bundled library of 873 exercises, what you lifted last time under each exercise, and sets that prefill from the one before. Save routines in folders, or add starter routines in one tap: Push, Pull, Legs, Upper, Lower, Full Body, Mobility, Active Rest, Short Run and Long Run.
+Each set records weight, reps, RPE, time and distance, all optional. A training focus - bodybuilding, powerlifting, CrossFit, Hyrox, endurance or everything - decides which fields you see without ever discarding data. A cable and a machine pulldown keep separate histories. 873 bundled exercises, what you lifted last time, and sets that prefill from the one before. Save routines in folders, or add ten starter routines in one tap.
 
 OUTDOOR
-Record a run, walk or hike with GPS: time, distance, pace, elevation gain and the route, drawn as you go. Recording continues with the screen off, with a notification while it does. Review a finished activity and export it to Health Connect with its route. See your last route and personal bests for each activity type.
+Record a run, walk or hike with GPS: time, distance, pace, elevation gain and the route, drawn as you go. Recording continues with the screen off, with a notification while it does. Review a finished activity and export it to Health Connect with its route. See your last route and your personal bests.
+
+TABLETS AND FOLDABLES
+On a tablet, a foldable, in split screen or with a phone turned sideways, LIFT uses the width: a navigation rail, and two or more columns where there is room, such as your workout beside your runs or the whole week's meals at once. A phone held upright looks as it always has.
 
 COACH
-Send to Coach writes an email in your own email app with your log in a link: 4, 8 or 12 weeks or 6 months, daily food totals or every item, and your runs, walks and hikes. The card lists what the email includes before you send. Your daily steps from Health Connect and your last route go only if you turn them on, the route with its first and last 200 m cut off. A coach's plan link opens in the app to preview, then accept or decline.
+Send to Coach writes an email in your own email app with your log in a link: 4, 8 or 12 weeks or 6 months, daily food totals or every item, and your runs, walks and hikes. Sets logged left and right keep their side. The card lists what the email includes. Your daily steps from Health Connect and your last route go only if you turn them on, the route with its first and last 200 m cut off. A coach's plan link opens in the app to accept or decline.
 
 YOUR DATA
-Save a backup file - food, training, recipes, meal plan, and outdoor history with full GPS routes - wherever you choose, and restore it on this phone or another. Restoring only adds what the phone doesn't already have.
+Save a backup file of everything, GPS routes included, wherever you choose, and restore it on this phone or another. Restoring only adds what the phone doesn't already have.
 
 PRIVACY
 Nothing leaves your phone unless you use a feature that sends it: a food search term or barcode goes to Open Food Facts when you search, Send to Coach hands your log to your own email app, and Export to Health Connect saves an activity to Health Connect on this phone. Full privacy policy at dugcanlift.com/app/privacy.
