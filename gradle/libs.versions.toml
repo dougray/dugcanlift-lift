@@ -15,7 +15,7 @@ guava = "33.7.1-android"
 json = "20260814"
 robolectric = "4.17"
 androidxTestCore = "1.7.0"
-kotlinxCoroutinesTest = "1.8.1"
+kotlinxCoroutinesTest = "1.11.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
