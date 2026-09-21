@@ -460,7 +460,7 @@ fun DashboardScreen(
                              * no advice. */
                             if (SideBalance.hasPerSideHistory(history)) {
                                 val sideSessions = SideBalance.sessions(history)
-                                val imbalance = SideBalance.imbalance(sideSessions)
+                                val imbalance = SideBalance.lines(sideSessions)
 
                                 Spacer(modifier = Modifier.height(20.dp))
                                 Text(
@@ -469,13 +469,15 @@ fun DashboardScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
-                                StatRow(
-                                    "Imbalance",
-                                    // Under three sessions a side, there is no figure
-                                    // to give — say so rather than print a number one
-                                    // heavy day decided.
-                                    imbalance?.description
-                                        ?: "Needs ${SideBalance.MIN_SESSIONS} sessions each side"
+                                // Coach web's words, shared by all six apps. Under
+                                // three sessions a side the headline is a dash and
+                                // the line below says what is missing, rather than
+                                // print a number one heavy day decided.
+                                StatRow("Imbalance", imbalance.headline)
+                                Text(
+                                    text = imbalance.detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 StatRow(
                                     "Sessions each",
