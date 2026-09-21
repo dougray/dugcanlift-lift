@@ -1,0 +1,5 @@
+Single-arm and single-leg work can now be logged left and right. Turn "Left and right separately" on for a lift — it is already on for the ones whose names say so — and each set records a side, alternating on its own so you only pick when you want to.
+
+Exercise progression then charts each side on its own line, with how far apart they are and whether the gap is closing. A lift you have always logged two-sided is unchanged.
+
+Your coach sees the same split, if you send them your log.
