@@ -77,9 +77,13 @@ android {
 }
 
 // LocationPermissionsManifestTest reads the source manifest directly, so a
-// manifest-only change has to make the unit tests out of date.
+// manifest-only change has to make the unit tests out of date. RoadFoodTest
+// reads the Road Food assets the same way (the debug fixture, and the real
+// file once it is in main), so an asset-only change reruns it too.
 tasks.withType<Test>().configureEach {
     inputs.file("src/main/AndroidManifest.xml")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(fileTree("src/main/assets") { include("road-food*.json") }, fileTree("src/debug/assets"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
