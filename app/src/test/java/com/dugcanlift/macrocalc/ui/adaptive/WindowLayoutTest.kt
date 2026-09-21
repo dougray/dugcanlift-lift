@@ -55,6 +55,7 @@ class WindowLayoutTest {
             assertEquals(1, AdaptiveLayout.homeColumns(c))
             assertFalse(AdaptiveLayout.foodIsTwoPane(c))
             assertFalse(AdaptiveLayout.trainIsTwoPane(c))
+            assertFalse(AdaptiveLayout.roadFoodIsTwoPane(c))
             assertEquals(1, AdaptiveLayout.cardColumns(c))
             assertEquals(1, AdaptiveLayout.planDayColumns(c))
             assertEquals(1, AdaptiveLayout.shoppingColumns(c))
@@ -71,6 +72,8 @@ class WindowLayoutTest {
         assertEquals(2, AdaptiveLayout.homeColumns(content(1280f)))
         assertFalse(AdaptiveLayout.foodIsTwoPane(655f))
         assertTrue(AdaptiveLayout.foodIsTwoPane(656f))
+        assertFalse(AdaptiveLayout.roadFoodIsTwoPane(content(673f)))
+        assertTrue(AdaptiveLayout.roadFoodIsTwoPane(content(800f)))
     }
 
     @Test fun `cards fill wider space in 280 dp cells, three at most`() {

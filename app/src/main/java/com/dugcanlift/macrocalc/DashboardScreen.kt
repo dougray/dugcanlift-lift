@@ -70,6 +70,7 @@ import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.ServingUnit
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
+import com.dugcanlift.macrocalc.data.remainingFor
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -173,7 +174,7 @@ fun DashboardScreen(
         } else {
             Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    val remaining = goal.calories - eaten.calories
+                    val remaining = remainingFor(goal, allEntries.forDate(today)).calories
                     Text(
                         text = if (remaining >= 0) "$remaining kcal left"
                         else "${-remaining} kcal over",
