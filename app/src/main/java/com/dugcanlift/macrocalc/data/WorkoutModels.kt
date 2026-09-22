@@ -121,6 +121,23 @@ data class WorkoutSet(
 }
 
 /**
+ * One set as a coach prescribed it, kept so a session can count against it.
+ *
+ * The same numbers as [WorkoutSet] with nothing logged about it: no id, and
+ * every field optional because a prescription is often partial ("five reps,
+ * you pick the weight"). [side] is PLAN-FORMAT "Sides" rule 2 -- a set for one
+ * side only, done on that side once. Null is both.
+ */
+data class PrescribedSet(
+    val weightLb: Double? = null,
+    val reps: Int? = null,
+    val rpe: Double? = null,
+    val durationSec: Int? = null,
+    val distanceMeters: Double? = null,
+    val side: SetSide? = null
+)
+
+/**
  * Equipment is a separate field rather than part of the name, because
  * "Lat Pulldown (Cable)" and "Lat Pulldown (Machine)" are different lifts with
  * different numbers — and keeping them apart means history matches correctly.
@@ -134,7 +151,17 @@ data class LoggedExercise(
     val name: String,
     val equipment: String = "",
     val sets: List<WorkoutSet> = emptyList(),
-    val note: String = ""
+    val note: String = "",
+    /**
+     * A coach's prescription, kept when it says anything about sides, so the
+     * header can count against it ("L 1/3 · R 0/3") and Add set can offer the
+     * next set it asks for -- and so both survive a relaunch. Null for every
+     * exercise that did not start from one. Informational: progression, the
+     * imbalance figure and volume read [sets], never this.
+     */
+    val prescribed: List<PrescribedSet>? = null,
+    /** PLAN-FORMAT's `b: 1`: every set in [prescribed] is done on both sides. */
+    val eachSide: Boolean = false
 ) {
     val volumeLb: Double get() = sets.sumOf { it.volumeLb }
 
@@ -226,7 +253,45 @@ internal fun LoggedExercise.toJson(): JSONObject = JSONObject().apply {
     put("equipment", equipment)
     put("note", note)
     put("sets", JSONArray().also { array -> sets.forEach { array.put(it.toJson()) } })
+    // LIFT web's spellings (BACKUP-FORMAT, a logged exercise started from a
+    // per-side prescription), both omitted when absent -- so an exercise
+    // without one writes the same object it always did.
+    putPrescription(prescribed, eachSide)
 }
+
+/** `prescribed` and `eachSide: true`, each omitted when there is nothing to say. */
+internal fun JSONObject.putPrescription(prescribed: List<PrescribedSet>?, eachSide: Boolean) {
+    prescribed?.let { sets -> put("prescribed", JSONArray().also { array -> sets.forEach { array.put(it.toJson()) } }) }
+    if (eachSide) put("eachSide", true)
+}
+
+/** A prescribed set: the numbers the coach gave, each omitted when not given, and `side` as a logged set spells it. */
+internal fun PrescribedSet.toJson(): JSONObject = JSONObject().apply {
+    weightLb?.let { put("weightLb", it) }
+    reps?.let { put("reps", it) }
+    rpe?.let { put("rpe", it) }
+    durationSec?.let { put("durationSec", it) }
+    distanceMeters?.let { put("distanceMeters", it) }
+    side?.let { put("side", it.wire) }
+}
+
+internal fun prescribedSetFromJson(o: JSONObject): PrescribedSet = PrescribedSet(
+    weightLb = o.finiteDoubleOrNull("weightLb"),
+    reps = o.finiteIntOrNull("reps"),
+    rpe = o.finiteDoubleOrNull("rpe"),
+    durationSec = o.finiteIntOrNull("durationSec"),
+    distanceMeters = o.finiteDoubleOrNull("distanceMeters"),
+    side = SetSide.fromWire(if (o.isNull("side")) null else o.optString("side", ""))
+)
+
+/** Lenient: a missing or malformed `prescribed` is none, a set that is not an object is skipped. */
+internal fun JSONObject.prescribedOrNull(): List<PrescribedSet>? {
+    val array = optJSONArray("prescribed") ?: return null
+    return (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::prescribedSetFromJson) }
+}
+
+/** Only `true` is each side; anything else, or nothing, is not. */
+internal fun JSONObject.eachSideFlag(): Boolean = opt("eachSide") == true
 
 internal fun loggedExerciseFromJson(o: JSONObject): LoggedExercise {
     val setsArray = o.optJSONArray("sets")
@@ -237,7 +302,9 @@ internal fun loggedExerciseFromJson(o: JSONObject): LoggedExercise {
         name = o.optString("name", ""),
         equipment = o.optString("equipment", ""),
         sets = sets,
-        note = o.optString("note", "")
+        note = o.optString("note", ""),
+        prescribed = o.prescribedOrNull(),
+        eachSide = o.eachSideFlag()
     )
 }
 
