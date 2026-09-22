@@ -29,10 +29,13 @@ data class RoutineExercise(
     val targetDistanceMeters: Double? = null,
     val note: String = "",
     /**
-     * A coach's sets one by one, kept only when the plan said something about
-     * sides (PLAN-FORMAT "Sides"): the targets above flatten a prescription to
-     * one set, which cannot say "plus one more on the left". Null otherwise,
-     * and the targets stay what they always were either way.
+     * A coach's sets one by one, kept whenever the targets above cannot say
+     * what the coach wrote: a ramp (60/60/70), a set whose weight was left to
+     * the lifter, each side, or a set naming one (PLAN-FORMAT "Sides"). The
+     * targets flatten a prescription to one set and a count, which says
+     * neither 60/60/70 nor "plus one more on the left". [Prescription] is the
+     * rule; null when the targets say the whole of it, and they stay what they
+     * always were either way.
      */
     val prescribed: List<PrescribedSet>? = null,
     /** PLAN-FORMAT's `b: 1`: every set in [prescribed] is done on both sides. */
@@ -41,9 +44,17 @@ data class RoutineExercise(
     val displayName: String
         get() = if (equipment.isBlank()) name else "$name ($equipment)"
 
-    /** "3 x 8 @ 185 lb", skipping whatever wasn't specified. */
+    /**
+     * "3 x 8 @ 185 lb", skipping whatever wasn't specified — and a coach's
+     * sets one by one when the targets cannot say them ("60 x 8, 60 x 8,
+     * 70 x 6, each side"). Summarising a ramp as its most common set would be
+     * the flattening [prescribed] exists to undo, in words.
+     */
     val summary: String
         get() {
+            prescribed?.let { sets ->
+                return sets.joinToString(", ") { it.summary } + if (eachSide) ", each side" else ""
+            }
             val parts = mutableListOf<String>()
             parts += "$targetSets sets"
             targetReps?.let { parts += "x $it" }
@@ -122,26 +133,39 @@ internal fun routineFromJson(o: JSONObject): Routine {
 /* ---------- conversions ---------- */
 
 /**
- * Builds a session from a routine, with the target sets already laid out so
- * you tick through them rather than adding each one by hand.
+ * Builds a session from a routine, with the sets already laid out so you tick
+ * through them rather than adding each one by hand.
  *
- * A coach's prescription with sides in it goes onto the exercise instead, so
- * the header counts against it and Add set offers the next set it asks for.
- * Its sided sets are logged one at a time, as they are done, rather than
- * pre-filled: a pre-filled left set is a claim nobody has made yet. Its
- * two-sided sets -- on an exercise that is not each side -- are laid out as
- * always, each with its own numbers. LIFT web's `startPrescribed`, rule for rule.
+ * A coach's sets are laid out **one by one, each with its own numbers**, when
+ * [RoutineExercise.prescribed] kept them: a ramp is 60/60/70, and a weight the
+ * coach left blank stays blank rather than borrowing the one beside it. Where
+ * a prescription says nothing the targets cannot -- and for every routine
+ * saved from a workout, added from a starter split or written by an older
+ * build -- the targets are repeated [RoutineExercise.targetSets] times, which
+ * is the same list.
+ *
+ * A prescription with sides in it also goes onto the exercise, so the header
+ * counts against it and Add set offers the next set it asks for. Its sided
+ * sets are logged one at a time, as they are done, rather than pre-filled: a
+ * pre-filled left set is a claim nobody has made yet. Its two-sided sets -- on
+ * an exercise that is not each side -- are laid out as always. LIFT web's
+ * `startPrescribed`, rule for rule.
  */
 fun Routine.toSession(date: String): WorkoutSession = WorkoutSession(
     date = date,
     name = name,
     exercises = exercises.map { template ->
         val prescribed = template.prescribed
-        if (prescribed != null && PerSideLogging.prescribesSides(prescribed, template.eachSide)) LoggedExercise(
+        if (prescribed != null) LoggedExercise(
             name = template.name,
             equipment = template.equipment,
             note = template.note,
-            prescribed = prescribed,
+            // Carried onto the session only when it says something about
+            // sides: that is what the header counts against and what Add set
+            // offers a side from. A ramp has nothing left to say once its sets
+            // are rows, and carrying it would write a key into every session
+            // file that reads it back as nothing.
+            prescribed = prescribed.takeIf { PerSideLogging.prescribesSides(it, template.eachSide) },
             eachSide = template.eachSide,
             sets = prescribed.filter { !template.eachSide && it.side == null }.map {
                 WorkoutSet(

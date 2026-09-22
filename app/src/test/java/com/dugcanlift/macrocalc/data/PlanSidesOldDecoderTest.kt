@@ -65,8 +65,10 @@ class PlanSidesOldDecoderTest {
         assertEquals(List(3) { listOf(225.0, 5, 8.0, null, null) }, logged["Back Squat"])
         assertEquals(List(3) { listOf(30.0, 8, null, null, null) }, logged["Single-Arm Dumbbell Row"])
         assertEquals(List(4) { listOf(40.0, 8, null, null, null) }, logged["Bulgarian Split Squat"])
-        // main collapses a ramp to its most common set, so the 40 x 10 third set reads as a third
-        // 60 x 8. That is main's rule for every plan, sided or not; the count is right.
+        // The old build collapses a ramp to its most common set, so the 40 x 10 third set reads
+        // as a third 60 x 8 -- every plan, sided or not. That was this app's own rule too until
+        // `plan-set-fidelity`; it is now only what a build that predates `prescribed` does, and
+        // the count is still right. PlanSetFidelityTest is what this app does with the same link.
         assertEquals(List(3) { listOf(60.0, 8, null, null, null) }, logged["Dumbbell Bench Press"])
         assertEquals(listOf(listOf<Any?>(null, null, null, 600, 1600.0)), logged["Suitcase Carry"])
     }
