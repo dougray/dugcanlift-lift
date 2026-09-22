@@ -65,7 +65,7 @@ class PlanImporterTest {
     )
 
     @Test
-    fun `accept imports every record and reduces the ramp to a most-common target`() = runTest {
+    fun `accept imports every record, keeps the ramp, and fills the targets from it`() = runTest {
         val result = PlanImporter.accept(samplePayload(), context)
         assertTrue(result is PlanImportResult.Imported)
         val imported = result as PlanImportResult.Imported
@@ -76,6 +76,18 @@ class PlanImporterTest {
 
         val routine = RoutineRepository.get(context).routines.value.first()
         val exercise = routine.exercises.first()
+        // The ramp itself, set by set -- 225 x 5 twice and then 245 x 3, as the
+        // coach wrote it. See PlanSetFidelityTest for the rule in full.
+        assertEquals(
+            listOf(
+                PrescribedSet(weightLb = 225.0, reps = 5, rpe = 8.0),
+                PrescribedSet(weightLb = 225.0, reps = 5, rpe = 8.0),
+                PrescribedSet(weightLb = 245.0, reps = 3, rpe = 9.0)
+            ),
+            exercise.prescribed
+        )
+        // The flattened targets are still filled in beside it, for every reader
+        // that has only ever had them.
         assertEquals(3, exercise.targetSets)
         assertEquals(225.0, exercise.targetWeightLb) // most common of 225, 225, 245
         assertEquals(5, exercise.targetReps)
@@ -129,6 +141,9 @@ class PlanImporterTest {
         val exercise = routine.exercises.first()
         assertEquals(4, exercise.targetSets)
         assertEquals(100.0, exercise.targetWeightLb) // tie between 100 and 110 (2 each) -> first occurrence wins
+        // Which set the tie picks decides nothing a lifter sees any more: the
+        // four sets are laid out as the coach wrote them.
+        assertEquals(listOf(100.0, 110.0, 100.0, 110.0), exercise.prescribed?.map { it.weightLb })
     }
 
     // MARK: - Saturated fat, sugar and sodium (PLAN-FORMAT `ux`)

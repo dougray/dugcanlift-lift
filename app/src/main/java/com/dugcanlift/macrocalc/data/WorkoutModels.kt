@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc.data
 
+import com.dugcanlift.kit.trimZeros
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -135,7 +136,27 @@ data class PrescribedSet(
     val durationSec: Int? = null,
     val distanceMeters: Double? = null,
     val side: SetSide? = null
-)
+) {
+    /**
+     * "185 x 5", "5 reps", "600s 1600m L", for [RoutineExercise.summary]'s list
+     * of a coach's sets. A field the coach left blank is left out, never
+     * written as a zero; a set that gave nothing at all is "as written".
+     */
+    val summary: String
+        get() {
+            val parts = mutableListOf<String>()
+            if (weightLb != null && reps != null) parts += "${weightLb.trimZeros()} x $reps"
+            else {
+                weightLb?.let { parts += "${it.trimZeros()} lb" }
+                reps?.let { parts += "$it reps" }
+            }
+            rpe?.let { parts += "RPE ${it.trimZeros()}" }
+            durationSec?.let { parts += "${it}s" }
+            distanceMeters?.let { parts += "${it.trimZeros()}m" }
+            side?.let { parts += it.short }
+            return if (parts.isEmpty()) "as written" else parts.joinToString(" ")
+        }
+}
 
 /**
  * Equipment is a separate field rather than part of the name, because
