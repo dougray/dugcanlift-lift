@@ -151,12 +151,22 @@ object PlanImporter {
     }
 
     /**
-     * Reduces a possibly-ramping set list to Android's single-target shape — see plan Global Constraints.
+     * One prescribed exercise, kept as the coach wrote it.
      *
-     * Deliberately uses most-common (not [WorkoutSession.toRoutine]'s `maxOrNull()`-for-weight) for
-     * every field: this is a *prescription*, not a record of a workout actually performed, so it
-     * should reflect what the coach literally wrote as a set rather than synthesizing an untested
-     * weight/rep combination from the extremes.
+     * The coach's sets go on [RoutineExercise.prescribed], one by one, whenever
+     * [RoutineExercise]'s flattened targets cannot say what they say — a ramp,
+     * a set whose weight was left to the lifter, each side, a set naming one.
+     * PLAN-FORMAT lists sets individually for that reason, and [Prescription]
+     * is the rule.
+     *
+     * The targets are still filled in, for the readers that have only ever had
+     * them (a routine saved from a workout, a starter split, a file an older
+     * build wrote) and so a prescription they can say in full stores exactly
+     * what it always did. Where they do reduce a ramp, they take the most
+     * common value of each field — not [WorkoutSession.toRoutine]'s
+     * `maxOrNull()` for weight — because this is a *prescription*, not a record
+     * of a workout performed: what the coach literally wrote as a set beats a
+     * weight/rep combination synthesised from the extremes.
      */
     private fun toRoutineExercise(pe: PlanWorkoutExercise): RoutineExercise {
         fun <T> mostCommon(values: List<T?>): T? =
@@ -172,11 +182,12 @@ object PlanImporter {
             targetRpe = mostCommon(pe.sets.map { it.rpe }),
             targetDurationSec = mostCommon(pe.sets.map { it.durationSec }),
             targetDistanceMeters = mostCommon(pe.sets.map { it.distanceMeters }),
-            // The targets above cannot say "each side" or "plus one on the
-            // left", so a prescription with sides in it is also kept set by
-            // set. One without them is exactly what it was.
+            // The targets above cannot say 60/60/70, "you pick the weight",
+            // "each side" or "plus one on the left", so a prescription that
+            // says any of those is kept set by set as well. One they say in
+            // full is exactly what it was.
             prescribed = pe.sets.map(::toPrescribedSet)
-                .takeIf { PerSideLogging.prescribesSides(it, pe.eachSide) },
+                .takeIf { Prescription.needsSetBySet(it, pe.eachSide) },
             eachSide = pe.eachSide
         )
     }
