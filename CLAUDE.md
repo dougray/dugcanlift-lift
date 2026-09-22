@@ -123,13 +123,14 @@ function for function into `PerSideLogging` -- change it there first.
   regenerate it) the way LIFT 1.11 does: accepted, both additions ignored,
   every exercise two-sided with the right count. It was first run against main
   itself, unmodified; the old path is now frozen in the test.
-- **Stored only when it says something about sides.** `RoutineExercise` keeps
-  its flattened targets as always, and gains `prescribed` (the sets one by one)
-  and `eachSide` only then; a plan without sides stores and writes exactly what
-  it did. Starting the session moves them onto the `LoggedExercise`, so the
-  header's targets survive a relaunch and a backup (`prescribed`, `eachSide:
-  true`, LIFT web's spellings, both omitted when absent). JSON files, no schema:
-  an older file reads with neither.
+- **Stored set by set whenever the targets cannot say it.** `RoutineExercise`
+  keeps its flattened targets as always, and gains `prescribed` (the sets one by
+  one) and `eachSide` beside them -- see "A prescription is not a count and a
+  set" below, which is the rule for when. Starting the session moves `prescribed`
+  onto the `LoggedExercise` *when it says something about sides*, so the header's
+  targets survive a relaunch and a backup (`prescribed`, `eachSide: true`, LIFT
+  web's spellings, both omitted when absent); a ramp has nothing left to say once
+  its sets are rows. JSON files, no schema: an older file reads with neither.
 - **Accepting an each-side exercise turns "Left and right separately" on** for
   that lift. A named set alone never touches the preference: on a lift not
   logged per side the set form offers Both / L / R until that set is logged.
@@ -142,6 +143,38 @@ function for function into `PerSideLogging` -- change it there first.
   and `L 4/3` when over -- never capped. A "Coach:" line lists the prescribed
   sets, because the sided ones are not rows until they are done.
 - Progression, the imbalance figure and volume read the log, never the plan.
+
+## A prescription is not a count and a set
+
+`RoutineExercise` has always been one set's worth of targets plus `targetSets`,
+which says "3 x 8 @ 60 lb" and nothing else. PLAN-FORMAT lists a prescription's
+sets individually for exactly that reason -- "Coaches ramp, and a
+count-and-tuple shape cannot say 225/225/245 without special cases" -- so
+reducing them to the most common value of each field, as `PlanImporter` did
+until `plan-set-fidelity`, silently prescribed something the coach never wrote:
+a ramp of 60/60/70 arrived as three 60s, and `[null, 5]` beside `[225, 5]`
+arrived as two sets at 225, inventing the weight the coach left to the lifter.
+
+**`Prescription` is the rule and it is not about sides.** `needsSetBySet` keeps
+the coach's sets on `RoutineExercise.prescribed` whenever the targets would lose
+something: sets that differ from each other, any set naming a side, or `b: 1`.
+The targets are still filled in beside them -- a routine saved from a workout, a
+starter split and every routine an older build wrote are nothing but targets --
+and a prescription the targets say in full (three identical sets) keeps
+`prescribed` null and writes byte for byte the object main wrote.
+`Routine.toSession` lays out whatever was kept, each set with its own weight,
+reps, RPE, duration, distance and side. `PlanSetFidelityTest` pins all of it,
+including a `routines.json` from before any of this.
+
+**Weights never convert anywhere on this path.** PLAN-FORMAT's set tuple is
+pounds, `WorkoutSet`/`PrescribedSet` are pounds, and the app shows pounds --
+there is no `WeightUnit` on Android, deliberately, the way there is no
+kilometres toggle for Outdoor.
+
+**`WorkoutSession.toRoutine` -- "Save as routine" -- still flattens, and that is
+a separate path.** It is a lifter's own log being turned into a template, and it
+synthesises on purpose (most common reps, *heaviest* weight). Nothing a coach
+sent goes through it.
 
 ## Road Food
 
