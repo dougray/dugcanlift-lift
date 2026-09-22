@@ -116,10 +116,7 @@ dependencies {
             because("Guava before 32.0.0: CVE-2020-8908, CVE-2023-2976")
         }
     }
-    // TEMPORARY: dugcanlift-kit-android's per-side-prescriptions commit (PlanSet.side,
-    // PlanWorkoutExercise.eachSide), built by JitPack from an immutable commit. Replace with the
-    // 1.6.0 release tag before this merges -- the rule is an exact release tag.
-    implementation("com.github.dougray:dugcanlift-kit-android:c36de3792a")
+    implementation("com.github.dougray:dugcanlift-kit-android:1.6.0")
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.robolectric)
