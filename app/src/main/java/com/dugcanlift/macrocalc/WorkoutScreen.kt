@@ -59,6 +59,7 @@ import com.dugcanlift.macrocalc.data.alreadyHas
 import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.PerSideLogging
+import com.dugcanlift.macrocalc.data.PrescribedSet
 import com.dugcanlift.macrocalc.data.SetSide
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.TrainingFocus
@@ -827,8 +828,35 @@ private fun ExerciseBlock(
         // Offered on every exercise, ticked to start only when the name looks
         // unilateral. With it off the rest of this block is exactly what it was
         // before sides existed.
+        // What the coach asked for, when it said anything about sides: the
+        // sided sets are not laid out as rows (nothing is logged until it is
+        // done), so this is where their numbers are. "Each side · L 4 · R 3"
+        // for the seven-set case, whose extra left set is listed with its L.
+        exercise.prescribed?.takeIf { exercise.eachSide || it.any { set -> set.side != null } }?.let { asked ->
+            val targets = PerSideLogging.prescribedTargets(asked, exercise.eachSide)
+            Text(
+                text = (if (exercise.eachSide) "Each side · L ${targets.left} · R ${targets.right}\n" else "") +
+                    "Coach: " + asked.joinToString(", ") { formatPrescribed(it) },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // Against the coach's prescription when it has sides in it -- "L 1/3 ·
+        // R 0/3", and "L 4/3" when over, never capped. On its own line: it is
+        // longer than the plain count and would squeeze the chip beside it.
+        PerSideLogging.targetsLabel(exercise)?.let { targets ->
+            Text(
+                text = targets,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         Spacer(modifier = Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // The preference itself, not whether L / R happens to be offered: a
+            // named set from the coach offers them without switching this on.
             FilterChip(
                 selected = perSide,
                 onClick = {
@@ -837,7 +865,7 @@ private fun ExerciseBlock(
                 },
                 label = { Text("Left and right separately", maxLines = 1) }
             )
-            if (perSide) {
+            if (perSide && exercise.prescribed == null) {
                 PerSideLogging.sideCountLabel(exercise)?.let { counts ->
                     Spacer(modifier = Modifier.width(12.dp))
                     // The whole point of the line: a side one set behind is visible
@@ -872,9 +900,13 @@ private fun ExerciseBlock(
         }
 
         if (addingSet) {
-            // The side this set starts on: whichever has fewer today, so the
-            // control alternates by itself and a pair costs one extra tap.
-            val startingSide = if (perSide) PerSideLogging.defaultSide(exercise) else null
+            // A named set from the coach on a lift not logged per side offers L
+            // and R, with Both, until it is logged.
+            val pending = PerSideLogging.pendingNamedSide(exercise, perSide)
+            // The side this set starts on: the one the next unfilled prescribed
+            // set names, otherwise whichever has fewer today, so the control
+            // alternates by itself and a pair costs one extra tap.
+            val startingSide = if (perSide || pending) PerSideLogging.startingSide(exercise) else null
             SetForm(
                 focus = focus,
                 // "Same as last": this side's own last set if it has one,
@@ -885,7 +917,13 @@ private fun ExerciseBlock(
                     ?: exercise.sets.lastOrNull()
                     ?: previous?.sets?.lastOrNull { it.side == startingSide }
                     ?: previous?.sets?.lastOrNull(),
+                // A coach's prescription for a side comes first: the next set it
+                // asks for on that side is what the lifter is about to do.
+                prescribedFor = { side ->
+                    exercise.prescribed?.let { PerSideLogging.prescribedSetFor(it, exercise.eachSide, exercise.sets, side) }
+                },
                 startingSide = startingSide,
+                offerBoth = pending,
                 onAdd = { newSet ->
                     onChange(exercise.copy(sets = exercise.sets + newSet))
                     addingSet = false
@@ -902,8 +940,15 @@ private fun ExerciseBlock(
 private fun SetForm(
     focus: TrainingFocus,
     previousSet: WorkoutSet?,
-    /** Null means this exercise is not logged per side, and no L/R control is drawn at all. */
+    /** The coach's next prescribed set on a side, to prefill from before [previousSet]; null for none. */
+    prescribedFor: (SetSide?) -> PrescribedSet?,
+    /**
+     * Null means this exercise is not logged per side, and no L/R control is
+     * drawn at all -- unless [offerBoth], where null is Both.
+     */
     startingSide: SetSide?,
+    /** L and R with Both beside them: a coach's named set on a lift not logged per side. */
+    offerBoth: Boolean,
     onAdd: (WorkoutSet) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -911,23 +956,55 @@ private fun SetForm(
     // put in a Bundle is what survives a rotation mid-set.
     var sideName by rememberSaveable { mutableStateOf(startingSide?.name) }
     val side = sideName?.let { name -> SetSide.entries.firstOrNull { it.name == name } }
-    var weight by rememberSaveable { mutableStateOf(previousSet?.weightLb?.trimZero() ?: "") }
+    // The coach's set, when there is one for this side, is the whole guess: a
+    // weight the coach left blank ("you pick") stays blank rather than being
+    // filled from the last set.
+    val asked = prescribedFor(startingSide)
+    var weight by rememberSaveable {
+        mutableStateOf((if (asked != null) asked.weightLb else previousSet?.weightLb)?.trimZero() ?: "")
+    }
     // The set before is the best guess there is; the focus only has to answer
     // for the first one, where 5 and 10 are different training decisions.
     var reps by rememberSaveable {
-        mutableStateOf(previousSet?.reps?.toString() ?: focus.defaultReps?.toString() ?: "")
+        mutableStateOf(
+            if (asked != null) asked.reps?.toString() ?: ""
+            else previousSet?.reps?.toString() ?: focus.defaultReps?.toString() ?: ""
+        )
     }
-    var rpe by rememberSaveable { mutableStateOf("") }
-    var time by rememberSaveable { mutableStateOf("") }
-    var distance by rememberSaveable { mutableStateOf(previousSet?.distanceMeters?.trimZero() ?: "") }
+    var rpe by rememberSaveable { mutableStateOf(asked?.rpe?.trimZero() ?: "") }
+    var time by rememberSaveable { mutableStateOf(asked?.durationSec?.let(::durationInput) ?: "") }
+    var distance by rememberSaveable {
+        mutableStateOf((if (asked != null) asked.distanceMeters else previousSet?.distanceMeters)?.trimZero() ?: "")
+    }
+    // Until a number is typed, switching sides refills the form from the
+    // coach's next set on the new side, when there is one. After, what was
+    // typed stays: the prescription suggests, the lifter decides.
+    var typed by rememberSaveable { mutableStateOf(false) }
+    fun chooseSide(option: SetSide?) {
+        sideName = option?.name
+        val next = prescribedFor(option) ?: return
+        if (typed) return
+        weight = next.weightLb?.trimZero() ?: ""
+        reps = next.reps?.toString() ?: ""
+        rpe = next.rpe?.trimZero() ?: ""
+        time = next.durationSec?.let(::durationInput) ?: ""
+        distance = next.distanceMeters?.trimZero() ?: ""
+    }
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        if (startingSide != null) {
+        if (startingSide != null || offerBoth) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (offerBoth) {
+                    FilterChip(
+                        selected = side == null,
+                        onClick = { chooseSide(null) },
+                        label = { Text("Both") }
+                    )
+                }
                 SetSide.entries.forEach { option ->
                     FilterChip(
                         selected = side == option,
-                        onClick = { sideName = option.name },
+                        onClick = { chooseSide(option) },
                         label = { Text(option.label) }
                     )
                 }
@@ -935,23 +1012,23 @@ private fun SetForm(
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (focus.showWeight) {
-            NumberField(value = weight, onValueChange = { weight = it }, label = "Weight (lb)")
+            NumberField(value = weight, onValueChange = { weight = it; typed = true }, label = "Weight (lb)")
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (focus.showReps) {
-            NumberField(value = reps, onValueChange = { reps = it }, label = "Reps")
+            NumberField(value = reps, onValueChange = { reps = it; typed = true }, label = "Reps")
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (focus.showRpe) {
-            NumberField(value = rpe, onValueChange = { rpe = it }, label = "RPE")
+            NumberField(value = rpe, onValueChange = { rpe = it; typed = true }, label = "RPE")
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (focus.showTime) {
-            NameField(value = time, onValueChange = { time = it }, label = "Time (mm:ss or seconds)")
+            NameField(value = time, onValueChange = { time = it; typed = true }, label = "Time (mm:ss or seconds)")
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (focus.showDistance) {
-            NumberField(value = distance, onValueChange = { distance = it }, label = "Distance (m)")
+            NumberField(value = distance, onValueChange = { distance = it; typed = true }, label = "Distance (m)")
             Spacer(modifier = Modifier.height(8.dp))
         }
 
@@ -993,9 +1070,25 @@ private fun formatSet(set: WorkoutSet): String {
     return if (parts.isEmpty()) "-" else parts.joinToString(" ")
 }
 
+/** A coach's set: "40 x 8", "40 x 8 L", "600 s"-style as [formatSet] writes a logged one. */
+private fun formatPrescribed(set: PrescribedSet): String = formatSet(
+    WorkoutSet(
+        weightLb = set.weightLb,
+        reps = set.reps,
+        rpe = set.rpe,
+        durationSec = set.durationSec,
+        distanceMeters = set.distanceMeters,
+        side = set.side
+    )
+).let { if (it == "-") "as written" else it }
+
 private fun formatDuration(seconds: Int): String =
     if (seconds >= 60) "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
     else "${seconds}s"
+
+/** A duration as the Time field reads it back: "10:00", or plain seconds under a minute. */
+private fun durationInput(seconds: Int): String =
+    if (seconds >= 60) formatDuration(seconds) else seconds.toString()
 
 private fun parseDuration(input: String): Int? {
     val text = input.trim()
