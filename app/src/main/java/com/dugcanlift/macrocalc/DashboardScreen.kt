@@ -479,11 +479,16 @@ fun DashboardScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                StatRow(
-                                    "Sessions each",
-                                    "L ${sideSessions.count { it.leftE1rm != null }} · " +
-                                        "R ${sideSessions.count { it.rightE1rm != null }}"
-                                )
+                                // Below three a side the line above already
+                                // counts each side ("2 left, 2 right so far"),
+                                // so the row would say it twice.
+                                if (SideBalance.imbalance(sideSessions) != null) {
+                                    StatRow(
+                                        "Sessions each",
+                                        "L ${sideSessions.count { it.leftE1rm != null }} · " +
+                                            "R ${sideSessions.count { it.rightE1rm != null }}"
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 LineChart(
                                     series = listOf(
