@@ -27,7 +27,16 @@ data class RoutineExercise(
     val targetRpe: Double? = null,
     val targetDurationSec: Int? = null,
     val targetDistanceMeters: Double? = null,
-    val note: String = ""
+    val note: String = "",
+    /**
+     * A coach's sets one by one, kept only when the plan said something about
+     * sides (PLAN-FORMAT "Sides"): the targets above flatten a prescription to
+     * one set, which cannot say "plus one more on the left". Null otherwise,
+     * and the targets stay what they always were either way.
+     */
+    val prescribed: List<PrescribedSet>? = null,
+    /** PLAN-FORMAT's `b: 1`: every set in [prescribed] is done on both sides. */
+    val eachSide: Boolean = false
 ) {
     val displayName: String
         get() = if (equipment.isBlank()) name else "$name ($equipment)"
@@ -71,6 +80,7 @@ internal fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
     targetDurationSec?.let { put("targetDurationSec", it) }
     targetDistanceMeters?.let { put("targetDistanceMeters", it) }
     put("note", note)
+    putPrescription(prescribed, eachSide)
 }
 
 internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
@@ -83,7 +93,9 @@ internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
     targetRpe = o.finiteDoubleOrNull("targetRpe"),
     targetDurationSec = o.finiteIntOrNull("targetDurationSec"),
     targetDistanceMeters = o.finiteDoubleOrNull("targetDistanceMeters"),
-    note = o.optString("note", "")
+    note = o.optString("note", ""),
+    prescribed = o.prescribedOrNull(),
+    eachSide = o.eachSideFlag()
 )
 
 internal fun Routine.toJson(): JSONObject = JSONObject().apply {
@@ -112,12 +124,35 @@ internal fun routineFromJson(o: JSONObject): Routine {
 /**
  * Builds a session from a routine, with the target sets already laid out so
  * you tick through them rather than adding each one by hand.
+ *
+ * A coach's prescription with sides in it goes onto the exercise instead, so
+ * the header counts against it and Add set offers the next set it asks for.
+ * Its sided sets are logged one at a time, as they are done, rather than
+ * pre-filled: a pre-filled left set is a claim nobody has made yet. Its
+ * two-sided sets -- on an exercise that is not each side -- are laid out as
+ * always, each with its own numbers. LIFT web's `startPrescribed`, rule for rule.
  */
 fun Routine.toSession(date: String): WorkoutSession = WorkoutSession(
     date = date,
     name = name,
     exercises = exercises.map { template ->
-        LoggedExercise(
+        val prescribed = template.prescribed
+        if (prescribed != null && PerSideLogging.prescribesSides(prescribed, template.eachSide)) LoggedExercise(
+            name = template.name,
+            equipment = template.equipment,
+            note = template.note,
+            prescribed = prescribed,
+            eachSide = template.eachSide,
+            sets = prescribed.filter { !template.eachSide && it.side == null }.map {
+                WorkoutSet(
+                    weightLb = it.weightLb,
+                    reps = it.reps,
+                    rpe = it.rpe,
+                    durationSec = it.durationSec,
+                    distanceMeters = it.distanceMeters
+                )
+            }
+        ) else LoggedExercise(
             name = template.name,
             equipment = template.equipment,
             note = template.note,

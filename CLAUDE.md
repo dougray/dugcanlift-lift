@@ -66,9 +66,9 @@ feature; those sets stay both, which is honest.
   beside bit 0's warmup flag — no new tuple position, so a coach app that
   ignores flags still reads the weight, the reps and the volume. BACKUP-FORMAT
   spells it as a **named field**, `side: "left" | "right"`, omitted when both,
-  because a backup is read by humans and by three platforms. PLAN-FORMAT is
-  unchanged in v1: a coach prescribes as before and the lifter picks the side
-  when logging. `CoachShareSideTest` and `PerLimbSetsTest` pin both, the second
+  because a backup is read by humans and by three platforms. A coach's plan can
+  carry sides too -- see "Per-side prescriptions" below. `CoachShareSideTest`
+  and `PerLimbSetsTest` pin both, the second
   against `fixtures/backup-main-no-sides.json`, a file `BackupStore.build` on
   main actually wrote — do not regenerate it from this branch.
 - **A both-sided set writes nothing.** No `side` key in the backup, `0` flags in
@@ -107,6 +107,41 @@ feature; those sets stay both, which is honest.
 - **Tracked and shown, never targeted** — the discipline saturated fat, sugar
   and sodium follow. No threshold, no colour, no warning, no advice. A 10% gap
   is ordinary, and what a particular one means is a question for a trainer.
+
+## Per-side prescriptions
+
+A coach's plan can say an exercise is done **each side** (`b: 1`: every
+prescribed set on both sides, so "3 x 8 each side" is six sets) and that a set
+is for **one side** (the set tuple's sixth position, SHARE-FORMAT's flags bits
+1-2). PLAN-FORMAT "Sides"; spec `dugcanlift-wip-backups/coach-per-side-prescriptions-spec.md`.
+The kit decodes both (`PlanWorkoutExercise.eachSide`, `PlanSet.side`, kit 1.6.0).
+LIFT web's `lift/sides.js` "a coach's prescription" block is the rule, ported
+function for function into `PerSideLogging` -- change it there first.
+
+- **Old builds degrade correctly, and this is checked.** `PlanSidesOldDecoderTest`
+  reads `fixtures/web-plan-per-side.txt` (Coach web's own encoder wrote it; never
+  regenerate it) the way LIFT 1.11 does: accepted, both additions ignored,
+  every exercise two-sided with the right count. It was first run against main
+  itself, unmodified; the old path is now frozen in the test.
+- **Stored only when it says something about sides.** `RoutineExercise` keeps
+  its flattened targets as always, and gains `prescribed` (the sets one by one)
+  and `eachSide` only then; a plan without sides stores and writes exactly what
+  it did. Starting the session moves them onto the `LoggedExercise`, so the
+  header's targets survive a relaunch and a backup (`prescribed`, `eachSide:
+  true`, LIFT web's spellings, both omitted when absent). JSON files, no schema:
+  an older file reads with neither.
+- **Accepting an each-side exercise turns "Left and right separately" on** for
+  that lift. A named set alone never touches the preference: on a lift not
+  logged per side the set form offers Both / L / R until that set is logged.
+- **Sided sets are not pre-filled.** A pre-filled left set is a claim nobody
+  made. Two-sided sets of a lift that is not each side are laid out as before,
+  each with its own numbers. The form starts on the side the next unfilled
+  prescribed set names and prefills from that set (switching side refills it
+  until something is typed); past the prescription it is the side that is behind.
+- **The header counts against the target**: `L 0/3 · R 0/3`, `R 0/1 · 2/2 both`,
+  and `L 4/3` when over -- never capped. A "Coach:" line lists the prescribed
+  sets, because the sided ones are not rows until they are done.
+- Progression, the imbalance figure and volume read the log, never the plan.
 
 ## Road Food
 

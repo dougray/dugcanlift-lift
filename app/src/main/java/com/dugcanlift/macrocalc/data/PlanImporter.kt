@@ -5,7 +5,9 @@ import com.dugcanlift.kit.IngredientParser
 import com.dugcanlift.kit.PlanPayload
 import com.dugcanlift.kit.PlanRecipe
 import com.dugcanlift.kit.RecipeNutrition
+import com.dugcanlift.kit.PlanSet
 import com.dugcanlift.kit.PlanWorkoutExercise
+import com.dugcanlift.kit.ShareSide
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -102,6 +104,15 @@ object PlanImporter {
             recipeRepo.plan(recipe = vm.recipe, date = vm.date, meal = vm.meal, servings = vm.servings)
         }
         routines.forEach { routineRepo.save(it) }
+        // An each-side exercise turns on "Left and right separately" for that
+        // lift when the plan is accepted, if it is not on already. The lifter
+        // can turn it back off; that choice is theirs from then on. A set that
+        // only names a side changes nothing here: the session offers L and R
+        // for it without touching the preference.
+        val settings = SettingsStore.get(context)
+        routines.flatMap { it.exercises }.filter { it.eachSide }.forEach {
+            settings.setLogsPerSide(LoggedExercise(name = it.name, equipment = it.equipment).matchKey, true)
+        }
         validSessions.forEach { vs ->
             sessionRepo.add(ScheduledSession(routineId = vs.routine.id, routineName = vs.workoutName, date = vs.date))
         }
@@ -160,9 +171,28 @@ object PlanImporter {
             targetWeightLb = mostCommon(pe.sets.map { it.weightLb }),
             targetRpe = mostCommon(pe.sets.map { it.rpe }),
             targetDurationSec = mostCommon(pe.sets.map { it.durationSec }),
-            targetDistanceMeters = mostCommon(pe.sets.map { it.distanceMeters })
+            targetDistanceMeters = mostCommon(pe.sets.map { it.distanceMeters }),
+            // The targets above cannot say "each side" or "plus one on the
+            // left", so a prescription with sides in it is also kept set by
+            // set. One without them is exactly what it was.
+            prescribed = pe.sets.map(::toPrescribedSet)
+                .takeIf { PerSideLogging.prescribesSides(it, pe.eachSide) },
+            eachSide = pe.eachSide
         )
     }
+
+    private fun toPrescribedSet(set: PlanSet) = PrescribedSet(
+        weightLb = set.weightLb,
+        reps = set.reps,
+        rpe = set.rpe,
+        durationSec = set.durationSec,
+        distanceMeters = set.distanceMeters,
+        side = when (set.side) {
+            ShareSide.LEFT -> SetSide.LEFT
+            ShareSide.RIGHT -> SetSide.RIGHT
+            null -> null
+        }
+    )
 
     private fun sha256(text: String): String =
         MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
