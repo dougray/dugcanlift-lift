@@ -121,6 +121,78 @@ class RoadFoodTest {
         assertEquals(Double.POSITIVE_INFINITY, RoadFood.proteinPer100(item("x", 0.0, 5.0))!!, 0.0)
     }
 
+    // MARK: - A coach's picks
+    //
+    // A port of `road-food.test.mjs`'s own picks block, case for case.
+
+    @Test fun `picks go to the top of a group and change nothing underneath`() {
+        val items = listOf(
+            item("a", 300, 15, 500),   // 5 per 100
+            item("b", 200, 30, 400),   // 15
+            item("c", 640, 40, 1000),  // 6.25
+            item("d", 100, 2, 200),    // 2
+        )
+        val plain = RoadFood.rank(items, 640)
+        assertEquals(listOf("b", "c", "a", "d"), names(plain.fits))
+
+        val picked = RoadFood.withPicks(plain, listOf("a", "d"))
+        assertEquals(listOf("a", "d", "b", "c"), names(picked.fits))
+        assertEquals(2, picked.count)
+        assertEquals(setOf("a", "d"), picked.picked)
+        // Within each part the nutrition order is exactly what it was: the
+        // picks in their own order, then everything else in theirs.
+        assertEquals(names(plain.fits).filter { it == "a" || it == "d" }, names(picked.fits).take(2))
+        assertEquals(names(plain.fits).filter { it != "a" && it != "d" }, names(picked.fits).drop(2))
+        assertEquals(RoadFood.Mode.GOAL, picked.mode)
+    }
+
+    @Test fun `an id the bundled data does not have is skipped silently, never a row`() {
+        val items = listOf(item("a", 300, 15, 500), item("b", 200, 30, 400))
+        val picked = RoadFood.withPicks(RoadFood.rank(items, 640), listOf("gone-2019", "a", ""))
+        assertEquals(listOf("a", "b"), names(picked.fits))
+        assertEquals("only what is here is counted, so no card promises a missing row", 1, picked.count)
+        assertEquals("nothing is added for an id nothing knows", 2, picked.fits.size)
+    }
+
+    @Test fun `no picks at all leaves the ranking exactly as it was`() {
+        val items = listOf(item("a", 300, 15, 500), item("b", 200, 30, 400), item("c", 700, 60, 100))
+        val plain = RoadFood.rank(items, 640)
+        val picked = RoadFood.withPicks(plain, emptyList())
+        assertEquals(names(plain.fits), names(picked.fits))
+        assertEquals(names(plain.over), names(picked.over))
+        assertEquals(0, picked.count)
+    }
+
+    @Test fun `a pick that is a little over stays a little over - the fit rule is the day talking`() {
+        val items = listOf(item("fits", 300, 15, 500), item("over", 700, 60, 100))
+        val picked = RoadFood.withPicks(RoadFood.rank(items, 640), listOf("over"))
+        assertEquals(listOf("fits"), names(picked.fits))
+        assertEquals("floated to the top of its own group, not out of it", listOf("over"), names(picked.over))
+        assertEquals(1, picked.count)
+    }
+
+    @Test fun `an item too far over is hidden whether or not it was picked`() {
+        val items = listOf(item("fits", 300, 15, 500), item("way-over", 2000, 60, 100))
+        val picked = RoadFood.withPicks(RoadFood.rank(items, 640), listOf("way-over"))
+        assertEquals(listOf("fits"), names(picked.fits))
+        assertTrue(picked.over.isEmpty())
+        assertEquals("a pick nobody can see is not counted as shown", 0, picked.count)
+    }
+
+    @Test fun `with no goal the picks lead the one ranked list`() {
+        val items = listOf(item("a", 500, 10, 100), item("b", 200, 40, 900), item("c", 400, 30, 300))
+        val picked = RoadFood.withPicks(RoadFood.rank(items, null), listOf("a"))
+        assertEquals(RoadFood.Mode.NO_GOAL, picked.mode)
+        assertEquals(listOf("a", "b", "c"), names(picked.fits))
+    }
+
+    @Test fun `pickCount counts a place without drawing its list`() {
+        val items = listOf(item("a", 1, 1, 1), item("b", 1, 1, 1))
+        assertEquals(1, RoadFood.pickCount(items, listOf("b", "gone")))
+        assertEquals(0, RoadFood.pickCount(items, emptyList()))
+        assertEquals(0, RoadFood.pickCount(emptyList(), listOf("a")))
+    }
+
     // MARK: - How old the numbers are
 
     @Test fun `six calendar months is the line, and a missing date is said to be missing`() {
