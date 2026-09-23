@@ -87,6 +87,23 @@ class PlanRoadPicksOldDecoderTest {
             Triple(pm.date, meal, pm.servings)
         }
 
+    /** main's `PlanImporter.summarize`, before picks were named in it. */
+    private fun oldSummarize(payload: PlanPayload): String {
+        fun plural(count: Int, noun: String) = "$count $noun${if (count == 1) "" else "s"}"
+        val parts = mutableListOf<String>()
+        if (payload.recipes.isNotEmpty()) parts += plural(payload.recipes.size, "recipe")
+        if (payload.meals.isNotEmpty()) parts += plural(payload.meals.size, "meal")
+        if (payload.workouts.isNotEmpty()) {
+            val dayCount = payload.sessions.map { it.date }.distinct().size
+            parts += if (dayCount > 0)
+                "${plural(payload.workouts.size, "workout")} scheduled across ${plural(dayCount, "day")}"
+            else plural(payload.workouts.size, "workout")
+        } else if (payload.sessions.isNotEmpty()) {
+            parts += "sessions scheduled across ${plural(payload.sessions.map { it.date }.distinct().size, "day")}"
+        }
+        return if (parts.isEmpty()) "Nothing to import" else parts.joinToString(", ")
+    }
+
     /** main's `toRoutineExercise`, reduced to what a reader can see of it. */
     private fun oldExercise(pe: PlanWorkoutExercise): List<Any?> {
         fun <T> mostCommon(values: List<T?>): T? =
@@ -135,7 +152,7 @@ class PlanRoadPicksOldDecoderTest {
         )
         assertEquals(listOf("2026-09-28" to 0), payload.sessions.map { it.date to it.workoutIndex })
 
-        assertEquals("1 recipe, 2 meals, 1 workout scheduled across 1 day", PlanImporter.summarize(payload))
+        assertEquals("1 recipe, 2 meals, 1 workout scheduled across 1 day", oldSummarize(payload))
     }
 
     @Test
@@ -149,7 +166,7 @@ class PlanRoadPicksOldDecoderTest {
             oldMeals(payload).toString(),
             payload.workouts.flatMap { it.exercises }.map(::oldExercise).toString(),
             payload.sessions.toString(),
-            PlanImporter.summarize(payload)
+            oldSummarize(payload)
         ).joinToString("\n")
 
         JSONObject(payload.rawJson).getJSONArray("rf").let { rf ->
