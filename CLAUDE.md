@@ -218,6 +218,42 @@ is the whole drop-in; no code changes. Until it is there:
   the unit-test task, so dropping the file in reruns it.
 - Refreshing the numbers is the same drop-in: replace the file, release as usual.
 
+**A coach's picks.** A plan link can carry `rf`, a flat list of Road Food item
+ids a coach is happy with for this client (`coach/PLAN-FORMAT.md` "Road picks").
+`RoadPicks` holds them, `SettingsStore.roadPicks` stores them, and
+`RoadFood.withPicks` (the port of `road-food.js`'s own `withPicks`) puts them on
+screen.
+
+- **The wire is read app-side, not in the kit.** `PlanPayload` has no field for
+  `rf`; `RoadPicks.fromPlan` reads it off `PlanPayload.rawJson`. One JSON key is
+  not worth a kit release, and this way the pinned decoder stays exactly the
+  decoder `PlanRoadPicksOldDecoderTest` freezes.
+- **What arrives replaces what is held, whole. A plan with no `rf` changes
+  nothing** -- absent is what every older Coach and every "here is a recipe"
+  send looks like, so it is silence, not a retraction. Clearing is done here, on
+  the Road Food screen.
+- **What a pick does is sort to the top of its group, marked.** Nothing else
+  moves: the same items fit, in the same order among themselves, and an item
+  more than 10% over what is left stays hidden picked or not. The label is
+  "Doug's pick" / "Your coach's pick" (`RoadPicks.label`), in **weight, not
+  colour** -- it names what a coach marked, it does not grade the food.
+- **An id this build's `road-food.json` does not have is skipped, silently, and
+  never counted.** The coach's copy and this one are two builds updated at
+  different times. Nothing is filtered away on arrival, so an item that comes
+  back shows its pick again.
+- **On this phone only**, like `roadFoodRecent`: not in the backup, matching
+  LIFT web's `STORED` list.
+- Tracked and shown, never targeted: no score, no colour, and nothing anywhere
+  about what was eaten instead.
+- `PlanRoadPicksOldDecoderTest` pins what a build that never heard of `rf` does
+  with the same link, against main's frozen mapping.
+  `fixtures/web-plan-road-picks.txt` is Coach web's own encoder's output --
+  never regenerate it from Kotlin.
+- The plan dialog does not navigate after an import -- it never has, for meals
+  or training either -- so a picks-only plan says where the picks went instead
+  of going there. LIFT web opens its Road Food screen; that is the one place
+  this deliberately differs.
+
 ## Recording a route needs no background location
 
 The manifest does **not** declare `ACCESS_BACKGROUND_LOCATION`, and nothing asks
