@@ -80,10 +80,16 @@ android {
 // manifest-only change has to make the unit tests out of date. RoadFoodTest
 // reads the Road Food assets the same way (the debug fixture, and the real
 // file once it is in main), so an asset-only change reruns it too.
+//
+// The include is "road-food*", not "road-food*.json", because road-food.sha256
+// is read by RoadFoodTest as well. Pinning the JSON but not the hash would let
+// a checksum-only change -- someone copying the kit's new hash across without
+// the file, which is exactly the half-done copy this pair exists to catch --
+// come back up to date from the cache without the test ever running.
 tasks.withType<Test>().configureEach {
     inputs.file("src/main/AndroidManifest.xml")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.files(fileTree("src/main/assets") { include("road-food*.json") }, fileTree("src/debug/assets"))
+    inputs.files(fileTree("src/main/assets") { include("road-food*") }, fileTree("src/debug/assets"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
