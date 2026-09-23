@@ -190,15 +190,36 @@ object RoadFood {
         }
     }
 
+    private val monthPattern = Regex("""^\d{4}-\d{2}$""")
+
     /**
-     * Whether [checkedOn] is more than six calendar months before [today] (both
-     * "YYYY-MM-DD"). Calendar months, not 182 days: "six months old" is what the
-     * screen says, so it is what gets measured. 31 March plus six months is 30
-     * September, clamped to the month's end as `road-food.js` clamps it. Null
-     * when the date is missing or not a date, which the screen also says.
+     * A document's own date as a date, or null. `publishedOn` is only as precise
+     * as the document is, so it may be "2022-11" where the chart says only
+     * "NOVEMBER 2022"; a month-only date is read as the first of that month,
+     * which can only make a document look older, never fresher.
      */
-    fun isStale(checkedOn: String?, today: String): Boolean? {
-        val checked = parseDay(checkedOn) ?: return null
+    fun parseDocDay(text: String?): LocalDate? =
+        parseDay(if (text != null && monthPattern.matches(text)) "$text-01" else text)
+
+    /**
+     * The date the "these numbers are old" warning keys off: the document's own
+     * date when the chain states one, and the day a person read it when it does
+     * not. Different facts -- [RoadFoodChain.publishedOn] is when the chain
+     * wrote the chart, [RoadFoodChain.checkedOn] is when someone read it -- and
+     * only the first can say a chart is from 2021.
+     */
+    fun ageDate(chain: RoadFoodChain?): String? = chain?.publishedOn ?: chain?.checkedOn
+
+    /**
+     * Whether [day] is more than six calendar months before [today]. Calendar
+     * months, not 182 days: "six months old" is what the screen says, so it is
+     * what gets measured. [day] is "YYYY-MM-DD", or "YYYY-MM" for a document
+     * that names only a month. 31 March plus six months is 30 September,
+     * clamped to the month's end as `road-food.js` clamps it. Null when the
+     * date is missing or not a date, which the screen also says.
+     */
+    fun isStale(day: String?, today: String): Boolean? {
+        val checked = parseDocDay(day) ?: return null
         val now = parseDay(today) ?: return null
         return now.isAfter(checked.plusMonths(6))
     }
