@@ -26,8 +26,8 @@ android {
         // share is negligible in 2026, so this isn't a meaningful trade-off.
         minSdk = 26
         targetSdk = 37
-        versionCode = 15
-        versionName = "1.13"
+        versionCode = 16
+        versionName = "1.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
