@@ -18,7 +18,10 @@ sealed class PlanImportResult {
         val recipeCount: Int,
         val mealCount: Int,
         val routineCount: Int,
-        val sessionCount: Int
+        val sessionCount: Int,
+        /** How many road picks the plan carried. 0 when it carried none, which
+         *  leaves whatever was already stored exactly as it was. */
+        val roadPickCount: Int = 0
     ) : PlanImportResult()
     object AlreadyImported : PlanImportResult()
 }
@@ -40,6 +43,9 @@ object PlanImporter {
             val dayCount = payload.sessions.map { it.date }.distinct().size
             parts += "sessions scheduled across ${pluralize(dayCount, "day")}"
         }
+        // Named like the other halves, so a plan that is only picks is not a
+        // dialog saying "Nothing to import" over a link that holds six.
+        RoadPicks.fromPlan(payload.rawJson)?.let { parts += pluralize(it.ids.size, "Road Food pick") }
         return if (parts.isEmpty()) "Nothing to import" else parts.joinToString(", ")
     }
 
@@ -116,13 +122,24 @@ object PlanImporter {
         validSessions.forEach { vs ->
             sessionRepo.add(ScheduledSession(routineId = vs.routine.id, routineName = vs.workoutName, date = vs.date))
         }
+        // `rf`: what the coach is happy with on the road, replacing whatever
+        // was stored, whole. A plan with no `rf` -- every older Coach, every
+        // "here is a recipe" send -- says nothing about picks rather than
+        // retracting them, so nothing is written for one. Nothing is checked
+        // against road-food.json here either: an id this build does not have is
+        // skipped where the list is drawn, so a file that gains the item back
+        // shows the pick again rather than having thrown it away on arrival.
+        // See RoadPicks and coach/PLAN-FORMAT.md "Road picks".
+        val picks = RoadPicks.fromPlan(payload.rawJson)
+        if (picks != null) settings.roadPicks = picks
         importedStore.add(hash)
 
         return PlanImportResult.Imported(
             recipeCount = recipes.size,
             mealCount = validMeals.size,
             routineCount = routines.size,
-            sessionCount = validSessions.size
+            sessionCount = validSessions.size,
+            roadPickCount = picks?.ids?.size ?: 0
         )
     }
 

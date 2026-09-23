@@ -67,8 +67,27 @@ class SettingsStore private constructor(context: Context) {
             ?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
         set(value) { prefs.edit().putString(KEY_ROAD_RECENT, value.joinToString("\n")).apply() }
 
+    /**
+     * The road picks a coach's plan brought, or null when no plan has brought
+     * any (and after "Clear these picks").
+     *
+     * Replaced whole by the next plan that carries some, never merged: a link
+     * carrying picks is the coach's current answer (see [RoadPicks]). On this
+     * phone only, like [roadFoodRecent] and for the same reason -- LIFT web
+     * keeps `lift.roadPicks` out of its backup's `STORED` list too, and a coach
+     * re-sending is how they come back.
+     */
+    var roadPicks: RoadPicks?
+        get() = RoadPicks.fromJson(prefs.getString(KEY_ROAD_PICKS, null))
+        set(value) {
+            prefs.edit().apply {
+                if (value == null) remove(KEY_ROAD_PICKS) else putString(KEY_ROAD_PICKS, value.toJson())
+            }.apply()
+        }
+
     companion object {
         private const val KEY_ROAD_RECENT = "road_food_recent"
+        private const val KEY_ROAD_PICKS = "road_food_picks"
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
         private const val KEY_SERVING_UNIT = "serving_unit"

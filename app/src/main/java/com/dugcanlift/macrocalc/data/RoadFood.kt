@@ -39,12 +39,36 @@ import java.util.UUID
  *
  * Zero-calorie drinks are real items (drinks are in; combos are not). With no
  * protein they rank at the bottom of the fits group, where a diet soda belongs.
+ *
+ * A coach's road picks ([withPicks]) sort to the top of a group and change
+ * nothing else: not the order underneath them, not which items fit, not what
+ * is hidden. A pick is an opinion sitting beside the numbers, never in front
+ * of them, and a pick that is "a little over" stays in the little-over group
+ * where the arithmetic put it. See [RoadPicks] and coach/PLAN-FORMAT.md
+ * "Road picks".
  */
 object RoadFood {
 
     enum class Mode { GOAL, NO_GOAL }
 
     data class Ranked(val mode: Mode, val fits: List<RoadFoodItem>, val over: List<RoadFoodItem>)
+
+    /**
+     * A [Ranked] with the coach's picks floated to the top of each group.
+     *
+     * [picked] is the ids that are actually on screen, so [count] is a number a
+     * card may promise; an id nothing here knows is not in it. Nothing is added
+     * to a group and nothing is taken out.
+     */
+    data class Picked(
+        val mode: Mode,
+        val fits: List<RoadFoodItem>,
+        val over: List<RoadFoodItem>,
+        val picked: Set<String>
+    ) {
+        val count: Int get() = picked.size
+        operator fun contains(item: RoadFoodItem): Boolean = item.id in picked
+    }
 
     /**
      * Grams of protein per 100 kcal, or null when it cannot honestly be said.
@@ -101,6 +125,56 @@ object RoadFood {
         }
         return Ranked(Mode.GOAL, fits.sortedWith(order), over.sortedWith(order))
     }
+
+    /* ---------------- a coach's picks ---------------- */
+
+    /**
+     * [ids] as a lookup, keeping only what this copy of the data has.
+     *
+     * An id nothing here knows is **skipped, silently**: the coach's Road Food
+     * file and this one are two builds updated at different times, and an item
+     * withdrawn since the plan was sent must leave no row, no gap and no error.
+     */
+    private fun pickedIn(items: List<RoadFoodItem>, ids: List<String>): Set<String> {
+        if (ids.isEmpty()) return emptySet()
+        val wanted = ids.filter { it.isNotEmpty() }.toSet()
+        if (wanted.isEmpty()) return emptySet()
+        return items.mapNotNull { it.id.takeIf { id -> id in wanted } }.toSet()
+    }
+
+    /**
+     * A stable partition: the picked ones first, each part in the order it
+     * already had. Sorting by a "picked" key would do the same thing and is
+     * not written that way on purpose -- what is promised here is that the
+     * nutrition order underneath is untouched, and a partition cannot quietly
+     * stop keeping it.
+     */
+    private fun pickedFirst(list: List<RoadFoodItem>, picked: Set<String>): List<RoadFoodItem> {
+        if (picked.isEmpty()) return list
+        val (first, rest) = list.partition { it.id in picked }
+        return first + rest
+    }
+
+    /**
+     * [ranked] with a coach's picks floated to the top of each group.
+     *
+     * Nothing else changes: the same items fit, in the same order among
+     * themselves, and an item more than 10% over what is left stays hidden
+     * whether or not it was picked -- the pick is about the food, and what is
+     * left of the day is the lifter's own arithmetic.
+     */
+    fun withPicks(ranked: Ranked, ids: List<String>): Picked {
+        val picked = pickedIn(ranked.fits + ranked.over, ids)
+        return Picked(
+            mode = ranked.mode,
+            fits = pickedFirst(ranked.fits, picked),
+            over = pickedFirst(ranked.over, picked),
+            picked = picked
+        )
+    }
+
+    /** How many of [items] are picked -- for a chain card, which draws no list. */
+    fun pickCount(items: List<RoadFoodItem>, ids: List<String>): Int = pickedIn(items, ids).size
 
     /* ---------------- how old the numbers are ---------------- */
 
