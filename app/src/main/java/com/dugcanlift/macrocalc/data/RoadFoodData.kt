@@ -34,11 +34,18 @@ data class RoadFoodItem(
     val source: String? = null
 )
 
-/** A chain: its own published nutrition, checked by hand on [checkedOn]. [kind] picks its rules. */
+/**
+ * A chain: its own published nutrition, checked by hand on [checkedOn].
+ * [publishedOn] is the date the chain's own document states about itself, and
+ * is absent when the document states none -- only as precise as the document
+ * is, so "2022-11" where a chart says only "NOVEMBER 2022". [kind] picks its
+ * rules.
+ */
 data class RoadFoodChain(
     val id: String,
     val name: String,
     val kind: String? = null,
+    val publishedOn: String? = null,
     val checkedOn: String? = null,
     val source: String? = null,
     val items: List<RoadFoodItem>
@@ -80,6 +87,7 @@ fun parseRoadFood(json: String): RoadFoodData {
                 id = id,
                 name = c.text("name") ?: id,
                 kind = c.text("kind"),
+                publishedOn = c.text("publishedOn"),
                 checkedOn = c.text("checkedOn"),
                 source = c.text("source"),
                 items = items.objects().map(::roadItem)
