@@ -228,7 +228,22 @@ is the whole drop-in; no code changes. Until it is there:
   once the real file is there it parses it and fails on any Sample/Example/
   Fictional/Placeholder/Test name. The Road Food assets are declared inputs of
   the unit-test task, so dropping the file in reruns it.
-- Refreshing the numbers is the same drop-in: replace the file, release as usual.
+- **`road-food.sha256` is the kit's checksum of those bytes**, copied in beside
+  the JSON, and `RoadFoodTest` hashes the asset and asserts it matches. Every
+  other check here is on the data's *shape*, and a copy three chains behind
+  passes all of them, so nothing else here would ever say the file had fallen
+  behind.
+- Refreshing the numbers is the same drop-in: replace the file, release as usual
+  -- but **replace `road-food.sha256` at the same time**, from the same place.
+
+**When the checksum test fails**, copy `road-food.json` *and* `road-food.sha256`
+from `dugcanlift-kit/data/` over together. Never edit either file here, and
+never re-write the checksum by hand to make the test pass: the kit writes it
+with `node data/validate-road-food.mjs --write-checksum`, and the other four app
+repos pin the same one, so a hand-written hash only moves the failure somewhere
+further away. The debug fixture is pinned the same way against
+`road-food-sample.sha256`, and is shared with LIFT web and lift-ios, so changing
+it means changing it in all three repos.
 
 **A coach's picks.** A plan link can carry `rf`, a flat list of Road Food item
 ids a coach is happy with for this client (`coach/PLAN-FORMAT.md` "Road picks").

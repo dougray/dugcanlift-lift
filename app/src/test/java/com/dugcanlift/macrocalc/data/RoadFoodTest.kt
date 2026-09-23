@@ -8,6 +8,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.security.MessageDigest
 import java.time.LocalDate
 
 /**
@@ -395,6 +396,73 @@ class RoadFoodTest {
                 assertEquals("$id should be old by its own chart", true, RoadFood.isStale(RoadFood.ageDate(c), "2026-09-23"))
             }
         }
+    }
+
+    // MARK: - The copies are the same bytes
+
+    /**
+     * road-food.json is curated once in `dugcanlift-kit/data/` and copied byte
+     * for byte into five app repos. Nothing used to check that they matched:
+     * CLAUDE.md says "copied unchanged, never edit it here alone", and the
+     * tests above check the data's *shape* -- every chain has a usable
+     * checkedOn, the three dated charts are dated -- which a copy three chains
+     * behind passes cleanly, so nothing here would ever say it had fallen
+     * behind.
+     *
+     * Item ids are the contract a coach's road picks travel on, and this app
+     * skips an id it does not have in silence, by design, so that is a real
+     * failure rather than an untidiness.
+     *
+     * So the kit writes the sha256 of the bytes to road-food.sha256, and that
+     * file is copied across with the JSON. Hashing the asset here catches both
+     * ways the copy can rot: taking the JSON without the hash, and editing the
+     * JSON in place.
+     */
+    private fun sha256(file: File) =
+        MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+            .joinToString("") { "%02x".format(it) }
+
+    /** Reads a pinned checksum, failing on anything that is not one bare hash. */
+    private fun pinned(path: String): String {
+        val file = File(path)
+        assertTrue("$path is missing -- copy it from the kit beside the JSON", file.exists())
+        val sum = file.readText().trim()
+        assertTrue("$path should be one bare sha256 and nothing else",
+            Regex("^[0-9a-f]{64}$").matches(sum))
+        return sum
+    }
+
+    @Test fun `the bundled road-food json is the kit's file, byte for byte`() {
+        // Gradle runs unit tests from the module directory, and these are the
+        // bytes packaged into the APK.
+        val json = File("src/main/assets/${RoadFoodStore.ASSET}")
+        assertTrue("src/main/assets/${RoadFoodStore.ASSET} is missing", json.exists())
+        assertEquals(
+            "src/main/assets/${RoadFoodStore.ASSET} does not match src/main/assets/road-food.sha256.\n" +
+                "Copy dugcanlift-kit/data/road-food.json AND data/road-food.sha256 over together.\n" +
+                "Never edit either file here, and never re-write the checksum by hand to make this\n" +
+                "pass: the kit writes it with `node data/validate-road-food.mjs --write-checksum`,\n" +
+                "and the other four app repos pin the same one, so a hand-written hash only moves\n" +
+                "the failure somewhere further away.",
+            pinned("src/main/assets/road-food.sha256"),
+            sha256(json),
+        )
+    }
+
+    @Test fun `the debug fixture is the same bytes the other apps hold`() {
+        // Shared with LIFT web's lift/fixtures/road-food-sample.json and
+        // lift-ios's Tests/Fixtures copy, which is in turn pinned against the
+        // inline copy in RoadFoodSample.swift.
+        val json = File("src/debug/assets/${RoadFoodStore.SAMPLE_ASSET}")
+        assertEquals(
+            "src/debug/assets/${RoadFoodStore.SAMPLE_ASSET} does not match its checksum.\n" +
+                "The fixture is shared with dugcanlift-site and lift-ios. Change it in all three,\n" +
+                "and re-write all three checksums:\n" +
+                "  shasum -a 256 app/src/debug/assets/road-food-sample.json | cut -d' ' -f1 \\\n" +
+                "    > app/src/debug/assets/road-food-sample.sha256",
+            pinned("src/debug/assets/road-food-sample.sha256"),
+            sha256(json),
+        )
     }
 
     private val fake = Regex("""^(Sample|Example|Fictional|Placeholder|Test) """)
