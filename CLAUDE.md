@@ -199,6 +199,18 @@ is left of today, reached from Food ("Road Food"). Spec:
   text on each row. No location of any kind and no new permissions: the person
   picks the chain. Recent chains are `SettingsStore.roadFoodRecent`, not backed up.
 
+**Two dates, and the warning keys off the chain's.** `checkedOn` is the day a
+person read a chain's chart; `publishedOn` is the date the chart **states about
+itself**, optional and only as precise as the document is -- `"2021-03-29"`
+where Whataburger's says "as of March 29, 2021", `"2022-11"` where Burger
+King's says only "NOVEMBER 2022", and absent where the document states none.
+`RoadFood.ageDate` picks the first over the second, and `isStale` measures six
+calendar months from it, so a 2021 chart read this morning says so:
+"These numbers are from the chain's chart dated Mar 29, 2021." A chain with no
+document date keeps the older sentence word for word. Both dates are on screen
+("Published Nov 2022 · checked Sep 23, 2026"), because what a chain published
+and when someone read it are different facts.
+
 **The data, and how the real file drops in.** One file,
 `dugcanlift-kit/data/road-food.json`, the same on every platform. It goes into
 this app **unchanged** as `app/src/main/assets/road-food.json` -- that one file

@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -212,6 +213,20 @@ private val checkedFormat: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate
 
 private fun checkedLabel(day: String?): String? = RoadFood.parseDay(day)?.format(checkedFormat.withLocale(Locale.getDefault()))
 
+/**
+ * A document's own date, printed no more precisely than the document wrote it:
+ * "Mar 29, 2021" for a chart that gives a day, "Nov 2022" for one that names
+ * only a month. The month-and-year pattern comes from the locale rather than a
+ * fixed "MMM yyyy", so it reads right wherever the phone is set.
+ */
+private fun publishedLabel(day: String?): String? {
+    val date = RoadFood.parseDocDay(day) ?: return null
+    if (day != null && day.length > 7) return date.format(checkedFormat.withLocale(Locale.getDefault()))
+    val locale = Locale.getDefault()
+    val pattern = DateFormat.getBestDateTimePattern(locale, "yMMM")
+    return date.format(DateTimeFormatter.ofPattern(pattern, locale))
+}
+
 private fun titleCase(text: String): String =
     text.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.titlecase(Locale.getDefault()) } }
 
@@ -306,6 +321,7 @@ private fun Picker(
                 title = c.name,
                 subtitle = "$count ${if (count == 1) "item" else "items"}" +
                     (if (picked > 0) " · $picked picked for you" else "") +
+                    (publishedLabel(c.publishedOn)?.let { " · published $it" } ?: "") +
                     (checkedLabel(c.checkedOn)?.let { " · checked $it" } ?: ""),
                 modifier = m,
                 onClick = { onChain(c.id) }
@@ -323,7 +339,8 @@ private fun Picker(
     }
     Text(
         "Numbers come from each chain's own published nutrition, checked by hand, and each place " +
-            "shows the date they were checked. LIFT never asks where you are.",
+            "shows when the chain published them and when they were checked. LIFT never asks " +
+            "where you are.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -368,14 +385,22 @@ private fun Place(
 
     Text(chain?.name ?: "Gas station", style = MaterialTheme.typography.headlineSmall)
 
-    // When the numbers were checked, in plain view. A gas-station view mixes
-    // products, so it shows the oldest date among what is on screen.
+    // What the chain published, and when a person last read it: two different
+    // facts, both on screen. A gas-station view mixes products, so it shows the
+    // oldest date among what is on screen, and no snack states a date of its own.
     val checkedOn = if (chain != null) chain.checkedOn
     else items.mapNotNull { it.checkedOn }.filter { RoadFood.parseDay(it) != null }.minOrNull()
+    val published = publishedLabel(chain?.publishedOn)
+    val checked = checkedLabel(checkedOn)
     val uriHandler = LocalUriHandler.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            checkedLabel(checkedOn)?.let { "Checked on $it" } ?: "No check date on file for these numbers.",
+            when {
+                published != null && checked != null -> "Published $published · checked $checked"
+                published != null -> "Published $published"
+                checked != null -> "Checked on $checked"
+                else -> "No check date on file for these numbers."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -384,10 +409,19 @@ private fun Place(
             TextButton(onClick = { uriHandler.openUri(source) }) { Text("Source") }
         }
     }
-    if (RoadFood.isStale(checkedOn, today) == true) {
+    // The warning keys off the chain's own document date when it states one, and
+    // the day a person read it when it does not -- a 2021 chart read yesterday
+    // is old, whoever read it and whenever.
+    val aged = if (chain != null) RoadFood.ageDate(chain) else checkedOn
+    if (RoadFood.isStale(aged, today) == true) {
         Text(
-            "These numbers are more than six months old. Menus change, so check them against " +
-                "the board before you count on them.",
+            if (published != null) {
+                "These numbers are from the chain's chart dated $published. Menus change, so " +
+                    "check them against the board before you count on them."
+            } else {
+                "These numbers are more than six months old. Menus change, so check them against " +
+                    "the board before you count on them."
+            },
             style = MaterialTheme.typography.bodyMedium
         )
     }

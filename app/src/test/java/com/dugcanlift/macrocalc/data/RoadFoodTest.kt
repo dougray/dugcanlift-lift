@@ -3,10 +3,12 @@ package com.dugcanlift.macrocalc.data
 import com.dugcanlift.macrocalc.MacroResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.time.LocalDate
 
 /**
  * A port of LIFT web's `lift/road-food.test.mjs`, test for test, so the two
@@ -205,6 +207,44 @@ class RoadFoodTest {
         assertNull(RoadFood.isStale("2026-02-30", "2026-09-20"))
     }
 
+    @Test fun `the warning keys off the chain's own document date, and falls back to when it was read`() {
+        // Burger King: a NOVEMBER 2022 chart read this morning. The day it was
+        // read says nothing about how old the numbers are, so it is not what is
+        // measured.
+        val bk = chain(publishedOn = "2022-11", checkedOn = "2026-09-23")
+        assertEquals("2022-11", RoadFood.ageDate(bk))
+        assertEquals(true, RoadFood.isStale(RoadFood.ageDate(bk), "2026-09-23"))
+        // A chain whose document states no date is exactly as it was before this:
+        // the day a person read it is all there is to go on.
+        val undated = chain(checkedOn = "2026-09-20")
+        assertEquals("2026-09-20", RoadFood.ageDate(undated))
+        assertEquals(false, RoadFood.isStale(RoadFood.ageDate(undated), "2026-09-23"))
+        assertEquals(true, RoadFood.isStale(RoadFood.ageDate(chain(checkedOn = "2025-12-01")), "2026-09-23"))
+        // A fresh document read long ago is not stale, and a stale document read
+        // this morning is: the document is the fact, not the reading.
+        val fresh = chain(publishedOn = "2026-09-02", checkedOn = "2025-01-01")
+        assertEquals(false, RoadFood.isStale(RoadFood.ageDate(fresh), "2026-09-23"))
+        // Neither date is no date, which the screen says in its own words.
+        assertNull(RoadFood.ageDate(chain()))
+        assertNull(RoadFood.ageDate(null))
+    }
+
+    @Test fun `a month-only document date is read as the first of that month`() {
+        // "NOVEMBER 2022" is all Burger King's chart says, so no day is invented:
+        // the first of the month can only make a document look older, never fresher.
+        assertEquals(LocalDate.of(2022, 11, 1), RoadFood.parseDocDay("2022-11"))
+        assertEquals(LocalDate.of(2021, 3, 29), RoadFood.parseDocDay("2021-03-29"))
+        assertEquals("exactly six months is not over", false, RoadFood.isStale("2026-03", "2026-09-01"))
+        assertEquals(true, RoadFood.isStale("2026-03", "2026-09-02"))
+        assertNull(RoadFood.parseDocDay("2022-13"))
+        assertNull(RoadFood.parseDocDay("2022"))
+        assertNull(RoadFood.parseDocDay(null))
+        assertNull(RoadFood.isStale("2022-13", "2026-09-23"))
+    }
+
+    private fun chain(publishedOn: String? = null, checkedOn: String? = null) =
+        RoadFoodChain(id = "c", name = "Chain", publishedOn = publishedOn, checkedOn = checkedOn, items = emptyList())
+
     // MARK: - Rules, picker, logging
 
     @Test fun `plain rules apply everywhere, kinded ones only to their kind`() {
@@ -316,6 +356,17 @@ class RoadFoodTest {
         assertTrue(data.snacks.isNotEmpty() && data.rules.isNotEmpty())
         assertEquals(listOf("jerky", "protein bars", "string cheese"), data.snackCategories)
         assertTrue(data.chains.any { RoadFood.isStale(it.checkedOn, "2026-09-20") == true })
+        // One chain of each kind, so the sample shows all three states: a
+        // document dated to the day, one that names only a month, and one that
+        // states none.
+        val by = { id: String -> data.chains.first { it.id == id } }
+        assertEquals("2026-09-02", by("sample-burger-co").publishedOn)
+        assertEquals("2024-10", by("fictional-taco-stand").publishedOn)
+        assertNull(by("example-chicken-shack").publishedOn)
+        // And the month-only one is old on its document date while its checked
+        // date is recent, which is the whole point of the field.
+        assertEquals(true, RoadFood.isStale(RoadFood.ageDate(by("fictional-taco-stand")), "2026-09-23"))
+        assertEquals(false, RoadFood.isStale(by("fictional-taco-stand").checkedOn, "2026-09-23"))
     }
 
     @Test fun `nothing fake can ship - the sample is in debug only, and a real file carries no sample names`() {
@@ -326,6 +377,23 @@ class RoadFoodTest {
             assertTrue("the real file has chains", data.chains.isNotEmpty())
             val names = data.chains.map { it.name } + data.chains.flatMap { c -> c.items.map { it.name } } + data.snacks.map { it.name }
             assertEquals(emptyList<String>(), names.filter { fake.containsMatchIn(it) })
+            // Every chain's dates are usable, and a document date is never
+            // after the day someone read it.
+            for (c in data.chains) {
+                assertNotNull("${c.id} has no usable checkedOn", RoadFood.parseDay(c.checkedOn))
+                c.publishedOn?.let {
+                    assertNotNull("${c.id} has an unusable publishedOn", RoadFood.parseDocDay(it))
+                    assertFalse("${c.id} claims a document published after it was read",
+                        RoadFood.parseDocDay(it)!!.isAfter(RoadFood.parseDay(c.checkedOn)))
+                }
+            }
+            // The three charts this field exists for: each looks fresh by the
+            // day it was read and is old by its own date.
+            for (id in listOf("burgerking", "whataburger", "chipotle")) {
+                val c = data.chains.first { it.id == id }
+                assertEquals("$id looks fresh by checkedOn alone", false, RoadFood.isStale(c.checkedOn, "2026-09-23"))
+                assertEquals("$id should be old by its own chart", true, RoadFood.isStale(RoadFood.ageDate(c), "2026-09-23"))
+            }
         }
     }
 
