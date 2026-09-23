@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.kit.NutrientDetails
 import com.dugcanlift.macrocalc.data.FoodRepository
@@ -48,6 +49,7 @@ import com.dugcanlift.macrocalc.data.RoadFoodChain
 import com.dugcanlift.macrocalc.data.RoadFoodData
 import com.dugcanlift.macrocalc.data.RoadFoodItem
 import com.dugcanlift.macrocalc.data.RoadFoodStore
+import com.dugcanlift.macrocalc.data.RoadPicks
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.forDate
 import com.dugcanlift.macrocalc.data.mealForHour
@@ -100,6 +102,9 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
     var note by rememberSaveable { mutableStateOf("") }
     var loggedAny by rememberSaveable { mutableStateOf(false) }
     var recent by remember { mutableStateOf(settings.roadFoodRecent) }
+    // What a coach marked and sent in a plan link, or null when none has. Held
+    // here so clearing them re-draws the whole screen, not just one card.
+    var picks by remember { mutableStateOf(settings.roadPicks) }
 
     val allEntries by repo.entries.collectAsState()
     val today = todayKey()
@@ -154,6 +159,11 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
                 Picker(
                     data = loaded,
                     recentIds = recent,
+                    picks = picks,
+                    onClearPicks = {
+                        picks = null
+                        settings.roadPicks = null
+                    },
                     contentWidth = contentWidth,
                     onChain = { id ->
                         recent = RoadFood.remember(recent, id)
@@ -175,6 +185,7 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
                     today = today,
                     meal = Meal.entries.firstOrNull { it.name == mealName } ?: Meal.SNACK,
                     note = note,
+                    picks = picks,
                     twoPane = AdaptiveLayout.roadFoodIsTwoPane(contentWidth),
                     onCategory = { view = "snacks:$it" },
                     onMeal = { mealName = it.name },
@@ -208,12 +219,15 @@ private fun titleCase(text: String): String =
 private fun Picker(
     data: RoadFoodData,
     recentIds: List<String>,
+    picks: RoadPicks?,
+    onClearPicks: () -> Unit,
     contentWidth: Float,
     onChain: (String) -> Unit,
     onSnacks: () -> Unit
 ) {
     val columns = AdaptiveLayout.cardColumns(contentWidth)
     val ordered = RoadFood.orderChains(data.chains, recentIds)
+    val pickIds = picks?.ids.orEmpty()
 
     Text("Road Food", style = MaterialTheme.typography.headlineSmall)
     Spacer(modifier = Modifier.height(4.dp))
@@ -224,6 +238,36 @@ private fun Picker(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(modifier = Modifier.height(16.dp))
+
+    // What a coach marked, when a plan brought any. Only what this copy of the
+    // file still has is counted -- an id it does not know is skipped -- so the
+    // card can be empty while picks are stored, and then it is not drawn.
+    val everything = data.chains.flatMap { it.items } + data.snacks
+    val pickedTotal = RoadFood.pickCount(everything, pickIds)
+    if (picks != null && pickedTotal > 0) {
+        val places = data.chains.count { RoadFood.pickCount(it.items, pickIds) > 0 } +
+            (if (RoadFood.pickCount(data.snacks, pickIds) > 0) 1 else 0)
+        Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(picks.label("picks"), style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    "$pickedTotal ${if (pickedTotal == 1) "item" else "items"} at " +
+                        "$places ${if (places == 1) "place" else "places"}, at the top of those " +
+                        "lists. The ranking underneath them is unchanged.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // Retracting is this phone's job: a plan with no picks in it is
+                // silent about them, not a retraction (see RoadPicks).
+                OutlinedButton(onClick = onClearPicks, modifier = Modifier.fillMaxWidth()) {
+                    Text("Clear these picks")
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
 
     @Composable
     fun cards(tiles: List<@Composable (Modifier) -> Unit>) {
@@ -243,9 +287,11 @@ private fun Picker(
     if (data.snacks.isNotEmpty()) {
         val categories = data.snackCategories
         cards(listOf { m ->
+            val gasPicked = RoadFood.pickCount(data.snacks, pickIds)
             PlaceCard(
                 title = "Gas station",
-                subtitle = if (categories.isEmpty()) "Snacks" else titleCase(categories.joinToString(", ")),
+                subtitle = (if (categories.isEmpty()) "Snacks" else titleCase(categories.joinToString(", "))) +
+                    (if (gasPicked > 0) " \u00b7 $gasPicked picked for you" else ""),
                 modifier = m,
                 onClick = onSnacks
             )
@@ -255,9 +301,11 @@ private fun Picker(
     fun chainTiles(chains: List<RoadFoodChain>): List<@Composable (Modifier) -> Unit> = chains.map { c ->
         { m: Modifier ->
             val count = c.items.size
+            val picked = RoadFood.pickCount(c.items, pickIds)
             PlaceCard(
                 title = c.name,
                 subtitle = "$count ${if (count == 1) "item" else "items"}" +
+                    (if (picked > 0) " · $picked picked for you" else "") +
                     (checkedLabel(c.checkedOn)?.let { " · checked $it" } ?: ""),
                 modifier = m,
                 onClick = { onChain(c.id) }
@@ -308,6 +356,7 @@ private fun Place(
     today: String,
     meal: Meal,
     note: String,
+    picks: RoadPicks?,
     twoPane: Boolean,
     onCategory: (String) -> Unit,
     onMeal: (Meal) -> Unit,
@@ -359,7 +408,10 @@ private fun Place(
         }
     }
 
-    val ranked = RoadFood.rank(items, remaining?.calories)
+    // Ranked first, then the coach's picks floated to the top of each group.
+    // Nothing about the ranking changes: the same items fit, in the same order
+    // among themselves, and the same ones are left out.
+    val ranked = RoadFood.withPicks(RoadFood.rank(items, remaining?.calories), picks?.ids.orEmpty())
     Spacer(modifier = Modifier.height(12.dp))
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -390,6 +442,15 @@ private fun Place(
                     )
                 }
             }
+            if (picks != null && ranked.count > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "${picks.label("picks")} are first, marked. Nothing else is moved, and " +
+                        "nothing that fits is hidden.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 
@@ -404,6 +465,9 @@ private fun Place(
     }
 
     val rules = if (chain != null) RoadFood.rulesFor(data.rules, chain.kind) else RoadFood.snackRules(data.rules)
+    // "Doug's pick", or nothing at all on an item nobody picked.
+    val pickLabel: (RoadFoodItem) -> String? =
+        { item -> picks?.takeIf { item in ranked }?.label("pick") }
     val list: @Composable () -> Unit = {
         Spacer(modifier = Modifier.height(12.dp))
         Text("Log to", style = MaterialTheme.typography.labelLarge)
@@ -418,7 +482,7 @@ private fun Place(
         }
         if (ranked.fits.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
-            ItemList(ranked.fits, onLog)
+            ItemList(ranked.fits, pickLabel, onLog)
         }
         if (ranked.over.isNotEmpty()) {
             SectionHeading("A little over")
@@ -428,7 +492,9 @@ private fun Place(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
-            ItemList(ranked.over, onLog)
+            // A pick that is over stays over: the pick is about the food, and
+            // what is left of the day is the lifter's own arithmetic.
+            ItemList(ranked.over, pickLabel, onLog)
         }
     }
     val ordering: @Composable () -> Unit = {
@@ -454,23 +520,37 @@ private fun Place(
 }
 
 @Composable
-private fun ItemList(items: List<RoadFoodItem>, onLog: (RoadFoodItem) -> Unit) {
+private fun ItemList(
+    items: List<RoadFoodItem>,
+    pickLabel: (RoadFoodItem) -> String?,
+    onLog: (RoadFoodItem) -> Unit
+) {
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
             items.forEachIndexed { i, item ->
                 if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                ItemRow(item, onLog)
+                ItemRow(item, pickLabel(item), onLog)
             }
         }
     }
 }
 
 @Composable
-private fun ItemRow(item: RoadFoodItem, onLog: (RoadFoodItem) -> Unit) {
+private fun ItemRow(item: RoadFoodItem, pickLabel: String?, onLog: (RoadFoodItem) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(item.name, style = MaterialTheme.typography.bodyLarge)
+            // A coach's pick, said in words under the name and above the
+            // numbers, where web puts it. Weight, not colour: this labels what
+            // a coach marked, it does not grade the food.
+            if (pickLabel != null) {
+                Text(
+                    pickLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             Text(RoadFood.macroLine(item), style = MaterialTheme.typography.bodyMedium, color = muted)
             listOfNotNull(RoadFood.densityText(item), item.serving).takeIf { it.isNotEmpty() }?.let {
                 Text(it.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = muted)
