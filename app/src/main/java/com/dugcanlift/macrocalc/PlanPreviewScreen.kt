@@ -73,7 +73,16 @@ private fun bodyFor(result: PlanDecodeResult, importResult: PlanImportResult?): 
         if (importResult.mealCount > 0) parts += pluralize(importResult.mealCount, "meal")
         if (importResult.routineCount > 0) parts += pluralize(importResult.routineCount, "routine")
         if (importResult.sessionCount > 0) parts += pluralize(importResult.sessionCount, "session")
-        if (parts.isEmpty()) "Nothing new was added." else "Added ${parts.joinToString(", ")}."
+        if (importResult.roadPickCount > 0) parts += pluralize(importResult.roadPickCount, "Road Food pick")
+        when {
+            parts.isEmpty() -> "Nothing new was added."
+            // Picks on their own belong on the screen that shows them. This
+            // dialog has never navigated anywhere -- not for meals, not for
+            // training -- so it says where they went rather than going there.
+            importResult.roadPickCount > 0 && parts.size == 1 ->
+                "Added ${parts.first()}. They're at the top of each place's list in Food · Road Food."
+            else -> "Added ${parts.joinToString(", ")}."
+        }
     }
     importResult is PlanImportResult.AlreadyImported -> "You already imported this plan."
     result is PlanDecodeResult.Success -> PlanImporter.summarize(result.payload)
