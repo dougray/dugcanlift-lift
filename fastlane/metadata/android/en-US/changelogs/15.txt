@@ -1,0 +1,3 @@
+Road Food adds Burger King, Whataburger and Chipotle, and your coach can now mark the items they are happy with for you. Their picks sit at the top of each list, marked, with everything else in the same order as before.
+
+Each place now says when the chain published its numbers, not just when we last checked them, so a chart from 2021 says so.

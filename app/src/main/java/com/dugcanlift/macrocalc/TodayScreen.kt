@@ -43,7 +43,9 @@ import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.dugcanlift.macrocalc.data.DayTotals
+import com.dugcanlift.macrocalc.data.Remaining
+import com.dugcanlift.macrocalc.data.RoadFoodStore
+import com.dugcanlift.macrocalc.data.remainingFor
 import com.dugcanlift.macrocalc.data.FoodEntry
 import com.dugcanlift.macrocalc.data.FoodEntryEdit
 import com.dugcanlift.macrocalc.data.FoodRepository
@@ -79,8 +81,13 @@ fun TodayScreen(
     val allEntries by repo.entries.collectAsState()
 
     var selectedDate by rememberSaveable { mutableStateOf(todayKey()) }
+
+    // Road Food opens over Food and belongs to it. Offered only when this build
+    // carries its list (RoadFoodStore): a release made before the real file is
+    // added has no entry point rather than an empty screen.
+    var showRoadFood by rememberSaveable { mutableStateOf(false) }
+    val hasRoadFood = remember { RoadFoodStore.isBundled(context) }
     val entries = allEntries.forDate(selectedDate)
-    val eaten = entries.totals()
     val detailRows = NutrientDetailsText.dayRows(entries)
 
     // Most people eat the same handful of things. Anything logged before can be
@@ -115,7 +122,7 @@ fun TodayScreen(
                 }
             }
         } else {
-            SummaryCard(goal = goal, eaten = eaten, detailRows = detailRows)
+            SummaryCard(goal = goal, remaining = remainingFor(goal, entries), detailRows = detailRows)
     }
     }
 
@@ -177,6 +184,13 @@ fun TodayScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Search")
+                }
+            }
+
+            if (hasRoadFood) {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(onClick = { showRoadFood = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Road Food")
                 }
             }
 
@@ -269,6 +283,19 @@ fun TodayScreen(
     }
     }
 
+    if (showRoadFood) {
+        RoadFoodScreen(
+            goal = goal,
+            onClose = { loggedAny ->
+                showRoadFood = false
+                // What was just logged went to today; show it.
+                if (loggedAny) selectedDate = todayKey()
+            },
+            modifier = modifier
+        )
+        return
+    }
+
     MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
         val twoPane = AdaptiveLayout.foodIsTwoPane(AdaptiveLayout.contentWidth(paneWidth))
         Column(
@@ -334,12 +361,13 @@ private fun DateNavigator(
 }
 
 @Composable
-private fun SummaryCard(goal: MacroResult, eaten: DayTotals, detailRows: List<NutrientDetailsText.Row>) {
+private fun SummaryCard(goal: MacroResult, remaining: Remaining, detailRows: List<NutrientDetailsText.Row>) {
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            val remaining = goal.calories - eaten.calories
+            val eaten = remaining.eaten
+            val left = remaining.calories
             Text(
-                text = if (remaining >= 0) "$remaining kcal left" else "${-remaining} kcal over",
+                text = if (left >= 0) "$left kcal left" else "${-left} kcal over",
                 style = MaterialTheme.typography.headlineSmall
             )
             Text(

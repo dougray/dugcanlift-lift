@@ -5,7 +5,9 @@ import com.dugcanlift.kit.IngredientParser
 import com.dugcanlift.kit.PlanPayload
 import com.dugcanlift.kit.PlanRecipe
 import com.dugcanlift.kit.RecipeNutrition
+import com.dugcanlift.kit.PlanSet
 import com.dugcanlift.kit.PlanWorkoutExercise
+import com.dugcanlift.kit.ShareSide
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -16,7 +18,10 @@ sealed class PlanImportResult {
         val recipeCount: Int,
         val mealCount: Int,
         val routineCount: Int,
-        val sessionCount: Int
+        val sessionCount: Int,
+        /** How many road picks the plan carried. 0 when it carried none, which
+         *  leaves whatever was already stored exactly as it was. */
+        val roadPickCount: Int = 0
     ) : PlanImportResult()
     object AlreadyImported : PlanImportResult()
 }
@@ -38,6 +43,9 @@ object PlanImporter {
             val dayCount = payload.sessions.map { it.date }.distinct().size
             parts += "sessions scheduled across ${pluralize(dayCount, "day")}"
         }
+        // Named like the other halves, so a plan that is only picks is not a
+        // dialog saying "Nothing to import" over a link that holds six.
+        RoadPicks.fromPlan(payload.rawJson)?.let { parts += pluralize(it.ids.size, "Road Food pick") }
         return if (parts.isEmpty()) "Nothing to import" else parts.joinToString(", ")
     }
 
@@ -102,16 +110,36 @@ object PlanImporter {
             recipeRepo.plan(recipe = vm.recipe, date = vm.date, meal = vm.meal, servings = vm.servings)
         }
         routines.forEach { routineRepo.save(it) }
+        // An each-side exercise turns on "Left and right separately" for that
+        // lift when the plan is accepted, if it is not on already. The lifter
+        // can turn it back off; that choice is theirs from then on. A set that
+        // only names a side changes nothing here: the session offers L and R
+        // for it without touching the preference.
+        val settings = SettingsStore.get(context)
+        routines.flatMap { it.exercises }.filter { it.eachSide }.forEach {
+            settings.setLogsPerSide(LoggedExercise(name = it.name, equipment = it.equipment).matchKey, true)
+        }
         validSessions.forEach { vs ->
             sessionRepo.add(ScheduledSession(routineId = vs.routine.id, routineName = vs.workoutName, date = vs.date))
         }
+        // `rf`: what the coach is happy with on the road, replacing whatever
+        // was stored, whole. A plan with no `rf` -- every older Coach, every
+        // "here is a recipe" send -- says nothing about picks rather than
+        // retracting them, so nothing is written for one. Nothing is checked
+        // against road-food.json here either: an id this build does not have is
+        // skipped where the list is drawn, so a file that gains the item back
+        // shows the pick again rather than having thrown it away on arrival.
+        // See RoadPicks and coach/PLAN-FORMAT.md "Road picks".
+        val picks = RoadPicks.fromPlan(payload.rawJson)
+        if (picks != null) settings.roadPicks = picks
         importedStore.add(hash)
 
         return PlanImportResult.Imported(
             recipeCount = recipes.size,
             mealCount = validMeals.size,
             routineCount = routines.size,
-            sessionCount = validSessions.size
+            sessionCount = validSessions.size,
+            roadPickCount = picks?.ids?.size ?: 0
         )
     }
 
@@ -140,12 +168,22 @@ object PlanImporter {
     }
 
     /**
-     * Reduces a possibly-ramping set list to Android's single-target shape — see plan Global Constraints.
+     * One prescribed exercise, kept as the coach wrote it.
      *
-     * Deliberately uses most-common (not [WorkoutSession.toRoutine]'s `maxOrNull()`-for-weight) for
-     * every field: this is a *prescription*, not a record of a workout actually performed, so it
-     * should reflect what the coach literally wrote as a set rather than synthesizing an untested
-     * weight/rep combination from the extremes.
+     * The coach's sets go on [RoutineExercise.prescribed], one by one, whenever
+     * [RoutineExercise]'s flattened targets cannot say what they say — a ramp,
+     * a set whose weight was left to the lifter, each side, a set naming one.
+     * PLAN-FORMAT lists sets individually for that reason, and [Prescription]
+     * is the rule.
+     *
+     * The targets are still filled in, for the readers that have only ever had
+     * them (a routine saved from a workout, a starter split, a file an older
+     * build wrote) and so a prescription they can say in full stores exactly
+     * what it always did. Where they do reduce a ramp, they take the most
+     * common value of each field — not [WorkoutSession.toRoutine]'s
+     * `maxOrNull()` for weight — because this is a *prescription*, not a record
+     * of a workout performed: what the coach literally wrote as a set beats a
+     * weight/rep combination synthesised from the extremes.
      */
     private fun toRoutineExercise(pe: PlanWorkoutExercise): RoutineExercise {
         fun <T> mostCommon(values: List<T?>): T? =
@@ -160,9 +198,29 @@ object PlanImporter {
             targetWeightLb = mostCommon(pe.sets.map { it.weightLb }),
             targetRpe = mostCommon(pe.sets.map { it.rpe }),
             targetDurationSec = mostCommon(pe.sets.map { it.durationSec }),
-            targetDistanceMeters = mostCommon(pe.sets.map { it.distanceMeters })
+            targetDistanceMeters = mostCommon(pe.sets.map { it.distanceMeters }),
+            // The targets above cannot say 60/60/70, "you pick the weight",
+            // "each side" or "plus one on the left", so a prescription that
+            // says any of those is kept set by set as well. One they say in
+            // full is exactly what it was.
+            prescribed = pe.sets.map(::toPrescribedSet)
+                .takeIf { Prescription.needsSetBySet(it, pe.eachSide) },
+            eachSide = pe.eachSide
         )
     }
+
+    private fun toPrescribedSet(set: PlanSet) = PrescribedSet(
+        weightLb = set.weightLb,
+        reps = set.reps,
+        rpe = set.rpe,
+        durationSec = set.durationSec,
+        distanceMeters = set.distanceMeters,
+        side = when (set.side) {
+            ShareSide.LEFT -> SetSide.LEFT
+            ShareSide.RIGHT -> SetSide.RIGHT
+            null -> null
+        }
+    )
 
     private fun sha256(text: String): String =
         MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))

@@ -26,8 +26,8 @@ android {
         // share is negligible in 2026, so this isn't a meaningful trade-off.
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
-        versionName = "1.9"
+        versionCode = 16
+        versionName = "1.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -77,9 +77,19 @@ android {
 }
 
 // LocationPermissionsManifestTest reads the source manifest directly, so a
-// manifest-only change has to make the unit tests out of date.
+// manifest-only change has to make the unit tests out of date. RoadFoodTest
+// reads the Road Food assets the same way (the debug fixture, and the real
+// file once it is in main), so an asset-only change reruns it too.
+//
+// The include is "road-food*", not "road-food*.json", because road-food.sha256
+// is read by RoadFoodTest as well. Pinning the JSON but not the hash would let
+// a checksum-only change -- someone copying the kit's new hash across without
+// the file, which is exactly the half-done copy this pair exists to catch --
+// come back up to date from the cache without the test ever running.
 tasks.withType<Test>().configureEach {
     inputs.file("src/main/AndroidManifest.xml")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(fileTree("src/main/assets") { include("road-food*") }, fileTree("src/debug/assets"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
@@ -90,7 +100,7 @@ dependencies {
     testImplementation("org.json:json:20260814")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.test:core:1.7.0")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
@@ -112,7 +122,7 @@ dependencies {
             because("Guava before 32.0.0: CVE-2020-8908, CVE-2023-2976")
         }
     }
-    implementation("com.github.dougray:dugcanlift-kit-android:1.5.0")
+    implementation("com.github.dougray:dugcanlift-kit-android:1.6.1")
     // LIFT Link's protocol layer, shared byte-for-byte with the Wear OS app. Pure JVM, no
     // dependencies of its own. See CLAUDE.md "LIFT Link".
     implementation(project(":link"))

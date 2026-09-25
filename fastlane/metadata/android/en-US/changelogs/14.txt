@@ -1,0 +1,3 @@
+A coach can now prescribe a lift each side, or a single set on one side. A lift marked each side shows a target per side — "L 0/3 · R 0/3" — and logging a set starts on the side your coach asked for next, with their weight and reps ready to adjust.
+
+Fixed: a plan's sets kept only the most common one, so a coach's 60/60/70 arrived as three 60s. Every set now arrives as written, and "five reps, you pick the weight" stays blank.

@@ -66,9 +66,9 @@ feature; those sets stay both, which is honest.
   beside bit 0's warmup flag — no new tuple position, so a coach app that
   ignores flags still reads the weight, the reps and the volume. BACKUP-FORMAT
   spells it as a **named field**, `side: "left" | "right"`, omitted when both,
-  because a backup is read by humans and by three platforms. PLAN-FORMAT is
-  unchanged in v1: a coach prescribes as before and the lifter picks the side
-  when logging. `CoachShareSideTest` and `PerLimbSetsTest` pin both, the second
+  because a backup is read by humans and by three platforms. A coach's plan can
+  carry sides too -- see "Per-side prescriptions" below. `CoachShareSideTest`
+  and `PerLimbSetsTest` pin both, the second
   against `fixtures/backup-main-no-sides.json`, a file `BackupStore.build` on
   main actually wrote — do not regenerate it from this branch.
 - **A both-sided set writes nothing.** No `side` key in the backup, `0` flags in
@@ -107,6 +107,179 @@ feature; those sets stay both, which is honest.
 - **Tracked and shown, never targeted** — the discipline saturated fat, sugar
   and sodium follow. No threshold, no colour, no warning, no advice. A 10% gap
   is ordinary, and what a particular one means is a question for a trainer.
+
+## Per-side prescriptions
+
+A coach's plan can say an exercise is done **each side** (`b: 1`: every
+prescribed set on both sides, so "3 x 8 each side" is six sets) and that a set
+is for **one side** (the set tuple's sixth position, SHARE-FORMAT's flags bits
+1-2). PLAN-FORMAT "Sides"; spec `dugcanlift-wip-backups/coach-per-side-prescriptions-spec.md`.
+The kit decodes both (`PlanWorkoutExercise.eachSide`, `PlanSet.side`, kit 1.6.0).
+LIFT web's `lift/sides.js` "a coach's prescription" block is the rule, ported
+function for function into `PerSideLogging` -- change it there first.
+
+- **Old builds degrade correctly, and this is checked.** `PlanSidesOldDecoderTest`
+  reads `fixtures/web-plan-per-side.txt` (Coach web's own encoder wrote it; never
+  regenerate it) the way LIFT 1.11 does: accepted, both additions ignored,
+  every exercise two-sided with the right count. It was first run against main
+  itself, unmodified; the old path is now frozen in the test.
+- **Stored set by set whenever the targets cannot say it.** `RoutineExercise`
+  keeps its flattened targets as always, and gains `prescribed` (the sets one by
+  one) and `eachSide` beside them -- see "A prescription is not a count and a
+  set" below, which is the rule for when. Starting the session moves `prescribed`
+  onto the `LoggedExercise` *when it says something about sides*, so the header's
+  targets survive a relaunch and a backup (`prescribed`, `eachSide: true`, LIFT
+  web's spellings, both omitted when absent); a ramp has nothing left to say once
+  its sets are rows. JSON files, no schema: an older file reads with neither.
+- **Accepting an each-side exercise turns "Left and right separately" on** for
+  that lift. A named set alone never touches the preference: on a lift not
+  logged per side the set form offers Both / L / R until that set is logged.
+- **Sided sets are not pre-filled.** A pre-filled left set is a claim nobody
+  made. Two-sided sets of a lift that is not each side are laid out as before,
+  each with its own numbers. The form starts on the side the next unfilled
+  prescribed set names and prefills from that set (switching side refills it
+  until something is typed); past the prescription it is the side that is behind.
+- **The header counts against the target**: `L 0/3 · R 0/3`, `R 0/1 · 2/2 both`,
+  and `L 4/3` when over -- never capped. A "Coach:" line lists the prescribed
+  sets, because the sided ones are not rows until they are done.
+- Progression, the imbalance figure and volume read the log, never the plan.
+
+## A prescription is not a count and a set
+
+`RoutineExercise` has always been one set's worth of targets plus `targetSets`,
+which says "3 x 8 @ 60 lb" and nothing else. PLAN-FORMAT lists a prescription's
+sets individually for exactly that reason -- "Coaches ramp, and a
+count-and-tuple shape cannot say 225/225/245 without special cases" -- so
+reducing them to the most common value of each field, as `PlanImporter` did
+until `plan-set-fidelity`, silently prescribed something the coach never wrote:
+a ramp of 60/60/70 arrived as three 60s, and `[null, 5]` beside `[225, 5]`
+arrived as two sets at 225, inventing the weight the coach left to the lifter.
+
+**`Prescription` is the rule and it is not about sides.** `needsSetBySet` keeps
+the coach's sets on `RoutineExercise.prescribed` whenever the targets would lose
+something: sets that differ from each other, any set naming a side, or `b: 1`.
+The targets are still filled in beside them -- a routine saved from a workout, a
+starter split and every routine an older build wrote are nothing but targets --
+and a prescription the targets say in full (three identical sets) keeps
+`prescribed` null and writes byte for byte the object main wrote.
+`Routine.toSession` lays out whatever was kept, each set with its own weight,
+reps, RPE, duration, distance and side. `PlanSetFidelityTest` pins all of it,
+including a `routines.json` from before any of this.
+
+**Weights never convert anywhere on this path.** PLAN-FORMAT's set tuple is
+pounds, `WorkoutSet`/`PrescribedSet` are pounds, and the app shows pounds --
+there is no `WeightUnit` on Android, deliberately, the way there is no
+kilometres toggle for Outdoor.
+
+**`WorkoutSession.toRoutine` -- "Save as routine" -- still flattens, and that is
+a separate path.** It is a lifter's own log being turned into a template, and it
+synthesises on purpose (most common reps, *heaviest* weight). Nothing a coach
+sent goes through it.
+
+## Road Food
+
+Macro-friendly picks at fast-food chains and gas stations, ranked against what
+is left of today, reached from Food ("Road Food"). Spec:
+`dugcanlift-wip-backups/lift-road-food-spec.md`.
+
+- **The ranking is a port of LIFT web's `lift/road-food.js`, function for
+  function** (`data/RoadFood.kt`, tested by `RoadFoodTest`, itself a port of
+  `road-food.test.mjs`): fits at or under what is left; a separate "A little
+  over" group up to 10% over (compared as `kcal x 10 <= left x 11`); nothing
+  beyond; protein per 100 kcal, then lower sodium, then name. No goal: protein
+  per 100 kcal alone, and the screen says so. Unknown protein or sodium ranks
+  after known, never as zero. As with `SideBalance`, **the rule changes in
+  `road-food.js` first and is ported again**.
+- **"What is left" is `remainingFor` (`data/Remaining.kt`)**, the one function
+  Home's and Food's "kcal left" read too. Do not compute it a second time.
+- **Log it** writes an ordinary `FoodEntry` for today in the chosen meal, so it
+  reaches the day's totals and Send to Coach like any food. Saturated fat, sugar
+  and sodium travel where the item lists them and stay null where it does not.
+- Tracked and shown, never targeted: sodium, sugar and saturated fat are plain
+  text on each row. No location of any kind and no new permissions: the person
+  picks the chain. Recent chains are `SettingsStore.roadFoodRecent`, not backed up.
+
+**Two dates, and the warning keys off the chain's.** `checkedOn` is the day a
+person read a chain's chart; `publishedOn` is the date the chart **states about
+itself**, optional and only as precise as the document is -- `"2021-03-29"`
+where Whataburger's says "as of March 29, 2021", `"2022-11"` where Burger
+King's says only "NOVEMBER 2022", and absent where the document states none.
+`RoadFood.ageDate` picks the first over the second, and `isStale` measures six
+calendar months from it, so a 2021 chart read this morning says so:
+"These numbers are from the chain's chart dated Mar 29, 2021." A chain with no
+document date keeps the older sentence word for word. Both dates are on screen
+("Published Nov 2022 · checked Sep 23, 2026"), because what a chain published
+and when someone read it are different facts.
+
+**The data, and how the real file drops in.** One file,
+`dugcanlift-kit/data/road-food.json`, the same on every platform. It goes into
+this app **unchanged** as `app/src/main/assets/road-food.json` -- that one file
+is the whole drop-in; no code changes. Until it is there:
+
+- `app/src/debug/assets/road-food-sample.json` is a fixture with obviously fake
+  names ("Sample Burger Co"), copied from LIFT web's
+  `lift/fixtures/road-food-sample.json`. It is in the **debug** source set only,
+  so no release can contain it. `RoadFoodStore` reads `road-food.json` first and
+  falls back to the sample only when that is absent, so once the real file is in
+  `main` a debug build shows it too.
+- A release without the real file shows **no Road Food button** at all
+  (`RoadFoodStore.isBundled`), rather than a screen with nothing in it.
+- `RoadFoodTest` fails if the sample ever appears under `src/main/assets`, and
+  once the real file is there it parses it and fails on any Sample/Example/
+  Fictional/Placeholder/Test name. The Road Food assets are declared inputs of
+  the unit-test task, so dropping the file in reruns it.
+- **`road-food.sha256` is the kit's checksum of those bytes**, copied in beside
+  the JSON, and `RoadFoodTest` hashes the asset and asserts it matches. Every
+  other check here is on the data's *shape*, and a copy three chains behind
+  passes all of them, so nothing else here would ever say the file had fallen
+  behind.
+- Refreshing the numbers is the same drop-in: replace the file, release as usual
+  -- but **replace `road-food.sha256` at the same time**, from the same place.
+
+**When the checksum test fails**, copy `road-food.json` *and* `road-food.sha256`
+from `dugcanlift-kit/data/` over together. Never edit either file here, and
+never re-write the checksum by hand to make the test pass: the kit writes it
+with `node data/validate-road-food.mjs --write-checksum`, and the other four app
+repos pin the same one, so a hand-written hash only moves the failure somewhere
+further away. The debug fixture is pinned the same way against
+`road-food-sample.sha256`, and is shared with LIFT web and lift-ios, so changing
+it means changing it in all three repos.
+
+**A coach's picks.** A plan link can carry `rf`, a flat list of Road Food item
+ids a coach is happy with for this client (`coach/PLAN-FORMAT.md` "Road picks").
+`RoadPicks` holds them, `SettingsStore.roadPicks` stores them, and
+`RoadFood.withPicks` (the port of `road-food.js`'s own `withPicks`) puts them on
+screen.
+
+- **The wire is read app-side, not in the kit.** `PlanPayload` has no field for
+  `rf`; `RoadPicks.fromPlan` reads it off `PlanPayload.rawJson`. One JSON key is
+  not worth a kit release, and this way the pinned decoder stays exactly the
+  decoder `PlanRoadPicksOldDecoderTest` freezes.
+- **What arrives replaces what is held, whole. A plan with no `rf` changes
+  nothing** -- absent is what every older Coach and every "here is a recipe"
+  send looks like, so it is silence, not a retraction. Clearing is done here, on
+  the Road Food screen.
+- **What a pick does is sort to the top of its group, marked.** Nothing else
+  moves: the same items fit, in the same order among themselves, and an item
+  more than 10% over what is left stays hidden picked or not. The label is
+  "Doug's pick" / "Your coach's pick" (`RoadPicks.label`), in **weight, not
+  colour** -- it names what a coach marked, it does not grade the food.
+- **An id this build's `road-food.json` does not have is skipped, silently, and
+  never counted.** The coach's copy and this one are two builds updated at
+  different times. Nothing is filtered away on arrival, so an item that comes
+  back shows its pick again.
+- **On this phone only**, like `roadFoodRecent`: not in the backup, matching
+  LIFT web's `STORED` list.
+- Tracked and shown, never targeted: no score, no colour, and nothing anywhere
+  about what was eaten instead.
+- `PlanRoadPicksOldDecoderTest` pins what a build that never heard of `rf` does
+  with the same link, against main's frozen mapping.
+  `fixtures/web-plan-road-picks.txt` is Coach web's own encoder's output --
+  never regenerate it from Kotlin.
+- The plan dialog does not navigate after an import -- it never has, for meals
+  or training either -- so a picks-only plan says where the picks went instead
+  of going there. LIFT web opens its Road Food screen; that is the one place
+  this deliberately differs.
 
 ## Recording a route needs no background location
 
@@ -153,6 +326,40 @@ Both must carry `RELEASE_CERT_SHA256` or nothing is published, and `SHA256SUMS`
 lists both files. Locally, with no `keystore.properties`,
 `./gradlew :app:bundleRelease` builds an unsigned bundle.
 
+## Uploading to Google Play
+
+```bash
+gh release download v1.9 -p lift-android.aab
+fastlane android upload aab:lift-android.aab            # internal testing, as a draft
+fastlane android upload aab:lift-android.aab track:alpha # closed testing
+```
+
+`fastlane/Fastfile`'s one lane runs `supply` with the signed bundle from the
+tag's GitHub Release (it never builds or signs) and everything under
+`fastlane/metadata/android`: title, descriptions, graphics, screenshots, and
+`changelogs/<versionCode>.txt`, which it refuses to go without. Options:
+`track:internal|alpha|beta` (alpha is closed testing), `status:draft|completed`,
+`validate:true` to have Play check the upload without committing it.
+**Production is refused**; promote a tested release in Play Console. A release
+arrives as a draft and is rolled out by hand there.
+
+- **The key is never in this repo.** `fastlane/Appfile` reads the service
+  account's JSON key from `PLAY_JSON_KEY_PATH`, falling back to
+  `~/keystores/play-publisher.json`; `*.json` under `fastlane/` is gitignored.
+  The service account needs release permission for this app under Play Console's
+  Users and permissions.
+- **The very first upload of a brand-new app goes through the browser.** The
+  Publishing API refuses an app that has never had a release, so the first AAB is
+  uploaded by hand in Play Console. Then `fastlane android upload listing_only:true`
+  sends the text and graphics without a bundle (that versionCode is already
+  taken), and every later version goes up with its `aab:`. Until the first
+  release is published, Play also accepts only `status:draft`, which is why
+  draft is the default.
+- **Store screenshots**: phone shots are 1080×1920, no alpha, captioned and
+  framed like the rest of the set, at most eight, numbered in carousel order with
+  no gaps; renumber the set when inserting. Tablet shots are raw captures, 7-inch
+  at `wm size 1080x1920` / `wm density 216` and 10-inch at `2560x1440` / `320`.
+
 ## Large screens
 
 Layout follows the **window's width**, never the device: Material 3's classes,
@@ -178,7 +385,8 @@ by `WindowLayoutTest`. Put a new width rule there, not in a composable.
   Food's totals and add/edit forms beside the meal list; Train's lifting beside
   Outdoor, with Last route (map larger) beside Personal bests below and routines as
   a card grid; Cook recipes as a card grid, the plan as two days a row and the
-  whole week in seven columns from 1000 dp, shopping in two columns read downwards.
+  whole week in seven columns from 1000 dp, shopping in two columns read downwards;
+  Road Food's chains as a card grid and a chain's ranked list beside its ordering rules.
   Two panes need two 320 dp panes (656 dp of content), so a tablet in portrait
   splits and an unfolded foldable in portrait (≈560 dp of content) does not.
 - Recording and reviewing a route (`RouteScreenLayout`) put the square map beside

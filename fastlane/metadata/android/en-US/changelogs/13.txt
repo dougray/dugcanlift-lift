@@ -1,0 +1,1 @@
+Left-and-right lifts now describe the gap between your sides in the same words your coach sees: "Right ahead by 5%", or "Sides level", with whether the gap is closing, widening or steady underneath. The numbers are worked out exactly as before.
