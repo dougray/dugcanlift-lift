@@ -456,6 +456,23 @@ before changing anything here.
   retry it, so `WatchLinkTransport.onBonded` does.
 - **The six-digit code is computed on both ends, never sent**, from the two
   handshake nonces. Both users confirm, in either order.
+- **Version 2 carries the coach's sides, and still speaks version 1.**
+  `eachSide` on a plan exercise and a named `side` on a prescribed set, as two
+  presence bits in masks version 1 already reserved — so a plan with no sides
+  encodes to exactly version 1's bytes and the fixture's `plan` line did not
+  move. Two things keep an un-updated peer working: frames go out at the
+  **negotiated** version (`LinkCodec.version`, raised in `apply` *after* the
+  handshake's own frames are written, so a HELLO is always legible), and
+  `LinkSession.pushPlan` strips the sides when the link settled on version 1.
+  Losing a label costs a lifter a letter beside a number; losing the frame costs
+  them the workout.
+- **`WatchPlanMapper` sends a routine's `prescribed` rows when it has them**,
+  and only falls back to the flattened `target*` fields when it does not.
+  Before version 2 it always flattened, so a coach's "3 x 8 each side" reached
+  the watch as three ordinary sets with no sides — half the work asked for — and
+  a ramp reached it as one number three times. `WatchPlanSidesTest` pins both.
+  Duration and distance still have nowhere to go: the wire's prescription
+  carries neither, so a conditioning row arrives as a set with no numbers.
 - **Pounds here, kilograms on the wire, whole grams in the bytes.** The only
   conversion is `WatchPlanMapper` (`KG_PER_LB = 0.45359237`, exact). Weights
   coming back are rounded to the hundredth of a pound, because whole grams turn

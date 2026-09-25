@@ -92,7 +92,9 @@ object LinkPayloads {
     private const val P_RPE = 0x04
 
     private const val PRESCRIBED_REST = 0x08
-    private const val PRESCRIBED_RESERVED = 0xF0
+    /** A named side, one byte of [LogSide.code]. Absent is both; see [PrescribedSet.side]. */
+    private const val PRESCRIBED_SIDE = 0x10
+    private const val PRESCRIBED_RESERVED = 0xE0
 
     private const val LOGGED_SIDE = 0x08
     private const val LOGGED_DURATION = 0x10
@@ -105,7 +107,9 @@ object LinkPayloads {
     private const val EX_EQUIPMENT = 0x01
     private const val EX_NOTE = 0x02
     private const val EX_LAST = 0x04
-    private const val EX_RESERVED = 0xF8
+    /** A flag with no bytes behind it: the bit *is* the value. See [PlanExercise.eachSide]. */
+    private const val EX_EACH_SIDE = 0x08
+    private const val EX_RESERVED = 0xF0
 
     private const val FINISHED_EX_RESERVED = 0xFC
 
@@ -213,6 +217,7 @@ object LinkPayloads {
             if (equipment != null) mask = mask or EX_EQUIPMENT
             if (note != null) mask = mask or EX_NOTE
             if (exercise.lastPerformed != null) mask = mask or EX_LAST
+            if (exercise.eachSide) mask = mask or EX_EACH_SIDE
             w.u8(mask)
             equipment?.let { w.str(it) }
             note?.let { w.str(it) }
@@ -240,7 +245,10 @@ object LinkPayloads {
             val note = if (mask and EX_NOTE != 0) r.str() else null
             val sets = List(r.u16()) { readPrescribed(r) }
             val last = if (mask and EX_LAST != 0) readLastPerformed(r) else null
-            PlanExercise(exName, normalised(equipment), normalised(note), sets, last)
+            PlanExercise(
+                exName, normalised(equipment), normalised(note), sets, last,
+                eachSide = mask and EX_EACH_SIDE != 0,
+            )
         }
         r.end()
         return Plan(planId, revision, name, source, scheduledFor, exercises)
@@ -252,11 +260,13 @@ object LinkPayloads {
         if (set.reps != null) mask = mask or P_REPS
         if (set.rpe != null) mask = mask or P_RPE
         if (set.restSeconds != null) mask = mask or PRESCRIBED_REST
+        if (set.side != null) mask = mask or PRESCRIBED_SIDE
         w.u8(mask)
         set.weightKg?.let { w.u32(gramsOf(it)) }
         set.reps?.let { require(it >= 1) { "reps $it below 1" }; w.u16(it) }
         set.rpe?.let { w.u8(rpeTenths(it)) }
         set.restSeconds?.let { require(it >= 1) { "restSeconds $it below 1" }; w.u16(it) }
+        set.side?.let { w.u8(it.code) }
     }
 
     private fun readPrescribed(r: ByteReader): PrescribedSet {
@@ -268,6 +278,10 @@ object LinkPayloads {
             rpe = if (mask and P_RPE != 0) rpeOf(r.u8()) else null,
             restSeconds = if (mask and PRESCRIBED_REST != 0) {
                 val s = r.u16(); if (s < 1) throw LinkDecodeException("restSeconds $s below 1") else s
+            } else null,
+            side = if (mask and PRESCRIBED_SIDE != 0) {
+                val code = r.u8()
+                LogSide.from(code) ?: throw LinkDecodeException("side $code is neither left nor right")
             } else null,
         )
     }

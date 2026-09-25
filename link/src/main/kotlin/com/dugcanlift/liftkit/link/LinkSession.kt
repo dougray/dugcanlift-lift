@@ -134,9 +134,19 @@ class LinkSession(
 
     // ---- outbound, once READY. The role rules are here rather than in two Android files. ----
 
+    /**
+     * The plan to push, at the version this link settled on.
+     *
+     * A version-1 peer refuses a sided plan's presence bits outright, so the sides come off here
+     * rather than at a call site that would have to remember to ask. Losing a label costs a lifter a
+     * letter beside a number; losing the frame costs them the whole workout.
+     */
     fun pushPlan(plan: Plan): LinkMessage {
         requireReady(LinkRole.CENTRAL, "push a plan")
-        return LinkMessage(MessageType.PLAN_PUSHED, LinkPayloads.encodePlan(plan))
+        val forPeer = if ((negotiatedVersion ?: LinkProtocol.MIN_SUPPORTED_VERSION)
+            >= LinkProtocol.VERSION_WITH_PLAN_SIDES
+        ) plan else plan.withoutSides()
+        return LinkMessage(MessageType.PLAN_PUSHED, LinkPayloads.encodePlan(forPeer))
     }
 
     fun requestPlan(): LinkMessage {
