@@ -96,6 +96,9 @@ object AdaptiveLayout {
     /** Food: the day's totals and the add/edit forms beside the meal list. */
     fun foodIsTwoPane(contentWidthDp: Float): Boolean = twoPanes(contentWidthDp)
 
+    /** Road Food: a chain's ranked list beside its ordering rules. */
+    fun roadFoodIsTwoPane(contentWidthDp: Float): Boolean = twoPanes(contentWidthDp)
+
     /** Train: the day's lifting beside Outdoor. */
     fun trainIsTwoPane(contentWidthDp: Float): Boolean = twoPanes(contentWidthDp)
 

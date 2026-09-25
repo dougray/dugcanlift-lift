@@ -70,6 +70,7 @@ import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.ServingUnit
 import com.dugcanlift.macrocalc.data.todayKey
 import com.dugcanlift.macrocalc.data.totals
+import com.dugcanlift.macrocalc.data.remainingFor
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -173,7 +174,7 @@ fun DashboardScreen(
         } else {
             Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    val remaining = goal.calories - eaten.calories
+                    val remaining = remainingFor(goal, allEntries.forDate(today)).calories
                     Text(
                         text = if (remaining >= 0) "$remaining kcal left"
                         else "${-remaining} kcal over",
@@ -459,7 +460,7 @@ fun DashboardScreen(
                              * no advice. */
                             if (SideBalance.hasPerSideHistory(history)) {
                                 val sideSessions = SideBalance.sessions(history)
-                                val imbalance = SideBalance.imbalance(sideSessions)
+                                val imbalance = SideBalance.lines(sideSessions)
 
                                 Spacer(modifier = Modifier.height(20.dp))
                                 Text(
@@ -468,19 +469,26 @@ fun DashboardScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
-                                StatRow(
-                                    "Imbalance",
-                                    // Under three sessions a side, there is no figure
-                                    // to give — say so rather than print a number one
-                                    // heavy day decided.
-                                    imbalance?.description
-                                        ?: "Needs ${SideBalance.MIN_SESSIONS} sessions each side"
+                                // Coach web's words, shared by all six apps. Under
+                                // three sessions a side the headline is a dash and
+                                // the line below says what is missing, rather than
+                                // print a number one heavy day decided.
+                                StatRow("Imbalance", imbalance.headline)
+                                Text(
+                                    text = imbalance.detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                StatRow(
-                                    "Sessions each",
-                                    "L ${sideSessions.count { it.leftE1rm != null }} · " +
-                                        "R ${sideSessions.count { it.rightE1rm != null }}"
-                                )
+                                // Below three a side the line above already
+                                // counts each side ("2 left, 2 right so far"),
+                                // so the row would say it twice.
+                                if (SideBalance.imbalance(sideSessions) != null) {
+                                    StatRow(
+                                        "Sessions each",
+                                        "L ${sideSessions.count { it.leftE1rm != null }} · " +
+                                            "R ${sideSessions.count { it.rightE1rm != null }}"
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 LineChart(
                                     series = listOf(
