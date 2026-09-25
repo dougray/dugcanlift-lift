@@ -10,6 +10,7 @@ import com.dugcanlift.liftkit.link.PlanExercise
 import com.dugcanlift.liftkit.link.PlanSource
 import com.dugcanlift.liftkit.link.PrescribedSet
 import com.dugcanlift.macrocalc.data.LoggedExercise
+import com.dugcanlift.macrocalc.data.PrescribedSet as AppPrescribedSet
 import com.dugcanlift.macrocalc.data.Routine
 import com.dugcanlift.macrocalc.data.RoutineExercise
 import com.dugcanlift.macrocalc.data.SetSide
@@ -69,23 +70,57 @@ object WatchPlanMapper {
     )
 
     private fun exercise(template: RoutineExercise, history: List<WorkoutSession>): PlanExercise {
-        // A routine prescribes per exercise, so every set gets the same prescription — exactly
-        // what `Routine.toSession` does when the phone starts one. No rest time: this app does not
-        // store one, and the wire's absent restSeconds means "the watch's own default", which is
-        // the honest thing to send.
-        val prescribed = PrescribedSet(
-            weightKg = template.targetWeightLb?.takeIf { it.isFinite() && it >= 0.0 }?.let(::lbToKg),
-            reps = template.targetReps?.takeIf { it >= 1 },
-            rpe = template.targetRpe?.takeIf { it.isFinite() && it in 1.0..10.0 },
-        )
+        // A routine that prescribes set by set sends its rows as they are -- a ramp, a named side, an
+        // extra set on one limb. `template.prescribed` is non-null exactly when the flattened targets
+        // cannot say what the coach wrote (`Prescription`, applied by `PlanImporter`), so this is the
+        // same question `Routine.toSession` asks when the phone starts one.
+        //
+        // Before LIFT Link version 2 this always flattened, which sent a coach's "3 x 8 each side" to
+        // the watch as three ordinary sets with no sides: half the work asked for, and no mention of
+        // the limbs. A missing side is silent, which is why it lasted.
+        //
+        // No rest time either way: this app does not store one, and the wire's absent restSeconds
+        // means "the watch's own default", which is the honest thing to send.
+        val sets = template.prescribed
+            ?.map(::prescribedSet)
+            ?.takeIf { it.isNotEmpty() }
+            ?: List(template.targetSets.coerceAtLeast(1)) {
+                PrescribedSet(
+                    weightKg = template.targetWeightLb?.takeIf { w -> w.isFinite() && w >= 0.0 }?.let(::lbToKg),
+                    reps = template.targetReps?.takeIf { r -> r >= 1 },
+                    rpe = template.targetRpe?.takeIf { r -> r.isFinite() && r in 1.0..10.0 },
+                )
+            }
         return PlanExercise(
             name = template.name,
             equipment = template.equipment.takeIf { it.isNotBlank() },
             note = template.note.takeIf { it.isNotBlank() },
-            sets = List(template.targetSets.coerceAtLeast(1)) { prescribed },
+            sets = sets,
             lastPerformed = lastPerformed(template, history),
+            // PLAN-FORMAT's `b: 1`. False writes no presence bit at all, so a routine with no sides
+            // encodes to exactly the bytes version 1 wrote.
+            eachSide = template.eachSide,
         )
     }
+
+    /**
+     * One prescribed row, phone to wire.
+     *
+     * **Pounds to kilograms**, as everywhere this app meets the wire: a missing conversion here is
+     * silent and 2.2x wrong on a lifter's wrist. Duration and distance have nowhere to go -- the
+     * wire's prescription carries neither -- so a conditioning row reaches the watch as a set with no
+     * numbers, which is what it already did when every row was flattened.
+     */
+    private fun prescribedSet(set: AppPrescribedSet): PrescribedSet = PrescribedSet(
+        weightKg = set.weightLb?.takeIf { it.isFinite() && it >= 0.0 }?.let(::lbToKg),
+        reps = set.reps?.takeIf { it >= 1 },
+        rpe = set.rpe?.takeIf { it.isFinite() && it in 1.0..10.0 },
+        side = when (set.side) {
+            SetSide.LEFT -> LogSide.LEFT
+            SetSide.RIGHT -> LogSide.RIGHT
+            null -> null
+        },
+    )
 
     /**
      * "last: 185x5 @8". The top set of the most recent time this lift — name *and* equipment — was

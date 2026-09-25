@@ -48,6 +48,34 @@ object LinkFixtures {
         ),
     )
 
+    /**
+     * The version-2 addition, and deliberately awkward in the same way [plan] is: an each-side
+     * exercise (three... no, two prescribed rows, so four sets to perform), one of them a named
+     * left, a blank weight throughout, no equipment, no note, no `lastPerformed`, and no
+     * `scheduledFor`. Every version-2 byte is in here and nothing else is.
+     *
+     * `PrescribedSet(reps = 8)` is PLAN-FORMAT's `[null, 8]`: eight reps, you pick the weight. It is
+     * here rather than a weighted set because a sided plan is exactly where a zero would be most
+     * tempting to write.
+     */
+    val sidedPlan = Plan(
+        planId = PLAN_ID,
+        revision = 4,
+        name = "Legs",
+        source = PlanSource.COACH_PLAN,
+        scheduledFor = null,
+        exercises = listOf(
+            PlanExercise(
+                name = "Split Squat",
+                sets = listOf(
+                    PrescribedSet(reps = 8),
+                    PrescribedSet(reps = 8, side = LogSide.LEFT),   // one extra, left only
+                ),
+                eachSide = true,
+            ),
+        ),
+    )
+
     val session = FinishedSession(
         sessionId = SESSION_ID,
         revision = 1,

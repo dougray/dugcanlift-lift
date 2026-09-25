@@ -40,7 +40,7 @@ enum class LogSide(val code: Int) {
     }
 }
 
-/** A prescription. All four fields optional; a set that prescribes nothing at all is legal. */
+/** A prescription. All five fields optional; a set that prescribes nothing at all is legal. */
 data class PrescribedSet(
     val weightKg: Double? = null,
     val reps: Int? = null,
@@ -48,6 +48,19 @@ data class PrescribedSet(
     /** How long to rest *after* this set. Absent means the sender has no opinion and the watch
      *  uses its own default — it does not mean rest for zero seconds. */
     val restSeconds: Int? = null,
+    /**
+     * The one limb this set is for (PLAN-FORMAT.md "Sides": the set tuple's sixth position).
+     * **Absent is both**, and a both-sides set writes no presence bit, so a plan that says nothing
+     * about sides is byte for byte what version 1 wrote.
+     *
+     * [LogSide] rather than a second enum of its own: the codes are SHARE-FORMAT's flags bits
+     * either way, and a prescription's "left" and a logged set's "left" are the same word about
+     * the same limb. Two enums would only be two things to keep in step.
+     *
+     * A named side on an exercise that is not [PlanExercise.eachSide] is legal and means that one
+     * set is single-limb.
+     */
+    val side: LogSide? = null,
 )
 
 /** What the lifter actually did last time, for the "last: 185x5 @8" line beside a prescription. */
@@ -66,6 +79,15 @@ data class PlanExercise(
     val note: String? = null,
     val sets: List<PrescribedSet> = emptyList(),
     val lastPerformed: LastPerformed? = null,
+    /**
+     * **Every prescribed set is done on both sides** (PLAN-FORMAT.md "Sides", `b: 1`): "3 x 8 each
+     * side" stays three prescribed rows and is six sets, three a side. The coach's own flag —
+     * neither end guesses it from the exercise's name.
+     *
+     * `false` writes **no presence bit**, never a zero byte, so a plan with no sides encodes to
+     * exactly the bytes version 1 wrote and `fixtures/link-wire.txt` does not move.
+     */
+    val eachSide: Boolean = false,
 )
 
 /**
@@ -81,7 +103,24 @@ data class Plan(
     /** The local calendar day this plan is for, `yyyy-MM-dd`. Absent when it is not tied to one. */
     val scheduledFor: String? = null,
     val exercises: List<PlanExercise> = emptyList(),
-)
+) {
+    /** Whether anything in this plan says anything about sides at all. */
+    val prescribesSides: Boolean
+        get() = exercises.any { it.eachSide || it.sets.any { set -> set.side != null } }
+
+    /**
+     * This plan with every side stripped, for a peer that negotiated version 1 and would refuse
+     * the presence bits outright (`LinkPayloads` reserves nothing it does not understand).
+     * [LinkSession.pushPlan] applies it, so no caller can send sides down a version-1 link by
+     * forgetting to ask. Losing a side costs the lifter a label; losing the frame costs them the
+     * whole plan.
+     */
+    fun withoutSides(): Plan =
+        if (!prescribesSides) this
+        else copy(exercises = exercises.map { exercise ->
+            exercise.copy(eachSide = false, sets = exercise.sets.map { it.copy(side = null) })
+        })
+}
 
 /** One performed set. Every field optional, for the reason a prescription's are. */
 data class LoggedSet(
