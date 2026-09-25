@@ -123,6 +123,9 @@ dependencies {
         }
     }
     implementation("com.github.dougray:dugcanlift-kit-android:1.6.1")
+    // LIFT Link's protocol layer, shared byte-for-byte with the Wear OS app. Pure JVM, no
+    // dependencies of its own. See CLAUDE.md "LIFT Link".
+    implementation(project(":link"))
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.robolectric)

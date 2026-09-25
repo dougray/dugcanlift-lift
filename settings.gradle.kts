@@ -24,7 +24,8 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "DugCanLiftCalc"
-include(":app")
+// :link is LIFT Link's protocol layer, pure JVM, shared byte-for-byte with the Wear OS app.
+include(":app", ":link")
 
 // Local development against the kit checkout: put `kitPath=../dugcanlift-kit-android` in local.properties.
 val localProps = java.util.Properties().apply { val f = file("local.properties"); if (f.exists()) f.inputStream().use { load(it) } }

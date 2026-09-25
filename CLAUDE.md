@@ -427,3 +427,59 @@ sheet, and allows its data to reach a third party only with explicit consent.
 - `PermissionsRationaleActivity` (and its Android 14 `VIEW_PERMISSION_USAGE`
   alias) opens the privacy policy the Play listing names;
   `HealthConnectRationaleManifestTest` pins the manifest side.
+
+## LIFT Link (the Wear OS watch)
+
+A direct Bluetooth LE channel to the LIFT Wear OS app. It exists because the
+Wearable Data Layer needs Google Play Services on both ends, this app carries
+none by policy, and the Wear app has no internet permission at all. The
+specification is `docs/LINK-PROTOCOL.md` in `dugcanlift-lift-watch`; read it
+before changing anything here.
+
+- **`:link` is shared source, not ours alone.** It is a byte-identical copy of
+  `dugcanlift-lift-watch`'s `android/liftkit/.../liftkit/link/` package, which
+  is canonical — change it there and copy it here, never only here. Both repos
+  carry `LinkWireFixtureTest` and the same `fixtures/link-wire.txt`, so a copy
+  that drifts fails in its own repo. **Never regenerate that fixture to make a
+  test pass**: a changed byte is a `LinkProtocol.VERSION` bump, made in both
+  repos together. The long-term home is `dugcanlift-kit-android`'s `:liftcore`.
+  `:link` is pure JVM with no dependencies — no Android, no JSON library —
+  and `./gradlew :link:test` runs it (CI runs it too).
+- **The phone is the central; the watch advertises.** The phone scans once, to
+  pair, and afterwards connects to the remembered address with `autoConnect`.
+  `MainActivity.onStart` arms that pending connection; it is a no-op for anyone
+  who never paired, and it never asks for a permission. Asking is the Watch
+  card's job, and only after it has said what crosses the link.
+- **Bonding is required.** The watch's characteristics are encrypted, and it
+  refuses an unbonded device again in its own code. The first protected write
+  fails with an authentication error and pairing starts; Android often does not
+  retry it, so `WatchLinkTransport.onBonded` does.
+- **The six-digit code is computed on both ends, never sent**, from the two
+  handshake nonces. Both users confirm, in either order.
+- **Pounds here, kilograms on the wire, whole grams in the bytes.** The only
+  conversion is `WatchPlanMapper` (`KG_PER_LB = 0.45359237`, exact). Weights
+  coming back are rounded to the hundredth of a pound, because whole grams turn
+  185 lb into 185.0009. `WatchPlanMapperTest` pins it through the real codec.
+- **Blank stays blank.** A routine with no target weight sends no weight; a
+  value the wire cannot carry (reps 0, RPE 11) is sent as absent, never clamped.
+  The payloads use presence bits precisely so a blank can never arrive as zero.
+  Routines have no rest time, so none is sent, and absent means "the watch's own
+  default", not zero rest.
+- **A finished session reconciles; it does not just overwrite.**
+  `WatchPlanMapper.reconcile`: never seen → insert; same revision → idempotent;
+  older → ignored; newer → accepted **only if the phone's copy is exactly what
+  was stored**. A session the lifter edited or deleted here is left alone — the
+  watch never silently overwrites a newer phone edit, and a deletion is not
+  undone because a wrist remembered it. The comparison is
+  `WatchPlanMapper.fingerprint`, not `hashCode()`: enums hash by identity, which
+  changes every launch.
+- **Streamed sets (`SET_LOGGED`) are shown, not stored.** `SESSION_FINISHED` is
+  the source of truth.
+- **Not in `BackupStore`.** A Bluetooth pairing belongs to this phone and that
+  watch; restoring it elsewhere would remember a bond the new phone lacks.
+- `WatchLinkManifestTest` pins `neverForLocation` on the scan, no
+  `BLUETOOTH_ADVERTISE`, the legacy pair capped at API 30, BLE optional, and no
+  background location.
+- **Proven by tests, not by radios.** Nothing here has run between two real
+  devices yet. The watch repo's `DEVICE-TESTING.md` lists what a real phone and
+  watch still have to show.
