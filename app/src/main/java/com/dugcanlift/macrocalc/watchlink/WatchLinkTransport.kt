@@ -465,7 +465,12 @@ class WatchLinkTransport private constructor(context: Context) {
     }
 
     private fun apply(reaction: Reaction) {
+        // Frames first, then the version. A HELLO is framed before this raises the codec, so the
+        // handshake itself always goes out at a version every build that has ever existed can read --
+        // which is the whole point of the version being byte 0, and what lets a version-2 phone talk
+        // to a version-1 watch at all rather than be refused before it can say hello.
         reaction.send.forEach(::queue)
+        session?.negotiatedVersion?.let { codec.version = it }
         reaction.events.forEach { event ->
             when (event) {
                 is LinkEvent.ConfirmationCode -> _status.value = Status.Confirming(event.code, event.peerName, confirmedHere = false)

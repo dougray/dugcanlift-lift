@@ -32,11 +32,18 @@ class LinkWireFixtureTest {
         assertEquals("$name differs", LinkFixtures.hex(fixture.getValue(name)), LinkFixtures.hex(actual))
 
     @Test fun `the frame header this build writes is the one in the fixture`() {
-        val frame = LinkFrame(
-            LinkProtocol.VERSION, MessageType.PLAN_REQUEST.code,
-            LinkFrame.FLAG_FIRST or LinkFrame.FLAG_LAST, 0, ByteArray(0),
+        // Built at an explicit 1 rather than at LinkProtocol.VERSION: version 1's header shape is
+        // frozen for ever (that is the whole point of the version being byte 0), and this line is
+        // what pins it. A version bump must not move it -- if it did, the guarantee would be a
+        // comment rather than a test.
+        fun planRequest(version: Int) = LinkFrames.encode(
+            LinkFrame(
+                version, MessageType.PLAN_REQUEST.code,
+                LinkFrame.FLAG_FIRST or LinkFrame.FLAG_LAST, 0, ByteArray(0),
+            )
         )
-        assertBytes("frame.planRequest", LinkFrames.encode(frame))
+        assertBytes("frame.planRequest", planRequest(LinkProtocol.MIN_SUPPORTED_VERSION))
+        assertBytes("frame.planRequestV2", planRequest(LinkProtocol.VERSION_WITH_PLAN_SIDES))
     }
 
     @Test fun `hello encodes to the fixture's bytes`() = assertBytes("hello", LinkPayloads.encodeHello(LinkFixtures.hello))
@@ -45,6 +52,23 @@ class LinkWireFixtureTest {
         assertBytes("helloAck", LinkPayloads.encodeHello(LinkFixtures.helloAck))
 
     @Test fun `the plan encodes to the fixture's bytes`() = assertBytes("plan", LinkPayloads.encodePlan(LinkFixtures.plan))
+
+    @Test fun `a plan carrying the coach's sides encodes to the fixture's bytes`() =
+        assertBytes("plan.sides", LinkPayloads.encodePlan(LinkFixtures.sidedPlan))
+
+    /**
+     * The reason version 2 is a bump and not a break: a plan that says nothing about sides is the
+     * same bytes it always was. Read out of the committed fixture rather than out of the encoder,
+     * because that is the claim -- the `plan` line predates sides entirely.
+     */
+    @Test fun `a plan with no sides is byte for byte what version 1 wrote`() {
+        assertBytes("plan", LinkPayloads.encodePlan(LinkFixtures.plan))
+        assertEquals(false, LinkFixtures.plan.prescribesSides)
+        assertEquals(
+            LinkFixtures.hex(fixture.getValue("plan")),
+            LinkFixtures.hex(LinkPayloads.encodePlan(LinkFixtures.plan.withoutSides())),
+        )
+    }
 
     @Test fun `the session encodes to the fixture's bytes`() =
         assertBytes("session", LinkPayloads.encodeSession(LinkFixtures.session))
@@ -61,6 +85,7 @@ class LinkWireFixtureTest {
         assertEquals(LinkFixtures.hello, LinkPayloads.decodeHello(fixture.getValue("hello")))
         assertEquals(LinkFixtures.helloAck, LinkPayloads.decodeHello(fixture.getValue("helloAck")))
         assertEquals(LinkFixtures.plan, LinkPayloads.decodePlan(fixture.getValue("plan")))
+        assertEquals(LinkFixtures.sidedPlan, LinkPayloads.decodePlan(fixture.getValue("plan.sides")))
         assertEquals(LinkFixtures.session, LinkPayloads.decodeSession(fixture.getValue("session")))
         assertEquals(LinkFixtures.report, LinkPayloads.decodeLoggedSet(fixture.getValue("setLogged")))
         assertEquals(LinkFixtures.ack, LinkPayloads.decodeAck(fixture.getValue("ack")))
