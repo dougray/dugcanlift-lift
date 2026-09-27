@@ -77,11 +77,18 @@ object PerSideLogging {
      * `countsLabel` exactly. Quietly leaving them out would make the line
      * disagree with the rows underneath it.
      */
-    fun sideCountLabel(exercise: LoggedExercise): String? {
-        if (!exercise.hasPerSideSets) return null
-        val left = exercise.setCount(SetSide.LEFT)
-        val right = exercise.setCount(SetSide.RIGHT)
-        val both = exercise.setCount(null)
+    fun sideCountLabel(exercise: LoggedExercise): String? = sideCountLabel(exercise.sets)
+
+    /**
+     * [sideCountLabel] for a bare list of sets, which is what [PlanLog]'s week card holds: it pools
+     * a day's sessions before it counts, so the lift it counts is not one [LoggedExercise]. One
+     * implementation, so the card and the session header cannot drift apart.
+     */
+    fun sideCountLabel(sets: List<WorkoutSet>): String? {
+        if (sets.none { it.side != null }) return null
+        val left = sets.count { it.side == SetSide.LEFT }
+        val right = sets.count { it.side == SetSide.RIGHT }
+        val both = sets.count { it.side == null }
         return "L $left · R $right" + if (both > 0) " · $both both" else ""
     }
 
