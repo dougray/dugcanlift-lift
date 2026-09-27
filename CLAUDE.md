@@ -176,6 +176,88 @@ a separate path.** It is a lifter's own log being turned into a template, and it
 synthesises on purpose (most common reps, *heaviest* weight). Nothing a coach
 sent goes through it.
 
+## What you were asked to do, and what you did
+
+`PlanLog` puts the week a coach booked beside the week this device logged, as a
+card on **Train**, under the coach's card for the day and above the routines
+(`PlanWeekCard`, placed by `WorkoutScreen`'s `planWeekBlock`). **A port of LIFT
+web's `lift/plan-log.js`, function for function**, the way `SideBalance` is a
+port of `sides.js`: the rule changes there first and is ported again, because
+three platforms describing one week differently is worse than any of them
+describing it slightly better. `PlanLogTest` is a port of
+`lift/plan-log.test.mjs`, case for case.
+
+**It is a week, and that argument is load-bearing.** Train shows one day at a
+time and `Next` is disabled past today, so a booked Wednesday is invisible on
+Thursday and a booked Friday can be read nowhere else on the phone. A marker on
+the day screen would only restate what the day screen already shows. One day is
+open at a time, and by default it is the day Train is showing; a row opens it and
+moves Train there when Train can show it. The arrows skip to weeks a coach
+actually booked (`adjacentWeek`) and are disabled, never hidden, when there is
+none. Weeks run **Monday to Sunday** (web's `WEEK_STARTS_ON`), not a rolling
+seven days: a rolling window would move a booked Tuesday out of "this week"
+overnight and describe one plan two ways on two consecutive days.
+
+**Nothing new travels and nothing new is stored.** No wire change, no new file,
+no new key, no new permission -- the card reads `scheduled_sessions.json`,
+`routines.json` and the log exactly as they already sit on disk.
+
+**The ask is read from the stored plan, never from the logged session.** This is
+where Android's storage differs from web's and the port had to think:
+`Routine.toSession` copies a prescription's numbers into the session's set rows
+and carries `prescribed` onto the `LoggedExercise` *only when it says something
+about sides*, so the moment a lifter edits a set the session no longer says what
+was asked for -- and for a ramp it never did. `PlanLog.bookings` resolves each
+`ScheduledSession` against the `Routine` it names, and the ask is
+`RoutineExercise.askedSets`: **`prescribed` set by set, and the flattened targets
+only where they say the whole of it.** `Routine.toSession` reads the same
+`askedSets`, so there is one place that knows how a prescription expands. Reading
+`targetWeightLb` instead would print a ramp of 225/225/245 as three 225s -- the
+flattening `plan-set-fidelity` removed from the importer, reintroduced at the
+other end. `PlanLogImportTest` pins it through the real importer.
+
+**Two things web has that this build does not**, both documented in `PlanLog`
+rather than worked around:
+
+- **`startedSessionId`.** Web knows which session a booking was started as, and
+  uses it to pick the right session out of a day holding two. Nothing here
+  records it, so a booked day is compared against everything logged on it,
+  pooled -- which is exactly web's own fallback when that session was deleted.
+  A lift nobody asked for still lands under "Also logged".
+- **A coach's name.** `PlanImporter` stores no `n`, so `PlanLog.SENT_BY` is web's
+  fallback sentence ("From your coach") always. Naming the coach would mean a new
+  stored field.
+
+**No warmup flag exists here**, so `loggedIn` has nothing to exclude -- web
+filters warmups out of both halves. If one is ever recorded on this platform,
+that function is where it is dropped, on both halves, masked and never compared.
+
+**Sides are `PerSideLogging`'s, not a second reading.** `targetsLabel` is the
+same `L 3/3 · R 2/3` the session header has shown since per-side prescriptions
+shipped, called with the same arguments, so the card and the session cannot
+disagree about a limb; `sideCountLabel` gained a list overload for it rather than
+a copy. A day still ahead shows `Each side · L 4 · R 3` (the prescribed card's
+sentence) instead, because `L 0/3` on a Friday is a nought nobody has had the
+chance to earn.
+
+**`PlanLog.setNumbers` prints both rows, and the session card's own rows too.**
+PLAN-FORMAT's set tuple and SHARE-FORMAT's are the same six fields so nothing has
+to be transposed to compare them, and one row above the other is what that was
+for -- so `formatSet` delegates to it rather than keeping a second spelling. The
+field order is this app's existing one (`@8` before the clock), not web's: the
+logged rows under this card have read that way since long before it existed.
+
+**Nobody is graded.** No score, no percentage, no streak, no colour on a day
+nothing was logged against, nothing carried between weeks. The words are Coach's
+-- `logged`, `not logged`, `not booked`, `Asked` / `Logged` -- so a lifter and
+their coach describe one week the same way; `to do` is this side's own, because
+only the person living the week has a day that has not happened yet. Coach's
+`outside the log they sent` cannot arise (the log is right here) and Coach's
+footer is a sentence about somebody else, so this card has its own. `lines()`
+flattens every sentence the card can produce, and the line-discipline tests read
+that rather than a screen. A week that books nothing is **no card at all**, never
+an empty frame explaining itself.
+
 ## Road Food
 
 Macro-friendly picks at fast-food chains and gas stations, ranked against what
