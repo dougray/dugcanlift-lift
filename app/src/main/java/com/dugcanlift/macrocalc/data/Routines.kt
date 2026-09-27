@@ -133,6 +133,30 @@ internal fun routineFromJson(o: JSONObject): Routine {
 /* ---------- conversions ---------- */
 
 /**
+ * The sets this exercise asks for, **one by one**.
+ *
+ * [RoutineExercise.prescribed] where a coach's sets were kept, and the flattened targets repeated
+ * [RoutineExercise.targetSets] times where they say the whole of it — a routine saved from a
+ * workout, a starter split and every routine an older build wrote are nothing but targets, and
+ * [Prescription] is the rule for which is which.
+ *
+ * One function, because two readers need the same answer: [toSession] lays a session out from it,
+ * and [PlanLog]'s week card prints what a booked day asked for from it. Reading `targetReps` and
+ * `targetWeightLb` instead would print a ramp of 225/225/245 as three 225s — the flattening
+ * [RoutineExercise.prescribed] exists to undo.
+ */
+val RoutineExercise.askedSets: List<PrescribedSet>
+    get() = prescribed ?: List(targetSets.coerceAtLeast(1)) {
+        PrescribedSet(
+            weightLb = targetWeightLb,
+            reps = targetReps,
+            rpe = targetRpe,
+            durationSec = targetDurationSec,
+            distanceMeters = targetDistanceMeters
+        )
+    }
+
+/**
  * Builds a session from a routine, with the sets already laid out so you tick
  * through them rather than adding each one by hand.
  *
@@ -180,13 +204,15 @@ fun Routine.toSession(date: String): WorkoutSession = WorkoutSession(
             name = template.name,
             equipment = template.equipment,
             note = template.note,
-            sets = List(template.targetSets.coerceAtLeast(1)) {
+            // The targets, repeated -- [askedSets], which is the one place that knows how a
+            // prescription with none of its own expands.
+            sets = template.askedSets.map {
                 WorkoutSet(
-                    weightLb = template.targetWeightLb,
-                    reps = template.targetReps,
-                    rpe = template.targetRpe,
-                    durationSec = template.targetDurationSec,
-                    distanceMeters = template.targetDistanceMeters
+                    weightLb = it.weightLb,
+                    reps = it.reps,
+                    rpe = it.rpe,
+                    durationSec = it.durationSec,
+                    distanceMeters = it.distanceMeters
                 )
             }
         )
