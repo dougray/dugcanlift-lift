@@ -59,6 +59,7 @@ import com.dugcanlift.macrocalc.data.alreadyHas
 import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.PerSideLogging
+import com.dugcanlift.macrocalc.data.PlanLog
 import com.dugcanlift.macrocalc.data.PrescribedSet
 import com.dugcanlift.macrocalc.data.SetSide
 import com.dugcanlift.macrocalc.data.SettingsStore
@@ -116,6 +117,14 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
     var selectedDate by rememberSaveable { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
+
+    // The week the coach's-plan-beside-your-log card is showing, and the day of it it has open.
+    // Both null means "follow Train": the week containing the day on screen, with that day open.
+    // The card's own arrows set the first, a day row sets the second, and the date navigator clears
+    // both -- moving a day should not leave the card describing a week the rest of the screen has
+    // left. rememberSaveable, like selectedDate, so a rotation does not send the card back.
+    var planWeekAnchor by rememberSaveable { mutableStateOf<String?>(null) }
+    var planWeekOpen by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Full-screen takeovers for recording/reviewing a Run or Hike, following the
     // same state-based screen-swap pattern MainActivity uses for showCalculator
@@ -253,6 +262,51 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+
+    /* The coach's week beside your own log, under the coach's card for the day.
+     *
+     * A week rather than a marker on the day screen, because Train shows one day at a time and
+     * cannot be moved past today: a booked Wednesday is invisible on Thursday and a booked Friday
+     * can be read nowhere else on the phone. Every sentence is PlanLog's, and there is no card at
+     * all when no plan books a day in the week on screen. */
+    val planWeekBlock: @Composable () -> Unit = rememberMovablePart {
+        val bookings = remember(scheduledSessions, routines) {
+            PlanLog.bookings(scheduledSessions, routines)
+        }
+        val week = remember(bookings, sessions, selectedDate, planWeekAnchor) {
+            PlanLog.compare(
+                bookings = bookings,
+                sessions = sessions,
+                today = todayKey(),
+                anchor = planWeekAnchor ?: selectedDate
+            )
+        }
+        if (week != null) {
+            PlanWeekCard(
+                week = week,
+                // Exactly one day is open, and by default it is the day the rest of Train is
+                // showing -- so the card follows the screen rather than keeping a second idea of
+                // where you are.
+                openDay = planWeekOpen ?: selectedDate.takeIf { date -> week.days.any { it.key == date } },
+                previousWeek = PlanLog.adjacentWeek(bookings, week.from, -1),
+                nextWeek = PlanLog.adjacentWeek(bookings, week.from, 1),
+                onStepWeek = { monday ->
+                    planWeekAnchor = monday
+                    planWeekOpen = null
+                },
+                onOpenDay = { day ->
+                    planWeekOpen = day.key
+                    // A day Train can show moves Train to it. A day that has not happened cannot be
+                    // shown there, which is exactly why its prescription is printed here instead.
+                    if (day.openable) {
+                        selectedDate = day.key
+                        planWeekAnchor = null
+                    }
+                }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
@@ -431,8 +485,18 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         ) {
             WorkoutDateNavigator(
                 date = selectedDate,
-                onPrevious = { selectedDate = shiftWorkoutDate(selectedDate, -1) },
-                onNext = { selectedDate = shiftWorkoutDate(selectedDate, 1) }
+                // Moving a day brings the week card back to following Train: it would otherwise
+                // keep describing a week the rest of the screen has left.
+                onPrevious = {
+                    selectedDate = shiftWorkoutDate(selectedDate, -1)
+                    planWeekAnchor = null
+                    planWeekOpen = null
+                },
+                onNext = {
+                    selectedDate = shiftWorkoutDate(selectedDate, 1)
+                    planWeekAnchor = null
+                    planWeekOpen = null
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -441,6 +505,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 focusBlock()
                 Spacer(modifier = Modifier.height(24.dp))
                 scheduledBlock()
+                planWeekBlock()
                 outdoorBlock()
                 Spacer(modifier = Modifier.height(16.dp))
                 highlightsBlock(false)
@@ -453,6 +518,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                         focusBlock()
                         Spacer(modifier = Modifier.height(24.dp))
                         scheduledBlock()
+                        planWeekBlock()
                         sessionsBlock()
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -1053,21 +1119,25 @@ private fun SetForm(
 
 /* ---------- formatting ---------- */
 
+/**
+ * One logged set: "185 x 5", "185 x 5 L", "5 reps".
+ *
+ * The numbers come from [PlanLog.setNumbers], which prints the asked and the logged rows of the
+ * week card with them: a set has to read the same way here and there, or that card would be
+ * comparing two different sentences rather than two sets. The side is added here because this list
+ * is flat — the card groups its sets by side and would otherwise say it twice.
+ */
 private fun formatSet(set: WorkoutSet): String {
-    val parts = mutableListOf<String>()
-    if (set.weightLb != null && set.reps != null) {
-        parts += "${set.weightLb.trimZero()} x ${set.reps}"
-    } else {
-        set.weightLb?.let { parts += "${it.trimZero()} lb" }
-        set.reps?.let { parts += "$it reps" }
-    }
-    set.rpe?.let { parts += "@${it.trimZero()}" }
-    set.durationSec?.let { parts += formatDuration(it) }
-    set.distanceMeters?.let { parts += "${it.trimZero()} m" }
+    val numbers = PlanLog.setNumbers(
+        weightLb = set.weightLb,
+        reps = set.reps,
+        rpe = set.rpe,
+        durationSec = set.durationSec,
+        distanceMeters = set.distanceMeters
+    ) ?: return "-"
     // "185 x 5 L". A both-sided set says nothing, because saying "both" on
     // every bench press set would be noise on every screen.
-    set.side?.let { parts += it.short }
-    return if (parts.isEmpty()) "-" else parts.joinToString(" ")
+    return numbers + (set.side?.let { " ${it.short}" } ?: "")
 }
 
 /** A coach's set: "40 x 8", "40 x 8 L", "600 s"-style as [formatSet] writes a logged one. */
