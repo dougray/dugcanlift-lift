@@ -105,9 +105,15 @@ object PlanImporter {
         val routineRepo = RoutineRepository.get(context)
         val sessionRepo = ScheduledSessionRepository.get(context)
 
+        val coach = coachName(payload.rawJson)
         recipes.forEach { recipeRepo.addRecipe(it) }
+        // Marked as the coach's, so the week card can show what they booked and leave the lifter's
+        // own planned meals alone -- and so `sentBy` can sign a week that booked only food.
         validMeals.forEach { vm ->
-            recipeRepo.plan(recipe = vm.recipe, date = vm.date, meal = vm.meal, servings = vm.servings)
+            recipeRepo.plan(
+                recipe = vm.recipe, date = vm.date, meal = vm.meal, servings = vm.servings,
+                fromCoach = true, coachName = coach
+            )
         }
         routines.forEach { routineRepo.save(it) }
         // An each-side exercise turns on "Left and right separately" for that
@@ -119,7 +125,6 @@ object PlanImporter {
         routines.flatMap { it.exercises }.filter { it.eachSide }.forEach {
             settings.setLogsPerSide(LoggedExercise(name = it.name, equipment = it.equipment).matchKey, true)
         }
-        val coach = coachName(payload.rawJson)
         validSessions.forEach { vs ->
             sessionRepo.add(ScheduledSession(
                 routineId = vs.routine.id,

@@ -56,6 +56,7 @@ import com.dugcanlift.macrocalc.data.OutdoorRecords
 import com.dugcanlift.macrocalc.data.Routine
 import com.dugcanlift.macrocalc.data.StarterSplitStore
 import com.dugcanlift.macrocalc.data.alreadyHas
+import com.dugcanlift.macrocalc.data.RecipeRepository
 import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.PerSideLogging
@@ -96,6 +97,9 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val settings = remember { SettingsStore.get(context) }
     val scheduledSessionRepo = remember { ScheduledSessionRepository.get(context) }
     val outdoorRepo = remember { OutdoorActivityRepository.get(context) }
+    // The meal plan, for the week card: a coach can book meals as well as sessions, and the card
+    // lists the ones a coach booked. Cook's own repository, loaded rather than re-read.
+    val recipeRepo = remember { RecipeRepository.get(context) }
     val tracker = remember { LocationTracker.get(context) }
     val scope = rememberCoroutineScope()
 
@@ -104,6 +108,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         routineRepo.load()
         scheduledSessionRepo.load()
         outdoorRepo.load()
+        recipeRepo.load()
     }
 
     val sessions by workouts.sessions.collectAsState()
@@ -114,6 +119,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) { starters = StarterSplitStore.load(context) }
     val scheduledSessions by scheduledSessionRepo.sessions.collectAsState()
     val outdoorActivities by outdoorRepo.activities.collectAsState()
+    val plannedMeals by recipeRepo.plan.collectAsState()
 
     var selectedDate by rememberSaveable { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
@@ -287,12 +293,15 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         val bookings = remember(scheduledSessions, routines) {
             PlanLog.bookings(scheduledSessions, routines)
         }
-        val week = remember(bookings, sessions, selectedDate, planWeekAnchor) {
+        val week = remember(bookings, sessions, plannedMeals, selectedDate, planWeekAnchor) {
             PlanLog.compare(
                 bookings = bookings,
                 sessions = sessions,
                 today = todayKey(),
-                anchor = planWeekAnchor ?: selectedDate
+                anchor = planWeekAnchor ?: selectedDate,
+                // Both kinds, a coach's and the lifter's own: which belong on the card is PlanLog's
+                // decision and not a screen's.
+                plan = plannedMeals
             )
         }
         if (week != null) {
@@ -300,13 +309,13 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 week = week,
                 // The coach who sent the week, when a plan link carried a name -- read off the
                 // bookings the week holds, so a week nobody signed reads as it always did.
-                sentBy = PlanLog.sentBy(week, bookings),
+                sentBy = PlanLog.sentBy(week, bookings, plannedMeals),
                 // Exactly one day is open, and by default it is the day the rest of Train is
                 // showing -- so the card follows the screen rather than keeping a second idea of
                 // where you are.
                 openDay = planWeekOpen ?: selectedDate.takeIf { date -> week.days.any { it.key == date } },
-                previousWeek = PlanLog.adjacentWeek(bookings, week.from, -1),
-                nextWeek = PlanLog.adjacentWeek(bookings, week.from, 1),
+                previousWeek = PlanLog.adjacentWeek(bookings, week.from, -1, plannedMeals),
+                nextWeek = PlanLog.adjacentWeek(bookings, week.from, 1, plannedMeals),
                 onStepWeek = { monday ->
                     planWeekAnchor = monday
                     planWeekOpen = null

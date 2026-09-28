@@ -50,6 +50,37 @@ import java.util.Locale
  * that has not happened yet is not an absence, and calling it one would be the app inventing a
  * failure out of a Wednesday.
  *
+ * **Meals are stated, never answered.** A coach can book meals as well as sessions (PLAN-FORMAT's
+ * `m`), and accepting a plan files them as [PlannedMeal]s beside the ones placed in Cook. This card
+ * lists the ones a coach booked -- `Dinner · Beef Chilli · 2 servings` -- and says **nothing
+ * whatever about what you ate**. Coach's card does the other half as well: it names the foods the
+ * client stamped with that slot, above a count of the day's foods so `Nothing logged at lunch`
+ * cannot read as `they ate nothing`, under a note saying it cannot know whether the dish was the one
+ * it booked. None of that half is worth anything here. Your food log is on the Food screen, dated,
+ * and reading it back to you in the third person tells you nothing you did not already know -- and
+ * you are the one person who does not need telling whether they ate their dinner. So there is no
+ * `Nothing logged at lunch`, no food count above the rows, no macros beside a booked dish, no figure
+ * for meals eaten, and no meal footer: Coach's note exists to disclaim a join Coach cannot make, and
+ * this card makes no claim to disclaim.
+ *
+ * What is left is the one thing no other screen gives you: **the food booked for a day you cannot
+ * reach.** Cook's plan shows seven days from today and Train shows one, so a dish booked for next
+ * Thursday is legible nowhere until you arrive at it, and a week of it that a coach sent reached no
+ * screen at all. `to do` carries that, as it does for a session, and **a plan of meals with no
+ * training is now a card** where before there was none.
+ *
+ * [PlannedMeal.loggedFoodEntryId] is deliberately not read. This device really does know a planned
+ * meal was logged -- the lifter tapped "Log it" and the entry's id was stored against it -- so
+ * unlike Coach there would be no guessing in saying so. It is still not printed. The only thing it
+ * could add is a tick on some meal rows and a blank on the rest, which is a score with the numbers
+ * filed off, and the screen that can act on the answer (Cook's plan, with `Log it` beside the dish)
+ * already shows it where it is useful.
+ *
+ * Only a coach's meals, never the lifter's own -- [PlannedMeal.fromCoach] is what tells them apart.
+ * A week a coach booked no meals in reads exactly as it did before any of this: the count, the
+ * clause and the rows appear only where there is a booked meal to carry them, which `PlanLogTest`
+ * pins line for line against the card as it shipped.
+ *
  * The side counts are [PerSideLogging]'s own — the same `L 3/3 · R 2/3` the session header has
  * shown since per-side prescriptions shipped, called with the same arguments — so this card and
  * the session it describes cannot disagree about a limb.
@@ -214,6 +245,83 @@ object PlanLog {
                 startedSessionId = session.startedSessionId
             )
         }
+
+    /* ---------------- the meals a coach booked ----------------
+     *
+     * A [PlannedMeal] is a coach's or the lifter's own, in one list, the coach's marked
+     * [PlannedMeal.fromCoach] exactly as a prescribed session is. The slot is stored as this app
+     * writes it and read into the four words PLAN-FORMAT's `m.s` indexes in the same order, so a
+     * booked slot is named here the way Coach names it. */
+
+    /** The four slots a coach can book, in the order `m.s` indexes them -- the order a day is eaten
+     *  in, not the order the coach happened to book them. */
+    val MEAL_SLOTS: List<Meal> = listOf(Meal.BREAKFAST, Meal.LUNCH, Meal.DINNER, Meal.SNACK)
+
+    /**
+     * One booked meal: the slot, the dish and how much of it, which are the three things a coach
+     * wrote and so the three things that can be said without reservation. Macros are not here, and
+     * neither is anything about the food log -- see the head of this file.
+     *
+     * [title] is the whole line and [slotLabel] / [detail] are its two columns, so the view can
+     * align the slots without composing a second sentence of its own that could drift from the one
+     * the tests read.
+     */
+    data class MealRow(
+        val date: String,
+        /** The slot's place in [MEAL_SLOTS], or null for one this build cannot read. */
+        val slot: Int?,
+        val slotLabel: String,
+        val name: String,
+        val servings: Double,
+        val detail: String,
+        val title: String
+    )
+
+    /** "1 serving", "2 servings", "0.5 servings" -- Cook's own label, so a booked dish reads here the
+     *  way it reads there. */
+    private fun servingsLabel(servings: Double): String =
+        if (servings == 1.0) "1 serving" else "${servings.cookDisplay()} servings"
+
+    private fun mealRow(date: String, slot: Int?, name: String, servings: Double): MealRow {
+        val label = slot?.let { MEAL_SLOTS[it].label }.orEmpty()
+        val detail = "$name · ${servingsLabel(servings)}"
+        return MealRow(
+            date = date,
+            slot = slot,
+            slotLabel = label,
+            name = name,
+            servings = servings,
+            detail = detail,
+            title = listOf(label, detail).filter { it.isNotBlank() }.joinToString(" · ")
+        )
+    }
+
+    /**
+     * The meals a coach booked, in the window given, breakfast to snack within each day.
+     *
+     * **Only a coach's.** A meal the lifter placed in Cook is theirs to move, and holding it up on a
+     * card headed "your coach's plan" would make an expectation out of their own note-taking -- the
+     * same reason a week nobody booked is no card at all.
+     *
+     * Two dishes at one dinner are two dishes and both are shown, in the order they were booked;
+     * meals do not pool, as sessions on a date do, because a coach who booked both wants both eaten.
+     * A slot this build cannot read sorts last rather than being dropped: a dish a coach booked is a
+     * dish a coach booked, and hiding it would hide the plan. [from] and [to] are optional -- the
+     * arrows need every week a coach booked a meal in, not one week of them.
+     */
+    fun bookedMeals(plan: List<PlannedMeal>, from: String? = null, to: String? = null): List<MealRow> =
+        plan.filter { meal ->
+            meal.fromCoach && meal.date.isNotBlank() &&
+                (from == null || meal.date >= from) && (to == null || meal.date <= to)
+        }.map { meal ->
+            val slot = MEAL_SLOTS.indexOfFirst { it.name == meal.meal.trim().uppercase(Locale.US) }
+            val name = meal.recipeName.trim().ifBlank { "Recipe" }
+            // A coach's own number, however odd. Anything that is not a real amount is one serving
+            // rather than a dish of none.
+            val servings = if (meal.servings.isFinite() && meal.servings > 0) meal.servings else 1.0
+            mealRow(meal.date, if (slot < 0) null else slot, name, servings)
+        // sortedWith is stable, so two dishes at one dinner keep the order the coach booked them in.
+        }.sortedWith(compareBy({ it.date }, { it.slot ?: MEAL_SLOTS.size }))
 
     /* ---------------- the two halves in one shape ---------------- */
 
@@ -646,14 +754,24 @@ object PlanLog {
      * long enough to need more room than the line has is the view's problem and `PlanWeekCard`
      * solves it there, because a sentence three platforms share cannot be shortened by one of them.
      */
-    fun sentBy(result: Result, bookings: List<Booking>): String {
-        val names = bookings.filter { it.date in result.from..result.to }
+    fun sentBy(result: Result, bookings: List<Booking>, plan: List<PlannedMeal> = emptyList()): String {
+        val fromBookings = bookings.filter { it.date in result.from..result.to }
             .mapNotNull { it.fromCoach?.trim()?.ifBlank { null } }
-            .distinct()
+        // A week that booked only meals is signed by whoever sent it, like any other. A meal placed
+        // on this device is not from a coach at all, so the same test that keeps it off the card
+        // keeps its owner out of the name.
+        val fromMeals = plan.filter { it.fromCoach && it.date in result.from..result.to }
+            .mapNotNull { it.coachName?.trim()?.ifBlank { null } }
+        val names = (fromBookings + fromMeals).distinct()
         return if (names.isEmpty()) SENT_BY else "From ${names.joinToString(" · ")}"
     }
 
-    /** The four verdicts a day row can carry. `to do` is this side's own; the other three are Coach's. */
+    /**
+     * The four verdicts a day row can carry. `to do` is this side's own; the other three are Coach's.
+     *
+     * A day in the past booked only for food is the fifth state and carries **no word at all**, so
+     * it is not in here: there is no `not logged` for a meal, and no figure standing in for one.
+     */
     val WORDS: Map<String, String> = mapOf(
         "logged" to "logged",
         "toDo" to "to do",
@@ -661,8 +779,17 @@ object PlanLog {
         "notBooked" to "not booked"
     )
 
+    /**
+     * The days this week booked and the days it holds, and nothing else.
+     *
+     * [training] and [meals] count what a coach wrote -- days that book a session, and dishes
+     * booked. Neither carries a figure for what came back: [logged] is that figure for training, and
+     * **there is none for a meal**.
+     */
     data class Counts(
         val booked: Int,
+        val training: Int,
+        val meals: Int,
         val logged: Int,
         val notLogged: Int,
         val toDo: Int,
@@ -681,9 +808,13 @@ object PlanLog {
          *  and a day row is one thing you read. */
         val spoken: String,
         val exercises: List<ExerciseLines>,
-        val alsoLogged: List<AlsoLogged>
+        val alsoLogged: List<AlsoLogged>,
+        /** What a coach booked for this day to eat, and **nothing about what was eaten**. Empty on
+         *  every day nobody booked a meal for. */
+        val meals: List<MealRow> = emptyList()
     ) {
-        val hasDetail: Boolean get() = exercises.isNotEmpty() || alsoLogged.isNotEmpty()
+        val hasDetail: Boolean
+            get() = exercises.isNotEmpty() || alsoLogged.isNotEmpty() || meals.isNotEmpty()
     }
 
     data class Result(
@@ -709,7 +840,19 @@ object PlanLog {
      */
     private fun headLine(range: String, counts: Counts): String {
         var head = "Booked ${plural(counts.booked, "day", "days")}, $range"
-        if (counts.logged > 0 || counts.notLogged > 0) head += " · logged ${counts.logged}"
+        // What a coach booked, which is a count of their own writing. There is no figure beside it
+        // for meals eaten, in this line or anywhere else.
+        if (counts.meals > 0) head += " · ${plural(counts.meals, "meal booked", "meals booked")}"
+        if (counts.logged > 0 || counts.notLogged > 0) {
+            // `logged 1` under `Booked 5 days` would read as one day of five when three of them
+            // booked no session at all, so once meals are in the line the figure says what it
+            // counts. Coach's sentence, for the same reason.
+            head += if (counts.meals > 0) {
+                " · ${plural(counts.training, "training day", "training days")}, ${counts.logged} logged"
+            } else {
+                " · logged ${counts.logged}"
+            }
+        }
         if (counts.toDo > 0) head += " · ${counts.toDo} to do"
         if (counts.other > 0) head += " · ${plural(counts.other, "other day logged", "other days logged")}"
         return head
@@ -740,24 +883,49 @@ object PlanLog {
         bookings: List<Booking>,
         sessions: List<WorkoutSession>,
         today: String,
-        anchor: String = today
+        anchor: String = today,
+        /** This device's planned meals, a coach's and the lifter's own in one list. Which of the two
+         *  each is is [bookedMeals]'s decision and not a caller's -- a filter in a composable could
+         *  not be tested, and this one decides whether somebody's own note-taking is held up to them
+         *  as an expectation. */
+        plan: List<PlannedMeal> = emptyList()
     ): Result? {
         val (from, to) = weekOf(anchor)
         val booked = bookings.filter { it.date in from..to }
-        if (booked.isEmpty()) return null
+        // A plan is a plan whichever half of it arrived: `k` and `m` are independent
+        // (PLAN-FORMAT), and a send carrying only meals books days. Before this the card was absent
+        // for one, so a coach who sent a week of food reached no screen that said so past Cook's
+        // seven days from today.
+        val meals = bookedMeals(plan, from, to)
+        if (booked.isEmpty() && meals.isEmpty()) return null
 
         val logged = sessions.filter { it.date in from..to }
         val byDate = booked.groupBy { it.date }
-        val bookedDates = byDate.keys.sorted()
+        val mealsByDate = meals.groupBy { it.date }
+        // Every date this week books anything at all. A day may book a session with no meals, meals
+        // with no session, or both, and all three are one row -- this card opens one date at a time
+        // and tapping a row moves Train to a date, so a second row on the same day would open two
+        // details and go nowhere new.
+        val bookedDates = (byDate.keys + mealsByDate.keys).sorted()
 
+        var trainingDays = 0
+        var mealsBooked = 0
         var loggedDays = 0
         var notLoggedDays = 0
         var toDoDays = 0
         var otherDays = 0
 
         val rows = bookedDates.map { date ->
-            val name = byDate.getValue(date).map { it.name }.filter { it.isNotBlank() }.joinToString(" · ")
-            val asked = poolAsked(byDate.getValue(date).flatMap { it.exercises })
+            val bookedHere = byDate[date].orEmpty()
+            // Whether this day books a session at all. A day that books only meals gets no training
+            // verdict: `not logged` against a day nobody was asked to train would be the app
+            // inventing a booking to hold against you.
+            val booksTraining = bookedHere.isNotEmpty()
+            val dayMeals = mealsByDate[date].orEmpty()
+            if (booksTraining) trainingDays += 1
+            mealsBooked += dayMeals.size
+            val bookedName = bookedHere.map { it.name }.filter { it.isNotBlank() }.joinToString(" · ")
+            val asked = poolAsked(bookedHere.flatMap { it.exercises })
             val onDay = logged.filter { it.date == date }
             // The session this booking was started as, when it still exists: a day with a booked
             // session and an extra one of the lifter's own compares the right half. An id naming a
@@ -767,21 +935,38 @@ object PlanLog {
             // rather than tidied, because the alternative is this build describing such a day
             // differently from the browser.
             var startedSession: WorkoutSession? = null
-            byDate.getValue(date).forEach { booking ->
+            bookedHere.forEach { booking ->
                 val startedId = booking.startedSessionId ?: return@forEach
                 onDay.forEach { session -> if (session.id == startedId) startedSession = session }
             }
             val started = startedSession
-            val mine = loggedIn(if (started != null) listOf(started) else onDay)
+            val mine = if (!booksTraining) emptyList() else
+                loggedIn(if (started != null) listOf(started) else onDay)
             // A session on the same day that was not the one booked is logged work, counted against
-            // nothing, exactly like a lift nobody asked for.
-            val extra = if (started == null) emptyList()
-            else loggedIn(onDay.filter { it.id != started.id }).filter { it.sets.isNotEmpty() }
+            // nothing, exactly like a lift nobody asked for -- and on a day booked only for food,
+            // everything logged on it is that.
+            val extra = when {
+                !booksTraining -> loggedIn(onDay).filter { it.sets.isNotEmpty() }
+                started == null -> emptyList()
+                else -> loggedIn(onDay.filter { it.id != started.id }).filter { it.sets.isNotEmpty() }
+            }
 
             val state = when {
-                mine.isNotEmpty() -> { loggedDays += 1; "logged" }
+                booksTraining && mine.isNotEmpty() -> { loggedDays += 1; "logged" }
+                booksTraining && date >= today -> { toDoDays += 1; "toDo" }
+                booksTraining -> { notLoggedDays += 1; "notLogged" }
+                // A day booked for food that was trained anyway. The training was not booked, which
+                // is the same fact -- and Coach's same word -- as a day the plan says nothing about,
+                // and it is said on the row itself so a week read with every day shut still says
+                // which days you trained.
+                extra.isNotEmpty() -> { otherDays += 1; "notBooked" }
+                // A day still ahead is a plan, whether it books a session, a dinner or both. `to do`
+                // is a fact about the calendar and needs no log to be true, which is why it is the
+                // one verdict a meals-only day can carry.
                 date >= today -> { toDoDays += 1; "toDo" }
-                else -> { notLoggedDays += 1; "notLogged" }
+                // A day in the past that booked food and nothing else. No word at all: there is no
+                // `not logged` for a meal, and no figure for one either.
+                else -> "meals"
             }
 
             val joined = if (state == "logged") joinExercises(asked, mine) else Joined(
@@ -799,6 +984,25 @@ object PlanLog {
                 alsoLogged = emptyList()
             )
 
+            // A booking names itself. Only a day that books no session at all takes its name from
+            // what was logged on it, exactly as a `not booked` day of its own does -- a booked
+            // session with a blank name keeps its blank.
+            val name = if (bookedName.isNotBlank() || booksTraining) bookedName
+            else onDay.firstOrNull { loggedIn(listOf(it)).isNotEmpty() }?.name.orEmpty()
+            val word = WORDS[state].orEmpty()
+            val mealsClause =
+                if (dayMeals.isEmpty()) "" else plural(dayMeals.size, "meal booked", "meals booked")
+            // The training word hugs the session it judges; the meal clause follows it. A day that
+            // booked no session has no session for it to hug, so what is left -- `to do`, or nothing
+            // -- goes last instead. Coach's own rule, and its own sentence: a week described to a
+            // coach reads the same way.
+            val head = if (name.isBlank()) listOf(dayLabel(date), mealsClause, word)
+            else listOf(dayLabel(date), name, word, mealsClause)
+            // The same clauses in the same order, with the date said in words. Built beside [head]
+            // rather than from it, so a clause can never be in one and not the other.
+            val spokenDayHead = if (name.isBlank()) listOf(spokenDayLabel(date), mealsClause, word)
+            else listOf(spokenDayLabel(date), name, word, mealsClause)
+
             DayRow(
                 key = date,
                 state = state,
@@ -806,21 +1010,24 @@ object PlanLog {
                 // Past or today, so Train can be moved to it; a day still ahead cannot be shown
                 // there, which is the reason its prescription is printed here instead.
                 openable = date <= today,
-                text = listOf(dayLabel(date), name, WORDS.getValue(state))
-                    .filter { it.isNotBlank() }.joinToString(" · "),
-                // The same clauses, in the same order, with the date said in words -- one
-                // sentence rather than three fragments. Built here beside `text` rather than from
-                // it, so a clause can never be in one and not the other.
-                spoken = said(listOf(spokenDayLabel(date), name, WORDS.getValue(state))),
+                text = head.filter { it.isNotBlank() }.joinToString(" · "),
+                // One sentence rather than three fragments. `word`, never `WORDS.getValue(state)`:
+                // a day in the past booked only for food is the fifth state and is deliberately
+                // not in `WORDS`, so looking it up there would throw rather than say nothing.
+                spoken = said(spokenDayHead),
                 exercises = joined.exercises,
-                alsoLogged = joined.alsoLogged + extra.map(::alsoLogged)
+                alsoLogged = joined.alsoLogged + extra.map(::alsoLogged),
+                // What a coach booked for this day to eat, and nothing about what was eaten.
+                meals = dayMeals
             )
         }.toMutableList()
 
         // A day in the week that was trained and that nothing was booked for. Shown beside the
         // bookings, saying nothing about cause: a session lifted the day after the one it was
         // booked for looks exactly like this, and so does a session added for its own sake.
-        logged.filter { it.date !in byDate.keys }.forEach { session ->
+        // Every date this send booked, meals included: a day booked for food and trained anyway is
+        // already a row above, with `not booked` on it.
+        logged.filter { it.date !in bookedDates }.forEach { session ->
             val all = loggedIn(listOf(session))
             if (all.isEmpty()) return@forEach
             val lifts = all.filter { it.sets.isNotEmpty() }
@@ -848,6 +1055,8 @@ object PlanLog {
 
         val counts = Counts(
             booked = bookedDates.size,
+            training = trainingDays,
+            meals = mealsBooked,
             logged = loggedDays,
             notLogged = notLoggedDays,
             toDo = toDoDays,
@@ -873,8 +1082,17 @@ object PlanLog {
      * which is the one thing worse than an empty frame; and an arrow with nothing behind it is
      * disabled rather than hidden, so the row does not change shape as it is used.
      */
-    fun adjacentWeek(bookings: List<Booking>, fromMonday: String, direction: Int): String? {
-        val weeks = bookings.map { weekOf(it.date).first }.distinct().sorted()
+    fun adjacentWeek(
+        bookings: List<Booking>,
+        fromMonday: String,
+        direction: Int,
+        /** Meals book weeks too. Without this a week a coach sent food for would be reachable only
+         *  by standing in it, and the arrows would skip over a card that exists. A meal placed on
+         *  this device books no week: the arrow would land on a card that is not there. */
+        plan: List<PlannedMeal> = emptyList()
+    ): String? {
+        val weeks = (bookings.map { it.date } + bookedMeals(plan).map { it.date })
+            .map { weekOf(it).first }.distinct().sorted()
         return if (direction < 0) weeks.lastOrNull { it < fromMonday }
         else weeks.firstOrNull { it > fromMonday }
     }
@@ -903,6 +1121,12 @@ object PlanLog {
                 out += "Also logged"
                 day.alsoLogged.forEach { out += it.text }
             }
+            // Meals last, under the training they sit beside. One line each, and nothing under them:
+            // there is no second row about the food log.
+            if (day.meals.isNotEmpty()) {
+                out += "Meals"
+                day.meals.forEach { out += it.title }
+            }
         }
         out += result.footer
         return out
@@ -924,6 +1148,12 @@ object PlanLog {
             if (day.alsoLogged.isNotEmpty()) {
                 out += "Also logged"
                 day.alsoLogged.forEach { out += it.spoken }
+            }
+            // Meals last, exactly where [lines] puts them. A meal row is composed by the time a
+            // screen asks for it, so [plainly] is what says it -- the case that helper exists for.
+            if (day.meals.isNotEmpty()) {
+                out += "Meals"
+                day.meals.forEach { out += plainly(it.title) }
             }
         }
         out += result.footer
