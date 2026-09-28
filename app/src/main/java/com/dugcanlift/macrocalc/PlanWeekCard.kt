@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -35,8 +36,12 @@ import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
  *
  * Every sentence here is [PlanLog]'s, which the unit tests read as strings; this draws what it
  * returns and decides nothing of its own. **Nobody is graded**: every day row is the same weight and
- * the same colour whichever of the four states it is in, there is no score, no percentage, no streak
- * and nothing carried from one week to the next. A day nothing was logged against may have been a
+ * the same colour whichever state it is in, there is no score, no percentage, no streak
+ * and nothing carried from one week to the next.
+ *
+ * A day can also carry the **meals a coach booked** for it, under the training. Those are stated and
+ * nothing more: no verdict per slot, no macros, and nothing at all about what was eaten -- see
+ * [PlanLog]'s own head for why at length. A day nothing was logged against may have been a
  * day you trained and did not log, a day you were ill, or a day you were told to rest, and the
  * footer says in words that only the reader knows which.
  *
@@ -188,6 +193,31 @@ private fun PlanWeekDay(day: PlanLog.DayRow, open: Boolean, onOpen: () -> Unit) 
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.saidAs(it.spoken)
                 )
+            }
+        }
+        // What a coach booked for this day to eat, under the training it sits beside. Stated and
+        // nothing more -- no verdict per slot, no macros, and nothing at all about what was logged,
+        // however much this device knows. PlanLog says at length why.
+        if (day.meals.isNotEmpty()) {
+            Text(
+                text = "Meals",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            // The slot and the dish are MealRow's own two columns, so Breakfast and Dinner line up
+            // with each other and this composes no sentence of its own. Wider than a set row's
+            // label column, which holds "Asked" and not "Breakfast".
+            day.meals.forEach { meal ->
+                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                    Text(
+                        text = meal.slotLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(88.dp)
+                    )
+                    Text(text = meal.detail, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }

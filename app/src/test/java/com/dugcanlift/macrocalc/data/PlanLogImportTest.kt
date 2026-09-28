@@ -3,6 +3,8 @@ package com.dugcanlift.macrocalc.data
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.dugcanlift.kit.PlanPayload
+import com.dugcanlift.kit.PlanMeal
+import com.dugcanlift.kit.PlanRecipe
 import com.dugcanlift.kit.PlanSession
 import com.dugcanlift.kit.PlanSet
 import com.dugcanlift.kit.PlanWorkout
@@ -296,4 +298,96 @@ class PlanLogImportTest {
         assertEquals("225 x 5", day.exercises[0].logged!!.text)
         assertEquals(emptyList<String>(), day.alsoLogged.map { it.text })
     }
+
+    /* ---------------- the meals a coach booked ---------------- */
+
+    /**
+     * A plan that books meals, accepted for real: `m` becomes [PlannedMeal]s marked as the coach's,
+     * so the card shows what they booked and leaves the lifter's own planned meals alone -- and so a
+     * week that booked only food is signed and is a card at all.
+     */
+    @Test
+    fun `a plan that books meals reaches the card, and the lifter's own do not`() = runBlocking {
+        PlanImporter.accept(
+            PlanPayload(
+                coachName = "Doug",
+                recipes = listOf(PlanRecipe(name = "Beef Chilli", servings = 4.0)),
+                meals = listOf(PlanMeal(date = monday, mealSlot = 2, recipeIndex = 0, servings = 2.0)),
+                workouts = emptyList(),
+                sessions = emptyList(),
+                rawJson = """{"v":1,"t":"plan","l":"x","n":"Doug","test":"meals-1"}"""
+            ),
+            context
+        )
+        // And one the lifter placed for themselves, in Cook, on the same day.
+        val repo = RecipeRepository.get(context)
+        val mine = Recipe(name = "Overnight Oats", servings = 1.0)
+        repo.addRecipe(mine)
+        repo.plan(recipe = mine, date = monday, meal = Meal.BREAKFAST)
+
+        val plan = repo.plan.value
+        assertEquals(2, plan.size)
+        assertEquals(1, plan.count { it.fromCoach })
+
+        val week = PlanLog.compare(bookings(), emptyList(), monday, monday, plan)!!
+        assertEquals(
+            listOf(
+                // `today` here is the Monday itself, so the dinner is still ahead of the lifter.
+                "Booked 1 day, 12–18 Oct · 1 meal booked · 1 to do",
+                "Mon 12 Oct · 1 meal booked · to do",
+                "Meals",
+                "Dinner · Beef Chilli · 2 servings",
+                PlanLog.FOOTER
+            ),
+            PlanLog.lines(week)
+        )
+        assertEquals("From Doug", PlanLog.sentBy(week, bookings(), plan))
+    }
+
+    /**
+     * A meal a coach booked survives the backup file, under LIFT web's own `fromCoach` spelling: the
+     * coach's name, or `true` for a plan that named nobody, and nothing at all for the lifter's own.
+     * Without it a restore would leave the meals in the store and empty the meals half of the card.
+     */
+    @Test
+    fun `which meals a coach booked survives the backup file`() = runBlocking {
+        val repo = RecipeRepository.get(context)
+        val recipe = Recipe(name = "Beef Chilli", servings = 4.0)
+        repo.addRecipe(recipe)
+        repo.plan(recipe = recipe, date = monday, meal = Meal.DINNER, servings = 2.0,
+            fromCoach = true, coachName = "Doug")
+        repo.plan(recipe = recipe, date = monday, meal = Meal.LUNCH, fromCoach = true, coachName = null)
+        repo.plan(recipe = recipe, date = monday, meal = Meal.BREAKFAST)
+
+        val rows = repo.plan.value.map { it.toJson() }
+        val byMeal = rows.associateBy { it.getString("meal") }
+        assertEquals("Doug", byMeal.getValue("DINNER").getString("fromCoach"))
+        assertEquals(true, byMeal.getValue("LUNCH").getBoolean("fromCoach"))
+        assertFalse("a meal you placed yourself carries no coach at all",
+            byMeal.getValue("BREAKFAST").has("fromCoach"))
+
+        val back = rows.map { plannedMealFromJson(it) }
+        assertEquals(listOf(true, true, false), back.map { it.fromCoach })
+        assertEquals(listOf("Doug", null, null), back.map { it.coachName })
+        assertEquals(
+            listOf("Lunch · Beef Chilli · 1 serving", "Dinner · Beef Chilli · 2 servings"),
+            PlanLog.bookedMeals(back).map { it.title }
+        )
+    }
+
+    /** A file written before any of this says nothing about coaches, so every meal in it is the
+     *  lifter's own -- and the card reads exactly as it did. */
+    @Test
+    fun `a planned meal written before the marker is the lifter's own`() {
+        val old = org.json.JSONObject(
+            """{"id":"m1","recipeId":"r1","date":"$monday","meal":"DINNER","servings":2,
+               "recipeName":"Beef Chilli"}"""
+        )
+        val meal = plannedMealFromJson(old)
+        assertFalse(meal.fromCoach)
+        assertNull(meal.coachName)
+        assertEquals(emptyList<PlanLog.MealRow>(), PlanLog.bookedMeals(listOf(meal)))
+        assertNull(PlanLog.compare(emptyList(), emptyList(), monday, monday, listOf(meal)))
+    }
+
 }
