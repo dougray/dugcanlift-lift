@@ -91,6 +91,17 @@ Save the result as your goal and everything else tracks against it.
 - Start a routine and its target sets are laid out ready to overwrite
 - Sessions a coach schedules arrive from a plan link and can be started from
   Train
+- **What you were asked to do, and what you did**: a week card on Train, under
+  the coach's card for the day, putting what a plan booked beside what the log
+  holds — `Mon 12 Oct · Lower A · logged`, the asked sets above the logged ones,
+  `L 3/3 · R 2/3` where a lift is done a limb at a time, and `to do` for a day
+  still ahead. A week rather than a marker on the day screen because Train shows
+  one day at a time and cannot be moved past today, so a booked Wednesday is
+  invisible on Thursday and a booked Friday can be read nowhere else. Its arrows
+  skip to weeks a coach actually booked. **Nobody is graded**: no score, no
+  percentage, no streak, no colour on a day nothing was logged against, and
+  nothing carried from one week to the next. No card at all when no plan books a
+  day in the week on screen
 
 Time accepts `mm:ss` or plain seconds, so a 90-second sled push and a 22-minute
 row both read naturally.
