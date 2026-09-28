@@ -21,20 +21,63 @@ data class ScheduledSession(
     val routineId: String,
     val routineName: String,
     /** "yyyy-MM-dd", same key format the food/workout logs use. */
-    val date: String
+    val date: String,
+    /**
+     * The coach who sent this booking, as the plan link's `n` gave it — null for a booking a plan
+     * carried no name for, and for every booking written before this field existed.
+     *
+     * It is stored on the booking because that is where LIFT web keeps it (`training[].fromCoach`,
+     * under this same spelling) and because a booking is the only record of a plan that never leaves
+     * the device: `WorkoutSession` travels in the backup and in the share link the lifter sends
+     * back, and somebody else's name has no business riding in either for the sake of one muted line
+     * on Train. Read by [PlanLog.sentBy] and nowhere else — the card signs the week once and names
+     * nobody anywhere below that.
+     */
+    val fromCoach: String? = null,
+    /**
+     * The [WorkoutSession] that starting this booking wrote, when it was started here.
+     *
+     * Web's own field, on web's own record (`training[].startedSessionId`), for web's own reason:
+     * without it a booked day is compared against everything logged on it, so a second session that
+     * repeats a planned lift folds into the comparison instead of falling to "Also logged".
+     *
+     * Null for a booking nobody has started, and for every booking written before this field
+     * existed. A booking whose session has since been deleted keeps the id and behaves as if it had
+     * none: [PlanLog.compare] resolves it against the sessions it holds and pools the day when it
+     * finds nothing, which is what every session logged without pressing Start does anyway.
+     *
+     * The started session's id goes **on the booking** rather than the booking's id on the session,
+     * for the reason [fromCoach] does: a booking is a file that stays on the device, and a session
+     * is one that travels — in the backup, and in the share link the lifter sends a coach. Which
+     * booking a session answered is a fact about the coach's plan, and the plan's own file is where
+     * it belongs.
+     */
+    val startedSessionId: String? = null
 )
 
+/**
+ * A booking as JSON. The two optional fields are **omitted when null**, so a device that was never
+ * sent a name and has never started a booking writes byte for byte the object it always wrote — and
+ * an older build, which reads keys by name and ignores the rest, loads a file this one writes with
+ * every field it knows about intact. `ScheduledSessionTest` pins both directions.
+ */
 internal fun ScheduledSession.toJson(): JSONObject = JSONObject()
     .put("id", id)
     .put("routineId", routineId)
     .put("routineName", routineName)
     .put("date", date)
+    .also { o -> fromCoach?.let { o.put("fromCoach", it) } }
+    .also { o -> startedSessionId?.let { o.put("startedSessionId", it) } }
 
 internal fun scheduledSessionFromJson(o: JSONObject) = ScheduledSession(
     id = o.optString("id", UUID.randomUUID().toString()),
     routineId = o.optString("routineId", ""),
     routineName = o.optString("routineName", ""),
-    date = o.optString("date", "")
+    date = o.optString("date", ""),
+    // A real string or nothing. `optString` would read a JSON `true` — which is what LIFT web
+    // stores for "a coach, name unknown" — as the name "true", and print it.
+    fromCoach = (o.opt("fromCoach") as? String)?.trim()?.ifBlank { null },
+    startedSessionId = (o.opt("startedSessionId") as? String)?.trim()?.ifBlank { null }
 )
 
 fun List<ScheduledSession>.onDate(date: String): List<ScheduledSession> = filter { it.date == date }
@@ -52,6 +95,24 @@ class ScheduledSessionRepository private constructor(context: Context) {
 
     suspend fun add(session: ScheduledSession) = withContext(Dispatchers.IO) {
         val updated = read() + session
+        write(updated)
+        _sessions.value = updated
+    }
+
+    /**
+     * Record that starting the booking [id] wrote the session [sessionId] — the one write path this
+     * file has beyond [add], and the only thing that ever sets
+     * [ScheduledSession.startedSessionId].
+     *
+     * Started twice, the newest session wins: the older one is a session of the lifter's own on that
+     * day from then on, which is what it has become. A booking that is no longer in the file is
+     * nothing to record against and nothing is written — the same silence a deleted session gets
+     * when the card reads the id back.
+     */
+    suspend fun markStarted(id: String, sessionId: String) = withContext(Dispatchers.IO) {
+        val stored = read()
+        if (stored.none { it.id == id }) return@withContext
+        val updated = stored.map { if (it.id == id) it.copy(startedSessionId = sessionId) else it }
         write(updated)
         _sessions.value = updated
     }

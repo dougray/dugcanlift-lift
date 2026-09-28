@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.PlanLog
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
@@ -35,12 +36,17 @@ import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
  * day you trained and did not log, a day you were ill, or a day you were told to rest, and the
  * footer says in words that only the reader knows which.
  *
+ * The one line that names anybody is the signature above the head, [PlanLog.sentBy]'s: a coach who
+ * sent a plan with their name in it is named once, and nowhere else on the card does a name appear.
+ *
  * Absent entirely when no plan books a day in the week on screen — the caller draws nothing at all
  * rather than an empty frame explaining itself.
  */
 @Composable
 fun PlanWeekCard(
     week: PlanLog.Result,
+    /** [PlanLog.sentBy]'s line — "From Doug", or "From your coach" when no plan in the week named one. */
+    sentBy: String,
     openDay: String?,
     /** The Monday of the nearest booked week either side, or null when the arrow has nothing behind it. */
     previousWeek: String?,
@@ -51,10 +57,17 @@ fun PlanWeekCard(
 ) {
     Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // A coach's name is free text from somebody else's app, and this is the only line on the
+            // card that carries one. Two lines and then an ellipsis: the sentence is [PlanLog]'s and
+            // three platforms share it, so it is not shortened there -- but a name long enough to
+            // push the week's own head off the screen is a layout problem, and a layout is where it
+            // is answered.
             Text(
-                text = PlanLog.SENT_BY,
+                text = sentBy,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             // The arrows move between weeks a coach actually booked, never one week at a time: a

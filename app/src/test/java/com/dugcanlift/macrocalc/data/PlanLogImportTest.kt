@@ -11,7 +11,9 @@ import com.dugcanlift.kit.ShareSide
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,30 +53,47 @@ class PlanLogImportTest {
 
     private val monday = "2026-10-12"
 
-    private fun accept(vararg exercises: PlanWorkoutExercise) = runBlocking {
+    private fun accept(vararg exercises: PlanWorkoutExercise) = accept(
+        rawJson = """{"v":1,"t":"plan","l":"x","n":"Doug"}""",
+        exercises = exercises.toList()
+    )
+
+    /**
+     * A plan through the real importer. [rawJson] is what the head keys actually are — the coach's
+     * name is read from it and not from [PlanPayload.coachName], which the pinned kit fills with the
+     * placeholder "Your coach" when a link named nobody.
+     */
+    private fun accept(rawJson: String, exercises: List<PlanWorkoutExercise>) = runBlocking {
         PlanImporter.accept(
             PlanPayload(
-                coachName = "Doug",
+                coachName = PlanLinkHeadName(rawJson),
                 recipes = emptyList(),
                 meals = emptyList(),
-                workouts = listOf(PlanWorkout(name = "Lower A", exercises = exercises.toList())),
+                workouts = listOf(PlanWorkout(name = "Lower A", exercises = exercises)),
                 sessions = listOf(PlanSession(date = monday, workoutIndex = 0)),
-                rawJson = """{"v":1,"t":"plan","l":"x","n":"Doug"}"""
+                rawJson = rawJson
             ),
             context
         )
     }
 
-    /** The card, read off the stores the import wrote, exactly as Train reads them. */
-    private fun card(sessions: List<WorkoutSession> = emptyList(), today: String = monday) = PlanLog.compare(
-        PlanLog.bookings(
-            ScheduledSessionRepository.get(context).sessions.value,
-            RoutineRepository.get(context).routines.value
-        ),
-        sessions,
-        today,
-        monday
+    /** The kit's own reading of `n`: the name, or its placeholder when the link carried none. */
+    @Suppress("FunctionName")
+    private fun PlanLinkHeadName(rawJson: String): String =
+        org.json.JSONObject(rawJson).optString("n", "Your coach")
+
+    private fun bookings() = PlanLog.bookings(
+        ScheduledSessionRepository.get(context).sessions.value,
+        RoutineRepository.get(context).routines.value
     )
+
+    /** The card, read off the stores the import wrote, exactly as Train reads them. */
+    private fun card(sessions: List<WorkoutSession> = emptyList(), today: String = monday) =
+        PlanLog.compare(bookings(), sessions, today, monday)
+
+    /** The signature above the head, read the way `WorkoutScreen` reads it. */
+    private fun signature(today: String = monday): String =
+        PlanLog.sentBy(card(today = today)!!, bookings())
 
     @Test
     fun `a ramp a coach sent reads back as the ramp, not as its most common set`() {
@@ -153,5 +172,128 @@ class PlanLogImportTest {
         assertNotNull(day.exercises[0].logged)
         assertEquals("225 x 5 · 245 x 3", day.exercises[0].asked!!.text)
         assertEquals("225 x 5 · 245 x 3", day.exercises[0].logged!!.text)
+    }
+
+    /* ---------------- who sent it ---------------- */
+
+    @Test
+    fun `a plan that carried a name signs the week with it`() {
+        accept(
+            rawJson = """{"v":1,"t":"plan","l":"x","n":"Coach Sam"}""",
+            exercises = listOf(PlanWorkoutExercise(
+                name = "Back Squat", equipment = "Barbell", sets = listOf(PlanSet(weightLb = 225.0, reps = 5))
+            ))
+        )
+        assertEquals("Coach Sam", ScheduledSessionRepository.get(context).sessions.value.last().fromCoach)
+        assertEquals("From Coach Sam", signature())
+    }
+
+    @Test
+    fun `a plan that carried no name signs the week the way it always did`() {
+        // No `n` at all. The kit hands the importer its placeholder "Your coach" for this link, which
+        // is exactly why the importer reads the raw JSON instead: a placeholder stored as a name
+        // would sign the week "From Your coach".
+        accept(
+            rawJson = """{"v":1,"t":"plan","l":"x"}""",
+            exercises = listOf(PlanWorkoutExercise(
+                name = "Back Squat", equipment = "Barbell", sets = listOf(PlanSet(weightLb = 225.0, reps = 5))
+            ))
+        )
+        assertNull(ScheduledSessionRepository.get(context).sessions.value.last().fromCoach)
+        assertEquals("From your coach", signature())
+    }
+
+    @Test
+    fun `a name arrives as text and nothing else`() {
+        // Free text from somebody else's app: whitespace collapsed the way a browser collapses it,
+        // so the line reads the same in both, and no other meaning taken from it.
+        accept(
+            rawJson = """{"v":1,"t":"plan","l":"x","n":"  Coach\n\t Sam  "}""",
+            exercises = listOf(PlanWorkoutExercise(name = "Back Squat", equipment = "Barbell",
+                sets = listOf(PlanSet(weightLb = 225.0, reps = 5))))
+        )
+        assertEquals("From Coach Sam", signature())
+    }
+
+    @Test
+    fun `a name with no end to it is stored whole`() {
+        val long = "Coach " + "Wolfeschlegelsteinhausenbergerdorff ".repeat(20).trim()
+        accept(
+            rawJson = org.json.JSONObject()
+                .put("v", 1).put("t", "plan").put("l", "x").put("n", long).toString(),
+            exercises = listOf(PlanWorkoutExercise(name = "Back Squat", equipment = "Barbell",
+                sets = listOf(PlanSet(weightLb = 225.0, reps = 5))))
+        )
+        assertEquals("From $long", signature())
+        // And nowhere below the signature.
+        PlanLog.lines(card()).forEach { line -> assertFalse(line.contains("Wolfeschlegel")) }
+    }
+
+    /* ---------------- which session answered the booking ---------------- */
+
+    /** Train's Start button, end to end: the session it writes, and the link it records. */
+    private fun start(): WorkoutSession = runBlocking {
+        val repo = ScheduledSessionRepository.get(context)
+        val booking = repo.sessions.value.last()
+        val routine = RoutineRepository.get(context).routines.value.first { it.id == booking.routineId }
+        val started = routine.toSession(booking.date)
+        WorkoutRepository.get(context).save(started)
+        repo.markStarted(booking.id, started.id)
+        started
+    }
+
+    @Test
+    fun `starting a booked session records which session it became`() {
+        accept(PlanWorkoutExercise(
+            name = "Back Squat", equipment = "Barbell",
+            sets = listOf(PlanSet(weightLb = 225.0, reps = 5), PlanSet(weightLb = 245.0, reps = 3))
+        ))
+        val started = start()
+        assertEquals(
+            started.id,
+            ScheduledSessionRepository.get(context).sessions.value.last().startedSessionId
+        )
+        // And it survives the file: this is the one fact a relaunch has to still know.
+        runBlocking { ScheduledSessionRepository.get(context).load() }
+        assertEquals(
+            started.id,
+            ScheduledSessionRepository.get(context).sessions.value.last().startedSessionId
+        )
+    }
+
+    @Test
+    fun `a second session on the booked day is Also logged, not part of the answer`() {
+        accept(PlanWorkoutExercise(
+            name = "Back Squat", equipment = "Barbell",
+            sets = listOf(PlanSet(weightLb = 225.0, reps = 5), PlanSet(weightLb = 245.0, reps = 3))
+        ))
+        val started = start()
+        val own = WorkoutSession(date = monday, name = "Arms", exercises = listOf(
+            LoggedExercise(name = "Barbell Curl", equipment = "Barbell",
+                sets = listOf(WorkoutSet(weightLb = 65.0, reps = 10)))
+        ))
+        val day = card(listOf(started, own))!!.days.first()
+        assertEquals("225 x 5 · 245 x 3", day.exercises[0].logged!!.text)
+        assertEquals(listOf("Barbell Curl (Barbell) · 1 set"), day.alsoLogged.map { it.text })
+    }
+
+    @Test
+    fun `a booking whose started session was deleted is pooled again`() {
+        accept(PlanWorkoutExercise(
+            name = "Back Squat", equipment = "Barbell",
+            sets = listOf(PlanSet(weightLb = 225.0, reps = 5), PlanSet(weightLb = 245.0, reps = 3))
+        ))
+        val started = start()
+        runBlocking { WorkoutRepository.get(context).delete(started.id) }
+        // The booking still names it; the card resolves the id against the sessions it holds, finds
+        // nothing, and reads the day -- which is what a booking nobody started does.
+        val logged = listOf(WorkoutSession(date = monday, name = "Arms", exercises = listOf(
+            LoggedExercise(name = "Back Squat", equipment = "Barbell",
+                sets = listOf(WorkoutSet(weightLb = 225.0, reps = 5)))
+        )))
+        val day = card(logged)!!.days.first()
+        assertEquals("logged", day.state)
+        assertEquals("225 x 5", day.exercises[0].logged!!.text)
+        assertEquals(emptyList<String>(), day.alsoLogged.map { it.text })
     }
 }
