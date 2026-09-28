@@ -119,8 +119,14 @@ object PlanImporter {
         routines.flatMap { it.exercises }.filter { it.eachSide }.forEach {
             settings.setLogsPerSide(LoggedExercise(name = it.name, equipment = it.equipment).matchKey, true)
         }
+        val coach = coachName(payload.rawJson)
         validSessions.forEach { vs ->
-            sessionRepo.add(ScheduledSession(routineId = vs.routine.id, routineName = vs.workoutName, date = vs.date))
+            sessionRepo.add(ScheduledSession(
+                routineId = vs.routine.id,
+                routineName = vs.workoutName,
+                date = vs.date,
+                fromCoach = coach
+            ))
         }
         // `rf`: what the coach is happy with on the road, replacing whatever
         // was stored, whole. A plan with no `rf` -- every older Coach, every
@@ -159,6 +165,28 @@ object PlanImporter {
             sodiumMg = nutrition.sodiumMg ?: ux.sodiumMg
         )
     }
+
+    /**
+     * The coach's own name, as PLAN-FORMAT's head key `n` gave it, or null when the plan carried
+     * none.
+     *
+     * Read from the raw JSON rather than from [PlanPayload.coachName], which is **not** the wire's
+     * `n`: the pinned kit decodes it as `optString("n", "Your coach")`, so a plan that named nobody
+     * and a plan sent by a coach called "Your coach" arrive indistinguishable, and storing the
+     * placeholder would sign a week "From Your coach" in somebody else's capital letters. `rf` is
+     * read off `rawJson` in the same way, for the same kind of reason.
+     *
+     * Free text from another app, so it is trimmed, its runs of whitespace collapsed to single
+     * spaces — the one thing a browser does for nothing and Compose does not, and web is what this
+     * has to read like — and blank is nobody. It is never parsed, never matched against anything and
+     * never anything but a string on screen.
+     */
+    internal fun coachName(rawJson: String): String? = runCatching {
+        (org.json.JSONObject(rawJson).opt("n") as? String)?.replace(WHITESPACE, " ")?.trim()
+            ?.ifBlank { null }
+    }.getOrNull()
+
+    private val WHITESPACE = Regex("\\s+")
 
     private fun mealSlotToMeal(slot: Int): Meal = when (slot) {
         0 -> Meal.BREAKFAST
