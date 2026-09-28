@@ -209,7 +209,10 @@ private fun PlanWeekDay(day: PlanLog.DayRow, open: Boolean, onOpen: () -> Unit) 
             // with each other and this composes no sentence of its own. Wider than a set row's
             // label column, which holds "Asked" and not "Breakfast".
             day.meals.forEach { meal ->
-                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                // One sentence for the pair, the way an asked/logged pair is one: read as two
+                // nodes a screen reader says "Breakfast", then "Overnight Oats · 1 serving" with
+                // the dot spelled out. `plainly` says it, and [PlanLog.spokenLines] says the same.
+                Row(modifier = Modifier.padding(vertical = 2.dp).saidAs(PlanLog.plainly(meal.title))) {
                     Text(
                         text = meal.slotLabel,
                         style = MaterialTheme.typography.bodyMedium,
