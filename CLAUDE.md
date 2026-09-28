@@ -278,6 +278,49 @@ for -- so `formatSet` delegates to it rather than keeping a second spelling. The
 field order is this app's existing one (`@8` before the clock), not web's: the
 logged rows under this card have read that way since long before it existed.
 
+**Meals are stated, never answered.** A coach can book meals as well as sessions
+(`m`), and accepting a plan files them as `PlannedMeal`s beside the ones placed
+in Cook. The card lists the ones a coach booked -- `Dinner · Beef Chilli ·
+2 servings`, under `Meals`, with `2 meals booked` on the day row and
+`3 meals booked` in the head -- and says **nothing whatever about what was
+eaten**. Coach's card does the other half too: the foods a client stamped with
+that slot, a count above them so `Nothing logged at lunch` cannot read as `they
+ate nothing`, and a note disclaiming a join Coach cannot make. None of that half
+is here: the food log is on Food, dated, and reading it back to the lifter in the
+third person tells them nothing they did not already know. So no per-slot
+verdict, no food count, no macros beside a booked dish, no figure for meals
+eaten, and no meal footer. **`PlannedMeal.loggedFoodEntryId` means this device
+really does know a planned meal was logged, and it is still not printed**: a tick
+on some rows and a blank on the rest is a score with the numbers filed off, and
+Cook's own plan already shows it where `Log it` can act on it. `PlanLogTest`
+reads the card with no food logged, one dish logged and all of them, and pins the
+three as identical lines -- and reads `PlanLog.kt`'s own source for the tokens
+too.
+
+What that leaves is the thing no other screen gives: **the food booked for a day
+you cannot reach.** Cook's plan shows seven days from today and Train shows one.
+`to do` carries a booked meal as it carries a session, a past day booked only for
+food carries **no verdict word at all** (there is no `not logged` for a meal), and
+**a plan of meals with no training is now a card** where before there was none. A
+day booked for food that was trained anyway is **one row**
+(`… · not booked · 2 meals booked`), because tapping a row navigates by date.
+Once meals are in the head the training figure says what it counts
+(`3 training days, 1 logged`), so `logged 1` cannot be read against the total.
+
+**Only a coach's meals.** `PlannedMeal.fromCoach` (a Boolean) plus
+`PlannedMeal.coachName` are the marker -- web keeps the same fact in one field,
+`payload.n || true`, and Kotlin has no such union. A dinner the lifter placed is
+theirs to move, and holding it up on a card headed "your coach's plan" would make
+an expectation out of their own note-taking. In the **backup** it is web's
+spelling and web's shape: `fromCoach` on a `plan[]` row, the coach's name or
+`true`, omitted entirely for the lifter's own and read leniently, so one file
+moves between the three builds and a restore does not empty the meals half of the
+card. LIFT iPhone cannot add a column -- `PlannedMeal` is LiftKit's shared
+`@Model` there -- so it keeps a `PlanMeals` side-car in `UserDefaults` instead and
+writes the same `fromCoach` into the same file. **A week a coach booked no meals
+in reads exactly as it did**, which `PlanLogTest` pins line for line, all 35 of
+them, against the card as it shipped; LIFT web and LIFT iPhone pin the same 35.
+
 **Nobody is graded.** No score, no percentage, no streak, no colour on a day
 nothing was logged against, nothing carried between weeks. The words are Coach's
 -- `logged`, `not logged`, `not booked`, `Asked` / `Logged` -- so a lifter and
