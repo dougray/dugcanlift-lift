@@ -254,7 +254,19 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                     TextButton(
                         onClick = {
                             scheduledRoutine?.let { routine ->
-                                scope.launch { workouts.save(routine.toSession(selectedDate)) }
+                                scope.launch {
+                                    // Which session answered which booking, recorded here because
+                                    // this is the one place a booking becomes a session. Without it
+                                    // the week card compares a booked day against everything logged
+                                    // on it, and a second session of the lifter's own that repeats a
+                                    // planned lift folds into the comparison instead of falling to
+                                    // "Also logged". Only a dated booking is marked; starting a
+                                    // routine from the library below is not one, and starting a
+                                    // reusable template must not consume it.
+                                    val started = routine.toSession(selectedDate)
+                                    workouts.save(started)
+                                    scheduledSessionRepo.markStarted(session.id, started.id)
+                                }
                             }
                         },
                         enabled = scheduledRoutine != null

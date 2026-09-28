@@ -103,7 +103,11 @@ Save the result as your goal and everything else tracks against it.
   nothing carried from one week to the next. No card at all when no plan books a
   day in the week on screen. Signed with the coach's own name when the plan link
   carried one (`From Doug`), and `From your coach` when it did not — once, above
-  the head, and nowhere else on the card
+  the head, and nowhere else on the card. Starting a booked session records which
+  session it became, so a day holding a booked session and a second one of your
+  own compares the right half and the other reads as `Also logged`; a booking
+  nobody started, or one whose session was deleted, is compared against the whole
+  day as before
 
 Time accepts `mm:ss` or plain seconds, so a 90-second sled push and a 22-minute
 row both read naturally.
