@@ -82,7 +82,12 @@ class RecipeRepository private constructor(context: Context) {
         /** Grams of the dish, when planning via the gram-based flow instead
          * of servings. Non-null here switches the snapshot below to
          * per-gram, matching [PlannedMeal.toFoodEntry]'s gram branch. */
-        amountGrams: Double? = null
+        amountGrams: Double? = null,
+        /** Whether a coach's plan link booked this, rather than the lifter placing it. Only
+         * [PlanImporter] passes true; the week card shows a coach's meals and not your own. */
+        fromCoach: Boolean = false,
+        /** The coach who booked it, when the plan named one. */
+        coachName: String? = null
     ) = withContext(Dispatchers.IO) {
         val entry = PlannedMeal(
             recipeId = recipe.id,
@@ -97,7 +102,9 @@ class RecipeRepository private constructor(context: Context) {
             // Snapshot at plan time, per gram, only for the gram-based
             // flow — a later edit to the recipe must not change an
             // already-planned meal.
-            snapshotNutritionPerGram = if (amountGrams != null) recipe.nutritionPerGram else null
+            snapshotNutritionPerGram = if (amountGrams != null) recipe.nutritionPerGram else null,
+            fromCoach = fromCoach,
+            coachName = coachName
         )
         val updated = readPlan() + entry
         writePlan(updated)
