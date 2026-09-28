@@ -21,20 +21,42 @@ data class ScheduledSession(
     val routineId: String,
     val routineName: String,
     /** "yyyy-MM-dd", same key format the food/workout logs use. */
-    val date: String
+    val date: String,
+    /**
+     * The coach who sent this booking, as the plan link's `n` gave it — null for a booking a plan
+     * carried no name for, and for every booking written before this field existed.
+     *
+     * It is stored on the booking because that is where LIFT web keeps it (`training[].fromCoach`,
+     * under this same spelling) and because a booking is the only record of a plan that never leaves
+     * the device: `WorkoutSession` travels in the backup and in the share link the lifter sends
+     * back, and somebody else's name has no business riding in either for the sake of one muted line
+     * on Train. Read by [PlanLog.sentBy] and nowhere else — the card signs the week once and names
+     * nobody anywhere below that.
+     */
+    val fromCoach: String? = null
 )
 
+/**
+ * A booking as JSON. [ScheduledSession.fromCoach] is **omitted when null**, so a device that has
+ * never been sent a name writes byte for byte the object it always wrote — and an older build, which
+ * reads keys by name and ignores the rest, loads a file this one writes with every field it knows
+ * about intact. `ScheduledSessionTest` pins both directions.
+ */
 internal fun ScheduledSession.toJson(): JSONObject = JSONObject()
     .put("id", id)
     .put("routineId", routineId)
     .put("routineName", routineName)
     .put("date", date)
+    .also { o -> fromCoach?.let { o.put("fromCoach", it) } }
 
 internal fun scheduledSessionFromJson(o: JSONObject) = ScheduledSession(
     id = o.optString("id", UUID.randomUUID().toString()),
     routineId = o.optString("routineId", ""),
     routineName = o.optString("routineName", ""),
-    date = o.optString("date", "")
+    date = o.optString("date", ""),
+    // A real string or nothing. `optString` would read a JSON `true` — which is what LIFT web
+    // stores for "a coach, name unknown" — as the name "true", and print it.
+    fromCoach = (o.opt("fromCoach") as? String)?.trim()?.ifBlank { null }
 )
 
 fun List<ScheduledSession>.onDate(date: String): List<ScheduledSession> = filter { it.date == date }

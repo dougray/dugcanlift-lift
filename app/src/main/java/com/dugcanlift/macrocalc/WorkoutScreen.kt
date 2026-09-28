@@ -286,6 +286,9 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         if (week != null) {
             PlanWeekCard(
                 week = week,
+                // The coach who sent the week, when a plan link carried a name -- read off the
+                // bookings the week holds, so a week nobody signed reads as it always did.
+                sentBy = PlanLog.sentBy(week, bookings),
                 // Exactly one day is open, and by default it is the day the rest of Train is
                 // showing -- so the card follows the screen rather than keeping a second idea of
                 // where you are.

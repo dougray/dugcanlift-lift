@@ -101,7 +101,9 @@ Save the result as your goal and everything else tracks against it.
   skip to weeks a coach actually booked. **Nobody is graded**: no score, no
   percentage, no streak, no colour on a day nothing was logged against, and
   nothing carried from one week to the next. No card at all when no plan books a
-  day in the week on screen
+  day in the week on screen. Signed with the coach's own name when the plan link
+  carried one (`From Doug`), and `From your coach` when it did not — once, above
+  the head, and nowhere else on the card
 
 Time accepts `mm:ss` or plain seconds, so a 90-second sled push and a 22-minute
 row both read naturally.
