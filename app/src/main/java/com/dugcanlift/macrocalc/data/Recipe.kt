@@ -107,7 +107,23 @@ data class PlannedMeal(
      * edit to the recipe never changes an already-planned/logged meal. */
     val snapshotNutritionPerGram: RecipeNutrition? = null,
     /** Set once turned into a real log entry, so logging twice is visible. */
-    val loggedFoodEntryId: String? = null
+    val loggedFoodEntryId: String? = null,
+    /**
+     * Whether a coach's plan link booked this meal, rather than the lifter placing it in Cook.
+     *
+     * The week card shows **only a coach's**: a dinner you planned yourself is yours to move, and
+     * holding it up on a card headed "your coach's plan" would make an expectation out of your own
+     * note-taking. LIFT web keeps the same fact as one field, `fromCoach`, set to the plan's `n` or
+     * to `true`; two fields here because Kotlin has no such union and a sentinel string would be
+     * the same thing badly. They meet in the backup file, where the spelling is web's.
+     */
+    val fromCoach: Boolean = false,
+    /**
+     * The coach who booked it, when the plan named one. Read by [PlanLog.sentBy] and nothing else,
+     * exactly as [ScheduledSession.fromCoach] is. Null with [fromCoach] true is a plan that named
+     * nobody — which is still a coach's meal.
+     */
+    val coachName: String? = null
 ) {
     val isLogged: Boolean get() = loggedFoodEntryId != null
 
@@ -386,6 +402,9 @@ internal fun recipeFromJson(o: JSONObject): Recipe = Recipe(
     importedAt = o.finiteLong("importedAt", System.currentTimeMillis())
 )
 
+/* `fromCoach` is LIFT web's own spelling and LIFT web's own shape -- the coach's name, or `true`
+ * for a plan that named nobody -- so one file moves between the three builds. Omitted entirely for
+ * a meal the lifter placed, which is what every file written before this says about every meal. */
 internal fun PlannedMeal.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
     put("recipeId", recipeId)
@@ -397,6 +416,7 @@ internal fun PlannedMeal.toJson(): JSONObject = JSONObject().apply {
     snapshotNutrition?.let { put("snapshotNutrition", it.toJson()) }
     snapshotNutritionPerGram?.let { put("snapshotNutritionPerGram", it.toJson()) }
     loggedFoodEntryId?.let { put("loggedFoodEntryId", it) }
+    if (fromCoach) put("fromCoach", coachName ?: true)
 }
 
 internal fun plannedMealFromJson(o: JSONObject): PlannedMeal = PlannedMeal(
@@ -409,7 +429,11 @@ internal fun plannedMealFromJson(o: JSONObject): PlannedMeal = PlannedMeal(
     recipeName = o.optString("recipeName", ""),
     snapshotNutrition = recipeNutritionFromJson(o.optJSONObject("snapshotNutrition")),
     snapshotNutritionPerGram = recipeNutritionFromJson(o.optJSONObject("snapshotNutritionPerGram")),
-    loggedFoodEntryId = o.optStringOrNull("loggedFoodEntryId")
+    loggedFoodEntryId = o.optStringOrNull("loggedFoodEntryId"),
+    // Read leniently, as every optional field in this file is: a string is the coach's name,
+    // anything else truthy is a coach who named nobody, and absent or false is the lifter's own.
+    fromCoach = o.opt("fromCoach").let { it != null && it != JSONObject.NULL && it != false },
+    coachName = (o.opt("fromCoach") as? String)?.trim()?.ifBlank { null }
 )
 
 /**
