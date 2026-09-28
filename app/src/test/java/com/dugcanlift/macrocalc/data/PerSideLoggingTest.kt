@@ -101,4 +101,58 @@ class PerSideLoggingTest {
         }
         assertFalse("Cold Plunge", PerSideLogging.looksUnilateral("Cold Plunge"))
     }
+
+    /* ---------------- said, not spelled ----------------
+     *
+     * `L 3/3 · R 2/3` is a letter, a slash and the name of a character read out. The spoken forms
+     * carry the same two counts in words; these pin that they cannot drift apart, because two
+     * functions that count separately eventually count differently.
+     */
+
+    private fun setsOf(vararg sides: SetSide?) =
+        sides.map { WorkoutSet(weightLb = 60.0, reps = 8, side = it) }
+
+    private fun asked(vararg sides: SetSide?) =
+        sides.map { PrescribedSet(weightLb = 60.0, reps = 8, side = it) }
+
+    @Test
+    fun `targetsSpoken says exactly what targetsLabel counts`() {
+        val cases = listOf(
+            Triple(asked(null, null, null), true, setsOf(SetSide.LEFT, SetSide.LEFT, SetSide.LEFT,
+                SetSide.RIGHT, SetSide.RIGHT)),
+            Triple(asked(null, null, null), true, emptyList()),
+            Triple(asked(SetSide.LEFT), false, setsOf(SetSide.LEFT, SetSide.LEFT)),
+            Triple(asked(null, null), false, setsOf(null, null)),
+            Triple(asked(null, SetSide.RIGHT), true, setsOf(SetSide.RIGHT, null))
+        )
+        val digits = Regex("\\d+")
+        cases.forEach { (prescribed, eachSide, sets) ->
+            val label = PerSideLogging.targetsLabel(prescribed, eachSide, sets)
+            val spoken = PerSideLogging.targetsSpoken(prescribed, eachSide, sets)
+            // Both null or both not: a line that is drawn must be a line that is said.
+            assertEquals("$label vs $spoken", label == null, spoken == null)
+            if (label == null) return@forEach
+            assertEquals("$label vs $spoken",
+                digits.findAll(label).map { it.value }.toList(),
+                digits.findAll(spoken!!).map { it.value }.toList())
+            assertFalse(spoken, spoken.contains("·"))
+            assertFalse(spoken, spoken.contains("/"))
+            assertFalse(spoken, Regex("\\bL\\b|\\bR\\b").containsMatchIn(spoken))
+        }
+        val sets = setsOf(SetSide.LEFT, SetSide.LEFT, SetSide.LEFT, SetSide.RIGHT, SetSide.RIGHT)
+        assertEquals("L 3/3 · R 2/3",
+            PerSideLogging.targetsLabel(asked(null, null, null), true, sets))
+        assertEquals("left 3 of 3, right 2 of 3",
+            PerSideLogging.targetsSpoken(asked(null, null, null), true, sets))
+    }
+
+    @Test
+    fun `sideCountSpoken says exactly what sideCountLabel counts`() {
+        val sets = setsOf(SetSide.LEFT, SetSide.RIGHT, null)
+        assertEquals("L 1 · R 1 · 1 both", PerSideLogging.sideCountLabel(sets))
+        assertEquals("left 1, right 1, 1 both", PerSideLogging.sideCountSpoken(sets))
+        assertNull(PerSideLogging.sideCountLabel(setsOf(null, null)))
+        assertNull("nothing sided says nothing", PerSideLogging.sideCountSpoken(setsOf(null, null)))
+    }
+
 }
