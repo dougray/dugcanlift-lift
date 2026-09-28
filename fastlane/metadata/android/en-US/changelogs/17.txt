@@ -1,0 +1,5 @@
+Train now shows your coach's week beside your own log: which days were booked, which you logged, and what was asked against what you did. A day still ahead says "to do" and shows what it asks for — until now a session booked for Friday could not be read anywhere until Friday.
+
+The week is signed with your coach's name, and starting a booked session records which booking it answered, so a second session that day is listed separately instead of being folded in.
+
+Road Food adds Taco Bell and Sheetz.
