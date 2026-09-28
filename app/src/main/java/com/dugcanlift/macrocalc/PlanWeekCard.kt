@@ -15,6 +15,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +46,22 @@ import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
  * Absent entirely when no plan books a day in the week on screen — the caller draws nothing at all
  * rather than an empty frame explaining itself.
  */
+/* One block of the card, drawn as it always was and **said as one sentence**.
+ *
+ * Compose gives every `Text` its own accessibility node, so the six lines of a lift arrive as six
+ * stops with the word that named the numbers two swipes behind them.
+ * `clearAndSetSemantics` rather than `semantics(mergeDescendants = true)`: it leaves the subtree
+ * with exactly one source of text, so there is no question of whether the drawn lines are still
+ * announced beneath the sentence. Only ever used on a block of plain `Text`s -- it would clear an
+ * action too. The sentence is [PlanLog]'s; this only decides that the block is one thing.
+ */
+private fun Modifier.saidAs(sentence: String): Modifier =
+    clearAndSetSemantics { contentDescription = sentence }
+
+/** A glyph drawn as an affordance is not a word. `▸` announced is junk; the state it stands for
+ *  is on the row itself, as `stateDescription`. */
+private fun Modifier.drawnOnly(): Modifier = clearAndSetSemantics { }
+
 @Composable
 fun PlanWeekCard(
     week: PlanLog.Result,
@@ -75,17 +95,20 @@ fun PlanWeekCard(
             // leave no way back. An arrow with nothing behind it is disabled rather than hidden, so
             // the row does not change shape as it is used.
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // An arrow's name is its glyph unless it is given one, and `‹` is a quotation
+                // mark. `enabled` carries "disabled" on its own; what it cannot carry is which
+                // arrow this is.
                 TextButton(onClick = { previousWeek?.let(onStepWeek) }, enabled = previousWeek != null) {
-                    Text("‹")
+                    Text("‹", modifier = Modifier.saidAs("Previous booked week"))
                 }
                 Text(
                     text = week.head,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).saidAs(week.spokenHead)
                 )
                 TextButton(onClick = { nextWeek?.let(onStepWeek) }, enabled = nextWeek != null) {
-                    Text("›")
+                    Text("›", modifier = Modifier.saidAs("Next booked week"))
                 }
             }
 
@@ -112,20 +135,41 @@ fun PlanWeekCard(
  */
 @Composable
 private fun PlanWeekDay(day: PlanLog.DayRow, open: Boolean, onOpen: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen)
-            .padding(vertical = 6.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // The row is one thing to a reader: its three clauses as one sentence, the
+                // open/closed state it drew with a glyph said as a state rather than a character,
+                // and -- where tapping it moves Train as well as opening it -- that too.
+                //
+                // **The two `Text`s carry no semantics of their own** (`drawnOnly`), so this
+                // subtree has exactly one source of text however Compose splits it into nodes: a
+                // `clickable` emits a node of its own around the row, and leaving the drawn text
+                // in place beneath it left a reader hearing the `·` line after the sentence.
+                .clickable(
+                    onClickLabel = if (day.openable) "Open this day on Train" else "Open this day"
+                ) { onOpen() }
+                .semantics(mergeDescendants = true) {
+                    contentDescription = day.spoken
+                    if (day.hasDetail) {
+                        stateDescription = if (open) "Expanded" else "Collapsed"
+                    }
+                },
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             // The same weight and the same colour in all four states.
-            Text(text = day.text, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = day.text,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.drawnOnly()
+            )
             if (day.hasDetail) {
                 Text(
                     text = if (open) "▾" else "▸",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.drawnOnly()
                 )
             }
         }
@@ -139,7 +183,11 @@ private fun PlanWeekDay(day: PlanLog.DayRow, open: Boolean, onOpen: () -> Unit) 
                 modifier = Modifier.padding(top = 8.dp)
             )
             day.alsoLogged.forEach {
-                Text(text = it.text, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = it.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.saidAs(it.spoken)
+                )
             }
         }
     }
@@ -147,7 +195,7 @@ private fun PlanWeekDay(day: PlanLog.DayRow, open: Boolean, onOpen: () -> Unit) 
 
 @Composable
 private fun PlanWeekExercise(exercise: PlanLog.ExerciseLines) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+    Column(modifier = Modifier.padding(vertical = 4.dp).saidAs(exercise.spoken)) {
         Text(
             text = exercise.title,
             style = MaterialTheme.typography.titleSmall,
