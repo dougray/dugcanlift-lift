@@ -98,6 +98,63 @@ object PlanLog {
      */
     fun dayLabel(key: String): String = "${weekdayName(key)} ${dayMonth(key)}"
 
+    /* ---------------- how a line reads aloud ----------------
+     *
+     * Every line on this card is written with " · " between its clauses, which is a comma that
+     * takes no vertical space. Aloud it is not a comma: TalkBack either names the character or
+     * passes over it, and either way "Mon 28 Sep · Lower A · logged" arrives as three unrelated
+     * fragments. Worse here than anywhere: `PlanWeekSetRow` is a `Row` of two `Text`s, so "Asked"
+     * and its numbers are two separate accessibility nodes and a reader meets the word two swipes
+     * before what it named.
+     *
+     * So every line that reaches a screen also carries a spoken form, composed here from the same
+     * parts the written one is composed from -- never by a regex over the finished string, which
+     * would have to guess whether the `x` in a name you typed is a multiplication sign. " · "
+     * becomes a comma, " x " becomes "by", `L`/`R` become "left"/"right", `3/3` becomes "3 of 3",
+     * "Mon 28 Sep" becomes "Monday 28 September". **Nothing else**: no word is added that the card
+     * does not draw. You are not being graded here, and a day nothing was logged against is as
+     * flat aloud as it is on screen.
+     *
+     * Here rather than in `PlanWeekCard`, for the reason everything else on this card is here: a
+     * sentence you read is a rule, and a rule in a composable cannot be tested.
+     */
+
+    /** " · " is the only thing this may touch -- for the lines this object no longer has the
+     *  parts of by the time a screen asks. */
+    fun plainly(text: String?): String = text.orEmpty().replace(" · ", ", ")
+
+    private fun said(parts: List<String?>): String =
+        parts.filter { !it.isNullOrBlank() }.joinToString(", ")
+
+    private fun longMonth(key: String): String =
+        DayKey.parse(key)?.month?.getDisplayName(TextStyle.FULL, Locale.getDefault()).orEmpty()
+
+    private fun longWeekday(key: String): String =
+        DayKey.parse(key)?.dayOfWeek?.getDisplayName(TextStyle.FULL, Locale.getDefault()).orEmpty()
+
+    /** "Monday 28 September" -- [dayLabel] in the words a person says. The locale is the
+     *  reader's, as everywhere else here. */
+    fun spokenDayLabel(key: String): String = "${longWeekday(key)} ${dayOf(key)} ${longMonth(key)}"
+
+    /** "28 September to 4 October" -- the en dash in [rangeText] is a range sighted and a dash
+     *  aloud. */
+    fun spokenRange(from: String, to: String): String {
+        if (from == to) return "${dayOf(from)} ${longMonth(from)}"
+        val a = DayKey.parse(from)
+        val b = DayKey.parse(to)
+        if (a != null && b != null && a.year == b.year && a.month == b.month) {
+            return "${dayOf(from)} to ${dayOf(to)} ${longMonth(to)}"
+        }
+        return "${dayOf(from)} ${longMonth(from)} to ${dayOf(to)} ${longMonth(to)}"
+    }
+
+    /** "L" and "R" are a column heading, not a word. */
+    private fun sideWord(label: String): String = when (label) {
+        "L" -> "left"
+        "R" -> "right"
+        else -> label.lowercase()
+    }
+
     /** "12–18 Oct", "28 Sep–4 Oct", "12 Oct" for a single day. */
     fun rangeText(from: String, to: String): String {
         if (from == to) return dayMonth(from)
@@ -284,8 +341,39 @@ object PlanLog {
     fun setText(set: WorkoutSet): String =
         setNumbers(set.weightLb, set.reps, set.rpe, set.durationSec, set.distanceMeters) ?: "as written"
 
+    /**
+     * [setNumbers], said. The ` x ` is the only difference that matters: it is the letter, and
+     * "225 by 5" is what a lifter says out loud anyway. Built from the fields, not from
+     * [setNumbers]'s output -- a transform over the finished string would have to decide what to
+     * do with an ` x ` in a name somebody typed.
+     */
+    fun spokenNumbers(
+        weightLb: Double?,
+        reps: Int?,
+        rpe: Double?,
+        durationSec: Int?,
+        distanceMeters: Double?
+    ): String? {
+        val parts = mutableListOf<String>()
+        if (weightLb != null && reps != null) parts += "${weightLb.trimZeros()} by $reps"
+        else {
+            weightLb?.let { parts += "${it.trimZeros()} lb" }
+            reps?.let { parts += "$it reps" }
+        }
+        rpe?.let { parts += "@${it.trimZeros()}" }
+        durationSec?.let { parts += formatDuration(it) }
+        distanceMeters?.let { parts += "${it.trimZeros()} m" }
+        return parts.joinToString(" ").ifEmpty { null }
+    }
+
+    fun spokenSetText(set: PrescribedSet): String =
+        spokenNumbers(set.weightLb, set.reps, set.rpe, set.durationSec, set.distanceMeters) ?: "as written"
+
+    fun spokenSetText(set: WorkoutSet): String =
+        spokenNumbers(set.weightLb, set.reps, set.rpe, set.durationSec, set.distanceMeters) ?: "as written"
+
     /** One group of sets on screen: a side and its sets, or an unlabelled group when nothing is sided. */
-    data class SetGroup(val label: String, val text: String)
+    data class SetGroup(val label: String, val text: String, val spoken: String = text)
 
     /**
      * A row of sets: the groups, and the clause that applies to all of them.
@@ -296,19 +384,30 @@ object PlanLog {
      */
     data class SetRow(val label: String, val groups: List<SetGroup>, val suffix: String) {
         val text: String get() = groupsText(groups) + suffix
+        /** The label **and** the groups, in one string: on Android they are two `Text`s in a
+         *  `Row` and so two accessibility nodes, and "Asked" two swipes before its numbers is not
+         *  a comparison. */
+        val spoken: String get() = "$label " + groupsSpoken(groups) + suffix
     }
 
     private val SERIES = listOf(SetSide.LEFT, SetSide.RIGHT, null)
 
-    private fun <T> groupsOf(sets: List<T>, side: (T) -> SetSide?, text: (T) -> String): List<SetGroup> {
+    private fun <T> groupsOf(
+        sets: List<T>,
+        side: (T) -> SetSide?,
+        text: (T) -> String,
+        spoken: (T) -> String
+    ): List<SetGroup> {
         if (sets.none { side(it) != null }) {
             if (sets.isEmpty()) return emptyList()
-            return listOf(SetGroup("", sets.joinToString(" · ", transform = text)))
+            return listOf(SetGroup("", sets.joinToString(" · ", transform = text),
+                sets.joinToString(", ", transform = spoken)))
         }
         return SERIES.mapNotNull { want ->
             val mine = sets.filter { side(it) == want }
             if (mine.isEmpty()) null
-            else SetGroup(want?.short ?: "Both", mine.joinToString(" · ", transform = text))
+            else SetGroup(want?.short ?: "Both", mine.joinToString(" · ", transform = text),
+                mine.joinToString(", ", transform = spoken))
         }
     }
 
@@ -321,12 +420,19 @@ object PlanLog {
      * logging are a real third group labelled "Both" beside the two limbs, as the session header's
      * own "· 2 both" counts them.
      */
-    fun askedGroups(sets: List<PrescribedSet>): List<SetGroup> = groupsOf(sets, { it.side }, ::setText)
+    fun askedGroups(sets: List<PrescribedSet>): List<SetGroup> =
+        groupsOf(sets, { it.side }, ::setText, ::spokenSetText)
 
-    fun loggedGroups(sets: List<WorkoutSet>): List<SetGroup> = groupsOf(sets, { it.side }, ::setText)
+    fun loggedGroups(sets: List<WorkoutSet>): List<SetGroup> =
+        groupsOf(sets, { it.side }, ::setText, ::spokenSetText)
 
     private fun groupsText(groups: List<SetGroup>): String =
         groups.joinToString("   ") { (if (it.label.isEmpty()) "" else it.label + " ") + it.text }
+
+    /** The groups said, one limb after the other. A semicolon between them, because the sets
+     *  inside a group are already separated by commas and "right" has to land as a new column. */
+    private fun groupsSpoken(groups: List<SetGroup>): String =
+        groups.joinToString("; ") { (if (it.label.isEmpty()) "" else sideWord(it.label) + " ") + it.spoken }
 
     /* ---------------- one lift, asked against logged ---------------- */
 
@@ -344,13 +450,30 @@ object PlanLog {
         val state: String,
         val substitution: String?,
         val sideLine: String?,
+        /** [sideLine] said: "L 3/3 · R 2/3" is a letter, a slash and the name of a character read
+         *  out, on the one line of the card that says what one side of your body did. */
+        val spokenSideLine: String?,
         val countLine: String?,
         val asked: SetRow?,
         val logged: SetRow?
-    )
+    ) {
+        /**
+         * The whole block as one announcement.
+         *
+         * **The two rows are a comparison, and read apart they are two lists of numbers with
+         * nothing between them.** One node carrying the lift and both rows is what makes the
+         * relationship audible.
+         */
+        val spoken: String get() = listOfNotNull(
+            plainly(title), spokenSideLine, plainly(countLine).ifBlank { null },
+            asked?.spoken, logged?.spoken, plainly(substitution).ifBlank { null }
+        ).joinToString(". ")
+    }
 
     /** A lift the log has and the plan does not: its name and how many sets it carried, counted against nothing. */
-    data class AlsoLogged(val key: String, val title: String, val text: String)
+    data class AlsoLogged(val key: String, val title: String, val text: String) {
+        val spoken: String get() = plainly(text)
+    }
 
     /**
      * The side counts the session header has shown since per-side prescriptions shipped:
@@ -368,6 +491,15 @@ object PlanLog {
             ?: PerSideLogging.sideCountLabel(loggedSets)
     }
 
+    /** [sideLine] said -- [PerSideLogging]'s own spoken forms, called with the same arguments in
+     *  the same order, so the card and the session header it echoes can no more disagree about a
+     *  side aloud than they can on screen. */
+    fun spokenSideLine(asked: AskedLift, logged: LoggedLift?): String? {
+        val loggedSets = logged?.sets ?: return null
+        return PerSideLogging.targetsSpoken(asked.sets, asked.eachSide, loggedSets)
+            ?: PerSideLogging.sideCountSpoken(loggedSets)
+    }
+
     /**
      * What an each-side lift asks for on a day nothing has been logged against yet:
      * "Each side · L 4 · R 3", the sentence the prescribed card has printed under an each-side
@@ -380,6 +512,13 @@ object PlanLog {
         if (!asked.eachSide) return null
         val t = PerSideLogging.prescribedTargets(asked.sets, true)
         return "Each side · L ${t.left} · R ${t.right}"
+    }
+
+    /** [askLine], said. */
+    fun spokenAskLine(asked: AskedLift): String? {
+        if (!asked.eachSide) return null
+        val t = PerSideLogging.prescribedTargets(asked.sets, true)
+        return "Each side, left ${t.left}, right ${t.right}"
     }
 
     /**
@@ -412,6 +551,8 @@ object PlanLog {
                 "Asked ${equipmentWord(asked.equipment)} · logged ${equipmentWord(logged.equipment)}"
             else null,
             sideLine = side ?: if (recite) askLine(asked) else null,
+            spokenSideLine = spokenSideLine(asked, logged)
+                ?: if (recite) spokenAskLine(asked) else null,
             // How many were asked for and how many came back, when they differ and there is no
             // side line already saying it per side.
             countLine = if (logged != null && side == null && askedSets.size != loggedSets.size)
@@ -536,6 +677,9 @@ object PlanLog {
         /** Whether Train can be moved to this day. It cannot be moved past today. */
         val openable: Boolean,
         val text: String,
+        /** [text] said: three clauses separated by " · " are three fragments to a screen reader,
+         *  and a day row is one thing you read. */
+        val spoken: String,
         val exercises: List<ExerciseLines>,
         val alsoLogged: List<AlsoLogged>
     ) {
@@ -548,6 +692,9 @@ object PlanLog {
         val range: String,
         val counts: Counts,
         val head: String,
+        /** [head] with the range said as a range: "28 Sep–4 Oct" is a dash and two abbreviations
+         *  aloud. */
+        val spokenHead: String,
         val days: List<DayRow>,
         val footer: String = FOOTER
     )
@@ -661,6 +808,10 @@ object PlanLog {
                 openable = date <= today,
                 text = listOf(dayLabel(date), name, WORDS.getValue(state))
                     .filter { it.isNotBlank() }.joinToString(" · "),
+                // The same clauses, in the same order, with the date said in words -- one
+                // sentence rather than three fragments. Built here beside `text` rather than from
+                // it, so a clause can never be in one and not the other.
+                spoken = said(listOf(spokenDayLabel(date), name, WORDS.getValue(state))),
                 exercises = joined.exercises,
                 alsoLogged = joined.alsoLogged + extra.map(::alsoLogged)
             )
@@ -687,6 +838,8 @@ object PlanLog {
                 openable = session.date <= today,
                 text = listOf(dayLabel(session.date), session.name, WORDS.getValue("notBooked"))
                     .filter { it.isNotBlank() }.joinToString(" · "),
+                spoken = said(listOf(spokenDayLabel(session.date), session.name,
+                    WORDS.getValue("notBooked"))),
                 exercises = emptyList(),
                 alsoLogged = lifts.map(::alsoLogged)
             )
@@ -706,6 +859,7 @@ object PlanLog {
             range = rangeText(from, to),
             counts = counts,
             head = headLine(rangeText(from, to), counts),
+            spokenHead = plainly(headLine(spokenRange(from, to), counts)),
             days = rows
         )
     }
@@ -748,6 +902,28 @@ object PlanLog {
             if (day.alsoLogged.isNotEmpty()) {
                 out += "Also logged"
                 day.alsoLogged.forEach { out += it.text }
+            }
+        }
+        out += result.footer
+        return out
+    }
+
+    /**
+     * Every sentence a screen reader can be handed, in the order it is read -- [lines], said.
+     *
+     * Its own list rather than a widening of [lines], which the line-discipline tests already walk
+     * against the strings they pin. This exists so they walk the announced sentences too: a label
+     * is a sentence you read, and nothing here grades you in either form.
+     */
+    fun spokenLines(result: Result?): List<String> {
+        result ?: return emptyList()
+        val out = mutableListOf(result.spokenHead)
+        result.days.forEach { day ->
+            out += day.spoken
+            day.exercises.forEach { out += it.spoken }
+            if (day.alsoLogged.isNotEmpty()) {
+                out += "Also logged"
+                day.alsoLogged.forEach { out += it.spoken }
             }
         }
         out += result.footer

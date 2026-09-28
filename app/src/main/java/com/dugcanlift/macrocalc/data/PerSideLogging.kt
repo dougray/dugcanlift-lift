@@ -185,6 +185,40 @@ object PerSideLogging {
         return parts.joinToString(" · ")
     }
 
+    /** "L" and "R" are a column heading, not a word. */
+    private fun sideWord(side: SetSide): String =
+        if (side == SetSide.LEFT) "left" else "right"
+
+    /**
+     * [sideCountLabel], said: "left 3, right 3, 2 both".
+     *
+     * Read out, `L 3 · R 3` is a letter and the name of a character. Built from the same counts as
+     * the label rather than by picking the label apart -- two functions that count separately
+     * eventually count differently, and `PerSideLoggingTest` pins that these do not.
+     */
+    fun sideCountSpoken(sets: List<WorkoutSet>): String? {
+        if (sets.none { it.side != null }) return null
+        val left = sets.count { it.side == SetSide.LEFT }
+        val right = sets.count { it.side == SetSide.RIGHT }
+        val both = sets.count { it.side == null }
+        return "${sideWord(SetSide.LEFT)} $left, ${sideWord(SetSide.RIGHT)} $right" +
+            if (both > 0) ", $both both" else ""
+    }
+
+    /** [targetsLabel], said: "left 3 of 3, right 2 of 3". */
+    fun targetsSpoken(prescribed: List<PrescribedSet>?, eachSide: Boolean, sets: List<WorkoutSet>): String? {
+        val t = prescribedTargets(prescribed, eachSide)
+        if (t.left == 0 && t.right == 0) return null
+        val left = sets.count { it.side == SetSide.LEFT }
+        val right = sets.count { it.side == SetSide.RIGHT }
+        val both = sets.count { it.side == null }
+        val parts = mutableListOf<String>()
+        if (t.left > 0) parts += "left $left of ${t.left}" else if (left > 0) parts += "left $left"
+        if (t.right > 0) parts += "right $right of ${t.right}" else if (right > 0) parts += "right $right"
+        if (t.both > 0) parts += "$both of ${t.both} both" else if (both > 0) parts += "$both both"
+        return parts.joinToString(", ")
+    }
+
     /** [targetsLabel] for a logged exercise, null unless it started from a prescription with sides. */
     fun targetsLabel(exercise: LoggedExercise): String? =
         targetsLabel(exercise.prescribed, exercise.eachSide, exercise.sets)
