@@ -981,7 +981,10 @@ class PlanLogTest {
     @Test
     fun `nothing on a meal row says anything about what was eaten`() {
         val r = runMeals(weekTraining(), weekWorkouts(), mealWeek())
-        val every = PlanLog.lines(r).joinToString(" · ").lowercase(Locale.US)
+        // Said as well as drawn: a sentence only a screen reader hears is still a screen, and it
+        // is the one a lifter cannot skim past.
+        val every = (PlanLog.lines(r) + PlanLog.spokenLines(r))
+            .joinToString(" · ").lowercase(Locale.US)
         listOf("logged at", "nothing logged at", "not itemised", "no food logged", "foods logged",
             "not tied to a meal", "only they know", "only you know at").forEach { phrase ->
             assertFalse("\"$phrase\" reached a screen: $every", every.contains(phrase))
@@ -989,7 +992,9 @@ class PlanLogTest {
         // Coach's per-slot verdict and its note have no counterpart here at all: a result is a week's
         // two records and its counts, with no meal footer and no line about the food log.
         assertEquals(
-            listOf("counts", "days", "footer", "from", "head", "range", "to"),
+            // `spokenHead` is `head` said, and nothing else: the one field the accessibility pass
+            // added, and the reason this list is checked rather than assumed.
+            listOf("counts", "days", "footer", "from", "head", "range", "spokenHead", "to"),
             PlanLog.Result::class.java.declaredFields
                 .map { it.name }.filterNot { it.startsWith("$") }.sorted()
         )
