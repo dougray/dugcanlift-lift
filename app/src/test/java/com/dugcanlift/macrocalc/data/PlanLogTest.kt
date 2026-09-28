@@ -102,11 +102,13 @@ class PlanLogTest {
         date: String,
         name: String,
         exercises: List<RoutineExercise>,
-        fromCoach: String? = "Doug"
+        fromCoach: String? = "Doug",
+        startedSessionId: String? = null
     ) {
         val routine = Routine(id = nextId(), name = name, exercises = exercises)
         val session = ScheduledSession(
-            id = nextId(), routineId = routine.id, routineName = name, date = date, fromCoach = fromCoach
+            id = nextId(), routineId = routine.id, routineName = name, date = date,
+            fromCoach = fromCoach, startedSessionId = startedSessionId
         )
     }
 
@@ -114,8 +116,9 @@ class PlanLogTest {
         date: String,
         name: String,
         exercises: List<RoutineExercise>,
-        fromCoach: String? = "Doug"
-    ) = Plan(date, name, exercises, fromCoach)
+        fromCoach: String? = "Doug",
+        startedSessionId: String? = null
+    ) = Plan(date, name, exercises, fromCoach, startedSessionId)
 
     /** The bookings, resolved against their routines the way the screen resolves them. */
     private fun bookings(plans: List<Plan>): List<PlanLog.Booking> =
@@ -712,6 +715,121 @@ class PlanLogTest {
         val orphan = ScheduledSession(routineId = "r", routineName = "Lower A", date = "")
         assertEquals(emptyList<PlanLog.Booking>(), PlanLog.bookings(listOf(orphan), emptyList()))
         assertNull(PlanLog.compare(PlanLog.bookings(listOf(orphan), emptyList()), emptyList(), today, today))
+    }
+
+    /* ---------------- which session answers a booking ----------------
+     *
+     * Web's own four cases (`plan-log.test.mjs`), plus the one this build has that web never had: a
+     * log written before the link was recorded at all. */
+
+    @Test
+    fun `the session started from the booking is the one compared`() {
+        val booked = session(mon, "Lower A",
+            listOf(logged("Back Squat", "Barbell", listOf(did(225.0, 5)))))
+        val own = session(mon, "Arms", listOf(logged("Barbell Curl", "Barbell", listOf(did(65.0, 10)))))
+        val r = run(
+            listOf(plan(mon, "Lower A",
+                listOf(asked("Back Squat", "Barbell", listOf(ask(225.0, 5)))),
+                startedSessionId = booked.id)),
+            listOf(own, booked)
+        )
+        val row = day(r, 0)
+        assertEquals("225 x 5", row.exercises[0].logged!!.text)
+        assertEquals(listOf("Barbell Curl (Barbell) · 1 set"), row.alsoLogged.map { it.text })
+    }
+
+    @Test
+    fun `a session logged on a booked day that answers nothing is only Also logged`() {
+        // Nothing the coach asked for came back, and a lift nobody asked for did. The booked lift is
+        // "not logged" beside it; neither line says anything about the other.
+        val booked = session(mon, "Lower A", emptyList())
+        val own = session(mon, "Arms", listOf(logged("Barbell Curl", "Barbell", listOf(did(65.0, 10)))))
+        val r = run(
+            listOf(plan(mon, "Lower A",
+                listOf(asked("Back Squat", "Barbell", listOf(ask(225.0, 5)))),
+                startedSessionId = booked.id)),
+            listOf(booked, own),
+            today = tue
+        )
+        val row = day(r, 0)
+        assertEquals("notLogged", row.state)
+        assertEquals(listOf("Barbell Curl (Barbell) · 1 set"), row.alsoLogged.map { it.text })
+        assertEquals(
+            listOf(
+                "Booked 1 day, 12–18 Oct · logged 0",
+                "Mon 12 Oct · Lower A · not logged",
+                "Back Squat (Barbell) · not logged",
+                "Also logged",
+                "Barbell Curl (Barbell) · 1 set",
+                PlanLog.FOOTER
+            ),
+            PlanLog.lines(r)
+        )
+    }
+
+    @Test
+    fun `two sessions on one booked day are the booked one and the other one`() {
+        // The whole of what the link buys: the second session repeats a planned lift, and without the
+        // link its sets would pool into the comparison and read as the plan answered twice over.
+        val booked = session(mon, "Lower A",
+            listOf(logged("Back Squat", "Barbell", listOf(did(225.0, 5), did(225.0, 5)))))
+        val later = session(mon, "Extra",
+            listOf(logged("Back Squat", "Barbell", listOf(did(135.0, 12)))))
+        val plans = listOf(plan(mon, "Lower A",
+            listOf(asked("Back Squat", "Barbell", listOf(ask(225.0, 5), ask(225.0, 5)))),
+            startedSessionId = booked.id))
+        val row = day(run(plans, listOf(booked, later)), 0)
+        assertEquals("225 x 5 · 225 x 5", row.exercises[0].logged!!.text)
+        assertNull("the ask was answered exactly, so nothing counts sets", row.exercises[0].countLine)
+        assertEquals(listOf("Back Squat (Barbell) · 1 set"), row.alsoLogged.map { it.text })
+    }
+
+    @Test
+    fun `a booking whose session was deleted falls back to the day`() {
+        val r = run(
+            listOf(plan(mon, "Lower A",
+                listOf(asked("Back Squat", "Barbell", listOf(ask(225.0, 5)))),
+                startedSessionId = "gone")),
+            listOf(session(mon, "Lower A",
+                listOf(logged("Back Squat", "Barbell", listOf(did(225.0, 5))))))
+        )
+        assertEquals("logged", day(r, 0).state)
+        assertEquals("225 x 5", day(r, 0).exercises[0].logged!!.text)
+        assertEquals(emptyList<String>(), day(r, 0).alsoLogged.map { it.text })
+    }
+
+    @Test
+    fun `a log written before this change is pooled exactly as it was`() {
+        // Every booking in a file written before the link was recorded: no id, so the day is the
+        // join, both sessions on it pooled into one answer -- the behaviour this build shipped with
+        // and the behaviour it keeps wherever there is no id to read.
+        val plans = listOf(plan(mon, "Lower A",
+            listOf(asked("Back Squat", "Barbell", listOf(ask(225.0, 5), ask(225.0, 5))))))
+        val row = day(run(plans, listOf(
+            session(mon, "Lower A", listOf(logged("Back Squat", "Barbell", listOf(did(225.0, 5))))),
+            session(mon, "Extra", listOf(logged("Back Squat", "Barbell", listOf(did(135.0, 12)))))
+        )), 0)
+        // Both sessions' sets under one "Logged" row, and the second session is not "Also logged":
+        // with no id there is nothing to tell the two apart, which the card does not pretend to.
+        assertEquals("225 x 5 · 135 x 12", row.exercises[0].logged!!.text)
+        assertEquals(emptyList<String>(), row.alsoLogged.map { it.text })
+    }
+
+    @Test
+    fun `an id is only ever used to pick a session out of its own day`() {
+        // A booking pointing at a session logged on another day is a booking with nothing logged
+        // against it, and that session is a day of its own. Nothing pairs across dates.
+        val elsewhere = session(tue, "Lower A",
+            listOf(logged("Back Squat", "Barbell", listOf(did(225.0, 5)))))
+        val r = run(
+            listOf(plan(mon, "Lower A",
+                listOf(asked("Back Squat", "Barbell", listOf(ask(225.0, 5)))),
+                startedSessionId = elsewhere.id)),
+            listOf(elsewhere)
+        )
+        assertEquals("notLogged", dayOn(r, mon).state)
+        assertEquals("notBooked", dayOn(r, tue).state)
+        assertEquals(listOf("Back Squat (Barbell) · 1 set"), dayOn(r, tue).alsoLogged.map { it.text })
     }
 
     /* ---------------- who sent it ----------------

@@ -67,11 +67,13 @@ class ScheduledSessionTest {
         assertEquals("r1", restored.routineId)
         assertEquals("Lower A", restored.routineName)
         assertEquals("2026-09-10", restored.date)
+        // The two things this build can know about a booking and that one could not.
         assertNull("a plan accepted before this reads as From your coach", restored.fromCoach)
+        assertNull("and answers whatever its day holds, pooled", restored.startedSessionId)
     }
 
     @Test
-    fun `a booking no plan named a coach for writes byte for byte what main wrote`() {
+    fun `a booking with neither new fact writes byte for byte what main wrote`() {
         val session = ScheduledSession(routineId = "r1", routineName = "Lower A", date = "2026-09-10")
         assertEquals(oldEncoder(session).toString(), session.toJson().toString())
     }
@@ -82,34 +84,38 @@ class ScheduledSessionTest {
     fun `an older build reads a file this one writes, every field it knows intact`() {
         val session = ScheduledSession(
             id = "s1", routineId = "r1", routineName = "Lower A", date = "2026-09-10",
-            fromCoach = "Doug"
+            fromCoach = "Doug", startedSessionId = "w9"
         )
         val json = session.toJson()
         assertEquals(
             mapOf("id" to "s1", "routineId" to "r1", "routineName" to "Lower A", "date" to "2026-09-10"),
             oldReader(json)
         )
-        // Additive only: the four old keys are untouched, and the new one is simply never looked at
-        // by a build that has not heard of it.
+        // Additive only: the four old keys are untouched, and the two new ones are simply never
+        // looked at by a build that has not heard of them.
         assertTrue(json.has("fromCoach"))
-        assertEquals(5, json.length())
+        assertTrue(json.has("startedSessionId"))
+        assertEquals(6, json.length())
     }
 
-    /* ---------------- the name itself ---------------- */
+    /* ---------------- the two new fields themselves ---------------- */
 
     @Test
-    fun `a name round trips`() {
+    fun `both new fields round trip`() {
         val restored = scheduledSessionFromJson(ScheduledSession(
-            routineId = "r1", routineName = "Lower A", date = "2026-09-10", fromCoach = "Doug"
+            routineId = "r1", routineName = "Lower A", date = "2026-09-10",
+            fromCoach = "Doug", startedSessionId = "w9"
         ).toJson())
         assertEquals("Doug", restored.fromCoach)
+        assertEquals("w9", restored.startedSessionId)
     }
 
     @Test
-    fun `no name is written when there is none`() {
+    fun `neither is written when there is nothing to write`() {
         val json = ScheduledSession(routineId = "r1", routineName = "Lower A", date = "2026-09-10")
             .toJson()
         assertFalse("omitted, never null", json.has("fromCoach"))
+        assertFalse("omitted, never null", json.has("startedSessionId"))
     }
 
     @Test

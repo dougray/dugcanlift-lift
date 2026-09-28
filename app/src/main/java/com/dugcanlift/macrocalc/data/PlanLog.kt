@@ -25,9 +25,10 @@ import java.util.Locale
  *
  * **Nothing new travels.** No wire change, no new file, no new permission — `n` is a head key
  * PLAN-FORMAT has always carried and this build simply dropped on the floor. One thing is newly
- * *stored*: [ScheduledSession.fromCoach], the coach a booking came from, which is what lets this card
- * sign a week the way the browser signs it. It sits on the booking and never on a session, because a
- * booking is a file that stays on the device and a session is one that travels.
+ * *stored*, and both on the booking rather than on a session, because a booking is a file that stays
+ * on the device and a session is one that travels: [ScheduledSession.fromCoach], the coach a booking
+ * came from, which is what lets this card sign a week the way the browser signs it, and
+ * [ScheduledSession.startedSessionId], which says which session starting a booking wrote.
  *
  * **You are not being graded.** No score, no percentage, no streak, no colour on a day nothing was
  * logged against, and nothing carried from one week to the next. [lines] flattens every sentence
@@ -131,7 +132,13 @@ object PlanLog {
         val name: String,
         val exercises: List<RoutineExercise>,
         /** The coach who sent it, when the plan link named one. Read by [sentBy] and nothing else. */
-        val fromCoach: String? = null
+        val fromCoach: String? = null,
+        /**
+         * The session starting this booking wrote, when it was started on this device. Used only to
+         * pick a session out of a day that holds two — never to claim a session logged on one day
+         * answers a booking on another.
+         */
+        val startedSessionId: String? = null
     )
 
     /**
@@ -146,7 +153,8 @@ object PlanLog {
                 date = session.date,
                 name = session.routineName,
                 exercises = routines.firstOrNull { it.id == session.routineId }?.exercises.orEmpty(),
-                fromCoach = session.fromCoach
+                fromCoach = session.fromCoach,
+                startedSessionId = session.startedSessionId
             )
         }
 
@@ -569,14 +577,17 @@ object PlanLog {
      * told it has nothing for them, and a week of their own training held up against a plan nobody
      * wrote is the app inventing an expectation.
      *
-     * **Days join on date, and nothing else.** Web has one thing this side does not:
-     * `startedSessionId`, which says which session a booking was started as, and lets a day holding
-     * two sessions compare the right one. Nothing on this platform records it — starting a booked
-     * routine writes an ordinary [WorkoutSession] with a fresh id — so a booked day is compared
-     * against everything logged on it, pooled, which is exactly web's own fallback when the session
-     * a booking started was deleted. A session lifted the day after the one it was booked for is
-     * still a booked day with nothing logged **and** a session of its own, adjacent on screen, with
-     * nothing claimed about the two.
+     * **Days join on date, and on [Booking.startedSessionId] where there is one**: starting a booked
+     * routine records which session it became, so a day carrying two sessions compares the right one
+     * and the other falls to "Also logged". That link only ever picks a session out of a day. It
+     * never claims a session logged on one day answers a booking on another: a session lifted the day
+     * after the one it was booked for is still a booked day with nothing logged **and** a session of
+     * its own, adjacent on screen, with nothing claimed about the two.
+     *
+     * **Pooling is the fallback and stays the fallback.** A booking with no id — every booking
+     * written before the link was recorded, and every session logged without pressing Start — is
+     * compared against everything logged on its day, and so is a booking whose session has since
+     * been deleted. That is web's own fallback, in web's own order.
      */
     fun compare(
         bookings: List<Booking>,
@@ -600,7 +611,25 @@ object PlanLog {
         val rows = bookedDates.map { date ->
             val name = byDate.getValue(date).map { it.name }.filter { it.isNotBlank() }.joinToString(" · ")
             val asked = poolAsked(byDate.getValue(date).flatMap { it.exercises })
-            val mine = loggedIn(logged.filter { it.date == date })
+            val onDay = logged.filter { it.date == date }
+            // The session this booking was started as, when it still exists: a day with a booked
+            // session and an extra one of the lifter's own compares the right half. An id naming a
+            // session that has been deleted resolves to nothing and falls back to the day, which is
+            // what a booking nobody pressed Start on does anyway. Two bookings on one day, each
+            // started, leave the later of them holding the comparison -- web's own behaviour, ported
+            // rather than tidied, because the alternative is this build describing such a day
+            // differently from the browser.
+            var startedSession: WorkoutSession? = null
+            byDate.getValue(date).forEach { booking ->
+                val startedId = booking.startedSessionId ?: return@forEach
+                onDay.forEach { session -> if (session.id == startedId) startedSession = session }
+            }
+            val started = startedSession
+            val mine = loggedIn(if (started != null) listOf(started) else onDay)
+            // A session on the same day that was not the one booked is logged work, counted against
+            // nothing, exactly like a lift nobody asked for.
+            val extra = if (started == null) emptyList()
+            else loggedIn(onDay.filter { it.id != started.id }).filter { it.sets.isNotEmpty() }
 
             val state = when {
                 mine.isNotEmpty() -> { loggedDays += 1; "logged" }
@@ -633,7 +662,7 @@ object PlanLog {
                 text = listOf(dayLabel(date), name, WORDS.getValue(state))
                     .filter { it.isNotBlank() }.joinToString(" · "),
                 exercises = joined.exercises,
-                alsoLogged = joined.alsoLogged
+                alsoLogged = joined.alsoLogged + extra.map(::alsoLogged)
             )
         }.toMutableList()
 

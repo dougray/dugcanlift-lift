@@ -228,4 +228,72 @@ class PlanLogImportTest {
         // And nowhere below the signature.
         PlanLog.lines(card()).forEach { line -> assertFalse(line.contains("Wolfeschlegel")) }
     }
+
+    /* ---------------- which session answered the booking ---------------- */
+
+    /** Train's Start button, end to end: the session it writes, and the link it records. */
+    private fun start(): WorkoutSession = runBlocking {
+        val repo = ScheduledSessionRepository.get(context)
+        val booking = repo.sessions.value.last()
+        val routine = RoutineRepository.get(context).routines.value.first { it.id == booking.routineId }
+        val started = routine.toSession(booking.date)
+        WorkoutRepository.get(context).save(started)
+        repo.markStarted(booking.id, started.id)
+        started
+    }
+
+    @Test
+    fun `starting a booked session records which session it became`() {
+        accept(PlanWorkoutExercise(
+            name = "Back Squat", equipment = "Barbell",
+            sets = listOf(PlanSet(weightLb = 225.0, reps = 5), PlanSet(weightLb = 245.0, reps = 3))
+        ))
+        val started = start()
+        assertEquals(
+            started.id,
+            ScheduledSessionRepository.get(context).sessions.value.last().startedSessionId
+        )
+        // And it survives the file: this is the one fact a relaunch has to still know.
+        runBlocking { ScheduledSessionRepository.get(context).load() }
+        assertEquals(
+            started.id,
+            ScheduledSessionRepository.get(context).sessions.value.last().startedSessionId
+        )
+    }
+
+    @Test
+    fun `a second session on the booked day is Also logged, not part of the answer`() {
+        accept(PlanWorkoutExercise(
+            name = "Back Squat", equipment = "Barbell",
+            sets = listOf(PlanSet(weightLb = 225.0, reps = 5), PlanSet(weightLb = 245.0, reps = 3))
+        ))
+        val started = start()
+        val own = WorkoutSession(date = monday, name = "Arms", exercises = listOf(
+            LoggedExercise(name = "Barbell Curl", equipment = "Barbell",
+                sets = listOf(WorkoutSet(weightLb = 65.0, reps = 10)))
+        ))
+        val day = card(listOf(started, own))!!.days.first()
+        assertEquals("225 x 5 · 245 x 3", day.exercises[0].logged!!.text)
+        assertEquals(listOf("Barbell Curl (Barbell) · 1 set"), day.alsoLogged.map { it.text })
+    }
+
+    @Test
+    fun `a booking whose started session was deleted is pooled again`() {
+        accept(PlanWorkoutExercise(
+            name = "Back Squat", equipment = "Barbell",
+            sets = listOf(PlanSet(weightLb = 225.0, reps = 5), PlanSet(weightLb = 245.0, reps = 3))
+        ))
+        val started = start()
+        runBlocking { WorkoutRepository.get(context).delete(started.id) }
+        // The booking still names it; the card resolves the id against the sessions it holds, finds
+        // nothing, and reads the day -- which is what a booking nobody started does.
+        val logged = listOf(WorkoutSession(date = monday, name = "Arms", exercises = listOf(
+            LoggedExercise(name = "Back Squat", equipment = "Barbell",
+                sets = listOf(WorkoutSet(weightLb = 225.0, reps = 5)))
+        )))
+        val day = card(logged)!!.days.first()
+        assertEquals("logged", day.state)
+        assertEquals("225 x 5", day.exercises[0].logged!!.text)
+        assertEquals(emptyList<String>(), day.alsoLogged.map { it.text })
+    }
 }

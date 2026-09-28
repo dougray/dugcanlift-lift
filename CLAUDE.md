@@ -216,14 +216,25 @@ only where they say the whole of it.** `Routine.toSession` reads the same
 flattening `plan-set-fidelity` removed from the importer, reintroduced at the
 other end. `PlanLogImportTest` pins it through the real importer.
 
-**One thing web has that this build does not**, documented in `PlanLog` rather
-than worked around:
+**Which session answered a booking is recorded, and pooling is the fallback.**
+`ScheduledSession.startedSessionId` is web's field under web's own spelling,
+written by the one place a booking becomes a session -- Train's "Start" on the
+coach-scheduled card, which saves the `WorkoutSession` and then calls
+`ScheduledSessionRepository.markStarted`. Without it a booked day was compared
+against *everything* logged on it, so a second session that repeated a planned
+lift folded into the comparison instead of falling to "Also logged".
 
-- **`startedSessionId`.** Web knows which session a booking was started as, and
-  uses it to pick the right session out of a day holding two. Nothing here
-  records it, so a booked day is compared against everything logged on it,
-  pooled -- which is exactly web's own fallback when that session was deleted.
-  A lift nobody asked for still lands under "Also logged".
+It only ever picks a session out of **its own day**: a session logged the day
+after the one it was booked for is still a booked day with nothing logged plus a
+day of its own. Pooling stays, unchanged, for a booking with no id -- every
+booking written before this, every session logged without pressing Start -- and
+for one whose session has since been deleted, which resolves to nothing and
+reads the day. Two bookings on one day, each started, leave the later one
+holding the comparison: web's behaviour, ported rather than tidied.
+
+Started routines from the **library** are not marked. A routine is reusable by
+definition and starting it must not consume a booking, which is the same line
+web's `startPrescribed` draws.
 
 **The coach's name is stored on the booking, and read in one place.** `n` is a
 head key PLAN-FORMAT has always carried and `PlanImporter` used to drop, so the
