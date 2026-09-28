@@ -1048,4 +1048,121 @@ class PlanLogTest {
         }.distinct().sorted()
         assertEquals(listOf("Asked", "Logged"), labels)
     }
+
+    /* ---------------- how it reads aloud ----------------
+     *
+     * The card is built out of short muted lines with `·` between their clauses, which is a comma
+     * sighted and a fragment aloud -- and on Android worse than anywhere, because a `Row` of two
+     * `Text`s is two accessibility nodes and "Asked" arrives two swipes before its numbers.
+     * [PlanLog.spokenLines] is the same card said; these pin the rules rather than the strings.
+     */
+
+    @Test
+    fun `a day row is one sentence, not three fragments`() {
+        val spoken = PlanLog.spokenLines(everyState())
+        assertFalse(spoken.joinToString(" | "), spoken.any { it.contains(" · ") })
+        assertTrue(
+            "no spoken day row: ${spoken.take(4)}",
+            spoken.any { it == "Monday 12 October, Lower A, logged" }
+        )
+    }
+
+    @Test
+    fun `the date a day row says is the date it draws, in words`() {
+        assertEquals("Mon 12 Oct", PlanLog.dayLabel(mon))
+        assertEquals("Monday 12 October", PlanLog.spokenDayLabel(mon))
+    }
+
+    @Test
+    fun `a week is a range aloud, not an en dash`() {
+        assertEquals("12–18 Oct", PlanLog.rangeText("2026-10-12", "2026-10-18"))
+        assertEquals("12 to 18 October", PlanLog.spokenRange("2026-10-12", "2026-10-18"))
+        assertEquals("28 September to 4 October", PlanLog.spokenRange("2026-09-28", "2026-10-04"))
+        assertEquals("12 October", PlanLog.spokenRange("2026-10-12", "2026-10-12"))
+    }
+
+    @Test
+    fun `the asked row and the logged row are one comparison, under the lift`() {
+        val r = run(
+            listOf(plan(mon, "Lower A", listOf(
+                asked("Back Squat", "Barbell", listOf(ask(225.0, 5), ask(225.0, 5), ask(245.0, 3)))))),
+            listOf(session(mon, "Lower A", listOf(
+                logged("Back Squat", "Barbell", listOf(did(225.0, 5), did(225.0, 5))))))
+        )
+        val lift = day(r, 0).exercises[0]
+        assertEquals(
+            "Back Squat (Barbell). Asked 3 sets, logged 2. " +
+                "Asked 225 by 5, 225 by 5, 245 by 3. Logged 225 by 5, 225 by 5",
+            lift.spoken
+        )
+        // ` x ` never reaches it: read literally it is the letter.
+        assertFalse(lift.spoken, lift.spoken.contains(" x "))
+    }
+
+    @Test
+    fun `L 3 of 3 R 2 of 3 is said in words`() {
+        val r = run(
+            listOf(plan(mon, "Lower A", listOf(
+                asked("Split Squat", "Dumbbell",
+                    listOf(ask(40.0, 8), ask(40.0, 8), ask(40.0, 8)), eachSide = true)))),
+            listOf(session(mon, "Lower A", listOf(
+                logged("Split Squat", "Dumbbell", listOf(
+                    did(40.0, 8, side = SetSide.LEFT), did(40.0, 8, side = SetSide.LEFT),
+                    did(40.0, 8, side = SetSide.LEFT), did(40.0, 8, side = SetSide.RIGHT),
+                    did(40.0, 8, side = SetSide.RIGHT))))))
+        )
+        val lift = day(r, 0).exercises[0]
+        assertEquals("the drawn line is unchanged", "L 3/3 · R 2/3", lift.sideLine)
+        assertEquals("left 3 of 3, right 2 of 3", lift.spokenSideLine)
+        assertEquals(
+            "Logged left 40 by 8, 40 by 8, 40 by 8; right 40 by 8, 40 by 8",
+            lift.logged!!.spoken
+        )
+        val askedRow = lift.asked!!
+        assertTrue(askedRow.spoken, askedRow.spoken.endsWith(" each side"))
+    }
+
+    @Test
+    fun `a day still ahead says its each-side ask in words, not in noughts`() {
+        val r = run(
+            listOf(plan(fri, "Lower B", listOf(
+                asked("Split Squat", "Dumbbell", listOf(ask(35.0, 10), ask(35.0, 10)),
+                    eachSide = true)))),
+            emptyList()
+        )
+        val ahead = dayOn(r, fri).exercises[0]
+        assertEquals("Each side · L 2 · R 2", ahead.sideLine)
+        assertEquals("Each side, left 2, right 2", ahead.spokenSideLine)
+    }
+
+    @Test
+    fun `a set row says its label and its numbers in one breath`() {
+        // On Android they are two `Text`s in a `Row`, so two nodes -- which is why the label is
+        // part of the spoken form rather than left to the view to prepend.
+        val row = PlanLog.SetRow("Asked",
+            PlanLog.askedGroups(listOf(ask(225.0, 5))), "")
+        assertEquals("Asked 225 x 5", "${row.label} ${row.text}")
+        assertEquals("Asked 225 by 5", row.spoken)
+    }
+
+    @Test
+    fun `nothing a screen reader is handed changes what the card draws`() {
+        // The spoken layer is labels, and the drawn lines keep their punctuation.
+        val drawn = PlanLog.lines(everyState())
+        assertTrue("the card still draws `·`", drawn.any { it.contains(" · ") })
+        assertTrue("and still draws `L 3/3`", drawn.any { it.contains("L 3/3") })
+        assertTrue("and still draws ` x `", drawn.any { it.contains(" x ") })
+    }
+
+    @Test
+    fun `nothing a screen reader is handed tells a lifter what to do`() {
+        // The same discipline as the drawn lines, over the announced ones: a label is a sentence
+        // you read, and "not logged" must be as flat aloud as it is on screen.
+        val every = PlanLog.spokenLines(everyState()).joinToString(" · ").lowercase(Locale.US)
+        assertTrue("the fixture should exercise the whole card", every.length > 400)
+        (forbidden + forbiddenHere).forEach { word ->
+            assertFalse("\"$word\" reached a screen reader: $every", every.contains(word))
+        }
+    }
+
 }
