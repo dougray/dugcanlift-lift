@@ -23,9 +23,11 @@ import java.util.Locale
  * worse than any of them describing it slightly better. Pure and free of Android so the unit tests
  * read the sentences it produces rather than an eye reading one render of them.
  *
- * **Nothing new travels and nothing new is stored.** No wire change, no new file, no new key, no
- * new permission. This reads the bookings, the routines behind them and the sessions exactly as
- * they already sit on disk.
+ * **Nothing new travels.** No wire change, no new file, no new permission — `n` is a head key
+ * PLAN-FORMAT has always carried and this build simply dropped on the floor. One thing is newly
+ * *stored*: [ScheduledSession.fromCoach], the coach a booking came from, which is what lets this card
+ * sign a week the way the browser signs it. It sits on the booking and never on a session, because a
+ * booking is a file that stays on the device and a session is one that travels.
  *
  * **You are not being graded.** No score, no percentage, no streak, no colour on a day nothing was
  * logged against, and nothing carried from one week to the next. [lines] flattens every sentence
@@ -123,11 +125,13 @@ object PlanLog {
      * A booking whose routine has since been deleted keeps its name — [ScheduledSession] snapshots
      * `routineName` — and asks for nothing, rather than vanishing from a week the coach did book. */
 
-    /** One booked day: what it is called, and the exercises the plan behind it asks for. */
+    /** One booked day: what it is called, who sent it, and the exercises the plan behind it asks for. */
     data class Booking(
         val date: String,
         val name: String,
-        val exercises: List<RoutineExercise>
+        val exercises: List<RoutineExercise>,
+        /** The coach who sent it, when the plan link named one. Read by [sentBy] and nothing else. */
+        val fromCoach: String? = null
     )
 
     /**
@@ -141,7 +145,8 @@ object PlanLog {
             Booking(
                 date = session.date,
                 name = session.routineName,
-                exercises = routines.firstOrNull { it.id == session.routineId }?.exercises.orEmpty()
+                exercises = routines.firstOrNull { it.id == session.routineId }?.exercises.orEmpty(),
+                fromCoach = session.fromCoach
             )
         }
 
@@ -472,14 +477,32 @@ object PlanLog {
         "Your coach’s plan beside your own log. What else the week held, only you know."
 
     /**
-     * Who sent the week, for the one muted line above the head.
-     *
-     * Never a name: a plan link's coach name (`n`) is not stored by this build — [PlanImporter]
-     * writes a [Routine] and a [ScheduledSession] and nothing that remembers who sent them — so
-     * this is web's own fallback sentence, always. Naming the coach here would mean a new stored
-     * field, which this card does not have and does not need.
+     * Who sent the week, when no booking in it carries a name: web's own fallback sentence, and the
+     * sentence this card printed always before a name was stored at all. A plan accepted before
+     * [ScheduledSession.fromCoach] existed carries none, so the week it booked reads exactly as it
+     * did then.
      */
     const val SENT_BY: String = "From your coach"
+
+    /**
+     * Who sent the week, for the one muted line above the head — "From Doug", or [SENT_BY] when no
+     * plan in the week named anybody. Web's `sentBy`, ported: the names of the bookings **inside the
+     * week on screen**, each once, in the order they are met, joined the way every other list on this
+     * card is joined, because two coaches can book one week and the line is the only place either is
+     * named.
+     *
+     * The name is a coach's own, spelled by a coach's own app, and is never treated as anything but
+     * text: not parsed, not matched against anything, not a key, and printed in one place and no
+     * other. [PlanImporter.coachName] trims it and collapses its whitespace on the way in; a name
+     * long enough to need more room than the line has is the view's problem and `PlanWeekCard`
+     * solves it there, because a sentence three platforms share cannot be shortened by one of them.
+     */
+    fun sentBy(result: Result, bookings: List<Booking>): String {
+        val names = bookings.filter { it.date in result.from..result.to }
+            .mapNotNull { it.fromCoach?.trim()?.ifBlank { null } }
+            .distinct()
+        return if (names.isEmpty()) SENT_BY else "From ${names.joinToString(" · ")}"
+    }
 
     /** The four verdicts a day row can carry. `to do` is this side's own; the other three are Coach's. */
     val WORDS: Map<String, String> = mapOf(

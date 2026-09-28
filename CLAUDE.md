@@ -216,17 +216,37 @@ only where they say the whole of it.** `Routine.toSession` reads the same
 flattening `plan-set-fidelity` removed from the importer, reintroduced at the
 other end. `PlanLogImportTest` pins it through the real importer.
 
-**Two things web has that this build does not**, both documented in `PlanLog`
-rather than worked around:
+**One thing web has that this build does not**, documented in `PlanLog` rather
+than worked around:
 
 - **`startedSessionId`.** Web knows which session a booking was started as, and
   uses it to pick the right session out of a day holding two. Nothing here
   records it, so a booked day is compared against everything logged on it,
   pooled -- which is exactly web's own fallback when that session was deleted.
   A lift nobody asked for still lands under "Also logged".
-- **A coach's name.** `PlanImporter` stores no `n`, so `PlanLog.SENT_BY` is web's
-  fallback sentence ("From your coach") always. Naming the coach would mean a new
-  stored field.
+
+**The coach's name is stored on the booking, and read in one place.** `n` is a
+head key PLAN-FORMAT has always carried and `PlanImporter` used to drop, so the
+card signed every week "From your coach". It now signs it web's way — the names
+of the bookings *inside the week on screen*, each once, `From Doug · Sam` for two
+coaches, and `PlanLog.SENT_BY` when none of them named anybody, which is exactly
+what a plan accepted before this field existed reads as. `PlanLog.sentBy` is the
+port of web's `sentBy`; `PlanWeekCard` prints it above the head and **a name
+reaches no other line of the card**, which `PlanLogTest` pins by reading
+`lines()`.
+
+`ScheduledSession.fromCoach` holds it, under web's own spelling, because a
+booking is the one record of a plan that never leaves the device:
+`scheduled_sessions.json` is in no backup and no share link, and a
+`WorkoutSession` is in both. **It is not `PlanPayload.coachName`** — the pinned
+kit decodes that as `optString("n", "Your coach")`, so a link that named nobody
+and a coach called "Your coach" arrive indistinguishable. `PlanImporter.coachName`
+reads `n` off `payload.rawJson` instead, the way `RoadPicks.fromPlan` does, and
+trims it and collapses its whitespace: the name is free text from somebody else's
+app, an HTML paragraph collapses newlines for nothing and a Compose `Text` does
+not. **The sentence itself is never shortened** — three builds share it — so a
+name with no end to it is the view's problem, answered in the view
+(`maxLines = 2` and an ellipsis).
 
 **No warmup flag exists here**, so `loggedIn` has nothing to exclude -- web
 filters warmups out of both halves. If one is ever recorded on this platform,

@@ -98,12 +98,24 @@ class PlanLogTest {
         LoggedExercise(id = nextId(), name = name, equipment = equipment, sets = sets)
 
     /** A booking as a plan link leaves it: a [ScheduledSession] on a date, and the [Routine] it names. */
-    private inner class Plan(date: String, name: String, exercises: List<RoutineExercise>) {
+    private inner class Plan(
+        date: String,
+        name: String,
+        exercises: List<RoutineExercise>,
+        fromCoach: String? = "Doug"
+    ) {
         val routine = Routine(id = nextId(), name = name, exercises = exercises)
-        val session = ScheduledSession(id = nextId(), routineId = routine.id, routineName = name, date = date)
+        val session = ScheduledSession(
+            id = nextId(), routineId = routine.id, routineName = name, date = date, fromCoach = fromCoach
+        )
     }
 
-    private fun plan(date: String, name: String, exercises: List<RoutineExercise>) = Plan(date, name, exercises)
+    private fun plan(
+        date: String,
+        name: String,
+        exercises: List<RoutineExercise>,
+        fromCoach: String? = "Doug"
+    ) = Plan(date, name, exercises, fromCoach)
 
     /** The bookings, resolved against their routines the way the screen resolves them. */
     private fun bookings(plans: List<Plan>): List<PlanLog.Booking> =
@@ -700,6 +712,80 @@ class PlanLogTest {
         val orphan = ScheduledSession(routineId = "r", routineName = "Lower A", date = "")
         assertEquals(emptyList<PlanLog.Booking>(), PlanLog.bookings(listOf(orphan), emptyList()))
         assertNull(PlanLog.compare(PlanLog.bookings(listOf(orphan), emptyList()), emptyList(), today, today))
+    }
+
+    /* ---------------- who sent it ----------------
+     *
+     * Web's own two cases plus the two a phone has and a browser does not: a plan accepted before a
+     * name was ever stored, and a name with no end to it. */
+
+    @Test
+    fun `the week is signed the way the prescribed card signs a session`() {
+        val training = weekTraining()
+        val r = run(training, weekWorkouts())
+        assertEquals("From Doug", PlanLog.sentBy(r!!, bookings(training)))
+    }
+
+    @Test
+    fun `a week no plan named anybody for reads exactly as it always did`() {
+        // Every booking a build before this wrote: `fromCoach` absent from the file, so null here.
+        val training = listOf(plan(mon, "Lower A",
+            listOf(asked("Back Squat", "Barbell", listOf(ask(225.0, 5)))), fromCoach = null))
+        val r = run(training, emptyList())
+        assertEquals("From your coach", PlanLog.sentBy(r!!, bookings(training)))
+        assertEquals(PlanLog.SENT_BY, PlanLog.sentBy(r, bookings(training)))
+        // A blank name is nobody, not an empty "From ".
+        val blank = listOf(plan(mon, "Lower A", emptyList(), fromCoach = "   "))
+        assertEquals(PlanLog.SENT_BY,
+            PlanLog.sentBy(PlanLog.compare(bookings(blank), emptyList(), today, today)!!, bookings(blank)))
+    }
+
+    @Test
+    fun `two coaches who booked one week are both named, once each`() {
+        val training = listOf(
+            plan(mon, "Lower A", emptyList(), fromCoach = "Doug"),
+            plan(tue, "Upper B", emptyList(), fromCoach = "Sam"),
+            plan(wed, "Lower B", emptyList(), fromCoach = "Doug")
+        )
+        val r = run(training, emptyList())
+        assertEquals("From Doug · Sam", PlanLog.sentBy(r!!, bookings(training)))
+    }
+
+    @Test
+    fun `only the week on screen is signed`() {
+        // A coach who booked last week does not sign this one: `sentBy` reads the window `compare`
+        // read, and nothing carries from one week to the next here either.
+        val training = listOf(
+            plan(mon, "Lower A", emptyList(), fromCoach = "Doug"),
+            plan("2026-10-05", "Lower A", emptyList(), fromCoach = "Sam")
+        )
+        val r = run(training, emptyList())
+        assertEquals("From Doug", PlanLog.sentBy(r!!, bookings(training)))
+    }
+
+    @Test
+    fun `a name with no end to it reaches the line whole and unread`() {
+        // The sentence is not shortened here: three platforms share it, and `PlanWeekCard` draws it
+        // in two lines and an ellipsis rather than one of them printing a different string. What is
+        // guaranteed here is that nothing is silently dropped and nothing is interpreted -- a name
+        // is a string on a screen and never a key, a pattern or a tag.
+        val long = "Coach " + "Wolfeschlegelsteinhausenbergerdorff ".repeat(20).trim()
+        val training = listOf(plan(mon, "Lower A", emptyList(), fromCoach = long))
+        val r = run(training, emptyList())
+        assertEquals("From $long", PlanLog.sentBy(r!!, bookings(training)))
+        // And the name reaches nowhere else. Not one line of the card carries it.
+        PlanLog.lines(r).forEach { line ->
+            assertFalse("a name reached $line", line.contains("Wolfeschlegel"))
+        }
+    }
+
+    @Test
+    fun `nothing below the signature is signed`() {
+        // The card names a coach once, above the head, and never again -- not on a day row, not on a
+        // lift, not in the footer. The signature is the only line `lines()` leaves out for that
+        // reason: it is not a sentence about the week.
+        val r = everyState()
+        PlanLog.lines(r).forEach { line -> assertFalse("$line names a coach", line.contains("Doug")) }
     }
 
     /* ---------------- the line discipline ----------------
