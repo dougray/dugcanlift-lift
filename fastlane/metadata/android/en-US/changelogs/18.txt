@@ -1,0 +1,3 @@
+The week card now shows the meals your coach booked, under the day they were booked for. A day booked only for food gets no verdict word at all — there is nothing there to have missed. Nothing on the card says anything about what you actually ate; your food log is on the Food screen and does not need repeating here.
+
+The card reads properly through a screen reader. Its lines were separated by a "·" that is a comma on screen and either a character name or silence aloud, so a day arrived as four unrelated fragments and "L 3/3 · R 2/3" as no language at all. Every line now has a spoken form composed beside the written one, an asked row and its logged row are announced together, and the week arrows have names instead of punctuation. Nothing on screen changed.
