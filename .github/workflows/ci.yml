@@ -32,8 +32,10 @@ jobs:
       # Caches ~/.gradle and validates the wrapper jar checksum.
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
+      # :link is LIFT Link's protocol layer, shared byte-for-byte with the Wear OS app;
+      # its LinkWireFixtureTest is what catches the two copies drifting apart.
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --rerun
+        run: ./gradlew :link:test :app:testDebugUnitTest --rerun
 
       - name: Android lint
         run: ./gradlew :app:lintDebug

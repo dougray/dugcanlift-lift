@@ -47,6 +47,25 @@
     <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
     <uses-permission android:name="android.permission.health.WRITE_ELEVATION_GAINED" />
 
+    <!-- LIFT Link: the Bluetooth LE channel to the LIFT Wear OS watch (watchlink/). The phone is
+         the central: it scans once, to pair, and connects to the remembered watch afterwards.
+         neverForLocation because a scan here only ever looks for LIFT's own service UUID and
+         nothing derives a location from it - which is also what lets Android 12+ grant it
+         without the location permission. No ADVERTISE: the phone never advertises. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11 and older, where the two above do not exist. Scanning there also needs
+         ACCESS_FINE_LOCATION, which route recording already declares above; nothing new is asked
+         for on those versions. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- Not required: a phone without BLE is a phone without a LIFT watch, and everything else in
+         the app works the same. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
     </queries>

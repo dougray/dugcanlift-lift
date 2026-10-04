@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.dugcanlift.macrocalc.data.CoachStore
+import com.dugcanlift.macrocalc.watchlink.WatchLinkTransport
 import com.dugcanlift.macrocalc.data.GoalStore
 import com.dugcanlift.kit.PlanDecodeResult
 import com.dugcanlift.kit.PlanLinkCodec
@@ -101,6 +102,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Arms the pending Bluetooth connection to a paired watch, so the link comes up by itself when
+     * LIFT is next open on the wrist. A no-op for anyone who has never paired, and for anyone who
+     * has not granted Bluetooth: it checks and returns, it never asks.
+     */
+    override fun onStart() {
+        super.onStart()
+        WatchLinkTransport.get(this).reconnectIfPaired()
     }
 
     override fun onNewIntent(intent: Intent) {
