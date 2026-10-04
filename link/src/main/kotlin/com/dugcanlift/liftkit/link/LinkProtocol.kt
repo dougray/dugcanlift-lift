@@ -31,8 +31,22 @@ object LinkProtocol {
      * politely instead of parsing a later layout as if it were this one. A version bump that
      * changes the header is therefore legal, because no old reader will ever get past byte 0.
      */
-    const val VERSION = 1
+    const val VERSION = 2
     const val MIN_SUPPORTED_VERSION = 1
+
+    /**
+     * What version 2 added, and nothing else: a coach's sides on a plan — `eachSide` on an exercise
+     * and a named `side` on a prescribed set (PLAN-FORMAT.md "Sides"). Both are presence bits in
+     * masks version 1 already reserved, so **a plan with no sides encodes to exactly version 1's
+     * bytes** and `fixtures/link-wire.txt`'s `plan` line does not move.
+     *
+     * A version-1 reader would refuse those bits outright rather than ignore them — every decoder
+     * here is strict on purpose — so [LinkSession.pushPlan] strips sides when the link settled on
+     * version 1, and frames are written at the **negotiated** version (see [LinkCodec.version]).
+     * That is what makes a version-2 phone and a version-1 watch a working link that is missing one
+     * label, instead of two devices refusing to speak.
+     */
+    const val VERSION_WITH_PLAN_SIDES = 2
 
     /**
      * An [MessageType.ERROR] is always sent at version 1, whatever version the link settled on,
