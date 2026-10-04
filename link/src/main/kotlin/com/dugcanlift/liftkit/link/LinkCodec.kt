@@ -56,6 +56,27 @@ class LinkCodec(
             field = value
         }
 
+    /**
+     * The version written into byte 0 of every outgoing frame.
+     *
+     * Starts at [LinkProtocol.MIN_SUPPORTED_VERSION], not at [LinkProtocol.VERSION], and is raised
+     * only once the handshake has settled on a version both ends read. That is what the version byte
+     * is *for*: a build that speaks 2 must still be able to talk to one that speaks 1, and a peer
+     * that refuses byte 0 refuses the HELLO too, so framing at this build's own newest version would
+     * mean no link at all rather than a link without the newest field.
+     *
+     * An [MessageType.ERROR] ignores this and always goes at [LinkProtocol.ERROR_VERSION], because a
+     * refusal has to be legible to the peer being refused — which `LINK-PROTOCOL.md` has always
+     * said and nothing implemented until frames stopped being written at one fixed version.
+     */
+    var version: Int = LinkProtocol.MIN_SUPPORTED_VERSION
+        set(value) {
+            require(value in LinkProtocol.MIN_SUPPORTED_VERSION..LinkProtocol.VERSION) {
+                "cannot frame at version $value"
+            }
+            field = value
+        }
+
     private var nextSeq = 0
     private var pendingType = -1
     private var pendingSeq = -1
@@ -72,12 +93,14 @@ class LinkCodec(
     fun frames(message: LinkMessage): List<ByteArray> {
         val seq = nextSeq
         nextSeq = (nextSeq + 1) and 0xFF
+        val frameVersion =
+            if (message.known == MessageType.ERROR) LinkProtocol.ERROR_VERSION else version
         val perFrame = frameBudget - LinkFrame.HEADER_BYTES
         val payload = message.payload
         if (payload.isEmpty()) {
             return listOf(
                 LinkFrames.encode(
-                    LinkFrame(LinkProtocol.VERSION, message.type, LinkFrame.FLAG_FIRST or LinkFrame.FLAG_LAST, seq, ByteArray(0))
+                    LinkFrame(frameVersion, message.type, LinkFrame.FLAG_FIRST or LinkFrame.FLAG_LAST, seq, ByteArray(0))
                 )
             )
         }
@@ -89,7 +112,7 @@ class LinkCodec(
             if (offset == 0) flags = flags or LinkFrame.FLAG_FIRST
             if (end == payload.size) flags = flags or LinkFrame.FLAG_LAST
             out += LinkFrames.encode(
-                LinkFrame(LinkProtocol.VERSION, message.type, flags, seq, payload.copyOfRange(offset, end))
+                LinkFrame(frameVersion, message.type, flags, seq, payload.copyOfRange(offset, end))
             )
             offset = end
         }
