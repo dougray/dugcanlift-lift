@@ -11,6 +11,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextFieldColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,7 +47,8 @@ fun NumberField(
         label = { Text(label) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = dclTextFieldColors()
     )
 }
 
@@ -112,7 +115,8 @@ fun NameField(
         onValueChange = onValueChange,
         label = { Text(label) },
         singleLine = true,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth(),
+        colors = dclTextFieldColors()
     )
 }
 /**
@@ -214,7 +218,7 @@ fun MoreNutrientsFields(
     onSodium: (String) -> Unit
 ) {
     Spacer(modifier = Modifier.height(4.dp))
-    TextButton(onClick = onToggle) {
+    TextButton(onClick = onToggle, colors = dclTextButtonColors()) {
         Text(if (expanded) "Fewer nutrients" else "More nutrients")
     }
     if (expanded) {

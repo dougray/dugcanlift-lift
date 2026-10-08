@@ -2,6 +2,8 @@ package com.dugcanlift.macrocalc
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -139,11 +141,12 @@ fun FoodSearchPanel(
                                 .setOrientationLocked(true)
                         )
                     },
-                    enabled = !searching
+                    enabled = !searching,
+                    colors = dclOutlinedButtonColors()
                 ) {
                     Text("Scan")
                 }
-                OutlinedButton(onClick = onCancel) { Text("Cancel") }
+                OutlinedButton(onClick = onCancel, colors = dclOutlinedButtonColors()) { Text("Cancel") }
             }
 
             message?.let {
@@ -260,10 +263,11 @@ private fun AmountEntryDialog(
                         onConfirm(result.toFoodEntry(date, confirmedGrams, confirmedNutrition, amountLabel))
                     }
                 },
-                enabled = valid
+                enabled = valid,
+                colors = dclTextButtonColors()
             ) { Text("Add") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Cancel") } }
     )
 }
 

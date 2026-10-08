@@ -31,7 +31,10 @@ import com.dugcanlift.macrocalc.data.RoutineRepository
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.onDate
 import com.dugcanlift.macrocalc.data.todayKey
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import com.dugcanlift.macrocalc.watchlink.WatchLinkTransport
 import com.dugcanlift.macrocalc.watchlink.WatchLinkTransport.Status
 import kotlinx.coroutines.launch
@@ -77,7 +80,7 @@ fun WatchCard(modifier: Modifier = Modifier) {
 
     Card(modifier = modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Watch", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(text = "Watch", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
             Spacer(modifier = Modifier.height(8.dp))
 
             when (val current = status) {
@@ -95,11 +98,11 @@ fun WatchCard(modifier: Modifier = Modifier) {
                     Spacer(modifier = Modifier.height(8.dp))
                     if (found.isEmpty()) Body("Looking…")
                     found.forEach { watch ->
-                        TextButton(onClick = { link.pair(watch) }, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { link.pair(watch) }, modifier = Modifier.fillMaxWidth(), colors = dclTextButtonColors()) {
                             Text("${watch.name}  ·  ${signal(watch.rssi)}")
                         }
                     }
-                    TextButton(onClick = { link.stopScan() }) { Text("Stop looking") }
+                    TextButton(onClick = { link.stopScan() }, colors = dclTextButtonColors()) { Text("Stop looking") }
                 }
 
                 is Status.Connecting -> Body("Connecting to ${current.name}…")
@@ -121,7 +124,7 @@ fun WatchCard(modifier: Modifier = Modifier) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { link.confirm(true) }) { Text("Yes, it matches") }
-                            OutlinedButton(onClick = { link.confirm(false) }) { Text("No") }
+                            OutlinedButton(onClick = { link.confirm(false) }, colors = dclOutlinedButtonColors()) { Text("No") }
                         }
                     } else {
                         Body("Now accept on the watch.")
@@ -131,7 +134,7 @@ fun WatchCard(modifier: Modifier = Modifier) {
                 is Status.Waiting -> {
                     Body("Paired with ${current.name}. It connects by itself whenever LIFT is open on the watch.")
                     Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = { link.forget() }) { Text("Forget this watch") }
+                    TextButton(onClick = { link.forget() }, colors = dclTextButtonColors()) { Text("Forget this watch") }
                 }
 
                 is Status.Linked -> {
@@ -151,21 +154,21 @@ fun WatchCard(modifier: Modifier = Modifier) {
                                 val ok = link.pushRoutine(routine.id, day = null)
                                 note = if (ok) null else "Could not send. Is LIFT open on the watch?"
                             }
-                        }) { Text("Send ${routine.name}") }
+                        }, colors = dclTextButtonColors()) { Text("Send ${routine.name}") }
                     }
-                    TextButton(onClick = { link.forget() }) { Text("Forget this watch") }
+                    TextButton(onClick = { link.forget() }, colors = dclTextButtonColors()) { Text("Forget this watch") }
                 }
 
                 is Status.Unavailable -> {
                     Body(current.reason)
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(onClick = { permissions.launch(WatchLinkTransport.runtimePermissions) }) { Text("Try again") }
+                    OutlinedButton(onClick = { permissions.launch(WatchLinkTransport.runtimePermissions) }, colors = dclOutlinedButtonColors()) { Text("Try again") }
                 }
 
                 is Status.Failed -> {
                     Body(current.reason)
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(onClick = { permissions.launch(WatchLinkTransport.runtimePermissions) }) { Text("Try again") }
+                    OutlinedButton(onClick = { permissions.launch(WatchLinkTransport.runtimePermissions) }, colors = dclOutlinedButtonColors()) { Text("Try again") }
                 }
             }
 

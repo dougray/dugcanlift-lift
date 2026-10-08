@@ -2,8 +2,12 @@ package com.dugcanlift.macrocalc.ui.theme
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -76,12 +80,28 @@ private object DclError {
  * The brand accent for text: the kit's ACCENT_TEXT. Dark ACCENT (#C1442C) is
  * 3.1:1 on the dark surface, too low for an 18 sp heading, so text takes the
  * kit's lighter rust there (4.69:1 on SURFACE, 5.09:1 on BG). Light equals
- * ACCENT_LIGHT. Fills, lines and the selected tab stay `colorScheme.primary`.
+ * ACCENT_LIGHT. Fills, lines and the tab indicator stay `colorScheme.primary`.
  */
 @Composable
 @ReadOnlyComposable
 fun dclAccentText(): Color =
     Color(if (LocalDclDark.current) DclPalette.ACCENT_TEXT else DclPalette.ACCENT_TEXT_LIGHT)
+
+/*
+ * Material draws TextButton and OutlinedButton labels, and a focused text field's label, in
+ * `colorScheme.primary` -- the brand rust fill, 3.1:1 as text on the dark surface. These give
+ * that text [dclAccentText] and leave every other colour at Material's default, so `primary`
+ * stays the fill (filled buttons, checkboxes, the tab indicator, cursors).
+ */
+
+@Composable
+fun dclTextButtonColors(): ButtonColors = ButtonDefaults.textButtonColors(contentColor = dclAccentText())
+
+@Composable
+fun dclOutlinedButtonColors(): ButtonColors = ButtonDefaults.outlinedButtonColors(contentColor = dclAccentText())
+
+@Composable
+fun dclTextFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(focusedLabelColor = dclAccentText())
 
 /** Whether the app is currently drawing dark, after the person's choice. */
 val LocalDclDark = staticCompositionLocalOf { true }

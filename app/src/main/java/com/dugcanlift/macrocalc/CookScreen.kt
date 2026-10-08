@@ -2,6 +2,9 @@ package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.layout.Arrangement
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextFieldColors
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -175,7 +178,7 @@ private fun RecipesSection(repo: RecipeRepository, contentWidth: Float) {
         // module does not generate.
         if (isDebuggable(LocalContext.current)) {
             Spacer(modifier = Modifier.height(24.dp))
-            TextButton(onClick = { scope.launch { CookSampleData.load(repo) } }) {
+            TextButton(onClick = { scope.launch { CookSampleData.load(repo) } }, colors = dclTextButtonColors()) {
                 Text("Load sample recipes", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -292,14 +295,15 @@ private fun RecipeEditorDialog(
                 // still refuses to weigh a volume.
                 if (existing == null) {
                     if (!pasting) {
-                        TextButton(onClick = { pasting = true }) { Text("Paste a recipe") }
+                        TextButton(onClick = { pasting = true }, colors = dclTextButtonColors()) { Text("Paste a recipe") }
                     } else {
                         OutlinedTextField(
                             value = pasteText,
                             onValueChange = { pasteText = it },
                             label = { Text("Paste the recipe's text") },
                             placeholder = { Text("Ingredients:\n- 2 eggs\n\nMethod:\n1. Whisk") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = dclTextFieldColors()
                         )
                         Row {
                             TextButton(
@@ -332,9 +336,10 @@ private fun RecipeEditorDialog(
                                         pasting = false
                                         pasteText = ""
                                     }
-                                }
+                                },
+                                colors = dclTextButtonColors()
                             ) { Text("Read it") }
-                            TextButton(onClick = { pasting = false; pasteText = "" }) { Text("Cancel") }
+                            TextButton(onClick = { pasting = false; pasteText = "" }, colors = dclTextButtonColors()) { Text("Cancel") }
                         }
                     }
                     splitAdvice?.let {
@@ -348,7 +353,8 @@ private fun RecipeEditorDialog(
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dclTextFieldColors()
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -373,7 +379,8 @@ private fun RecipeEditorDialog(
                     onValueChange = { ingredientText = it },
                     label = { Text("Ingredients, one per line") },
                     placeholder = { Text("2 tbsp olive oil") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dclTextFieldColors()
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -381,7 +388,8 @@ private fun RecipeEditorDialog(
                     value = stepText,
                     onValueChange = { stepText = it },
                     label = { Text("Method, one step per line") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dclTextFieldColors()
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -426,7 +434,8 @@ private fun RecipeEditorDialog(
                             scope.launch { repo.deleteRecipe(existing.id) }
                             onDismiss()
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = dclOutlinedButtonColors()
                     ) {
                         Text("Delete recipe")
                     }
@@ -452,10 +461,11 @@ private fun RecipeEditorDialog(
                         if (existing == null) repo.addRecipe(recipe) else repo.updateRecipe(recipe)
                     }
                     onDismiss()
-                }
+                },
+                colors = dclTextButtonColors()
             ) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Cancel") } }
     )
 }
 
@@ -609,7 +619,8 @@ private fun PlanDayCard(
                     if (forSlot.isEmpty()) {
                         TextButton(
                             onClick = { onAdd(meal) },
-                            enabled = canAdd
+                            enabled = canAdd,
+                            colors = dclTextButtonColors()
                         ) { Text("Add") }
                     } else {
                         Column(modifier = slotModifier) {
@@ -676,9 +687,9 @@ private fun PlannedRow(
                 planned.isLogged ->
                     Text("Logged", style = MaterialTheme.typography.bodySmall)
                 planned.snapshotNutrition != null ->
-                    TextButton(onClick = onLog) { Text("Log it", maxLines = 1) }
+                    TextButton(onClick = onLog, colors = dclTextButtonColors()) { Text("Log it", maxLines = 1) }
             }
-            TextButton(onClick = onRemove) { Text("Remove", maxLines = 1) }
+            TextButton(onClick = onRemove, colors = dclTextButtonColors()) { Text("Remove", maxLines = 1) }
         }
         if (narrow) {
             // One above the other: side by side they need more than a week's column has.
@@ -726,7 +737,8 @@ private fun RecipePickerDialog(
                                 onPick(recipe, multiplier, null)
                             }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = dclTextButtonColors()
                     ) {
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Text(recipe.name, modifier = Modifier.weight(1f))
@@ -739,7 +751,7 @@ private fun RecipePickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Cancel") } }
     )
 
     amountRecipe?.let { recipe ->
@@ -809,10 +821,11 @@ private fun RecipeAmountEntryDialog(
         confirmButton = {
             TextButton(
                 onClick = { grams?.let { onConfirm(it) } },
-                enabled = valid
+                enabled = valid,
+                colors = dclTextButtonColors()
             ) { Text("Confirm") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Cancel") } }
     )
 }
 
@@ -870,7 +883,7 @@ private fun ShoppingSection(repo: RecipeRepository, contentWidth: Float) {
 
         if (checked.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
-            TextButton(onClick = { scope.launch { repo.clearChecked() } }) {
+            TextButton(onClick = { scope.launch { repo.clearChecked() } }, colors = dclTextButtonColors()) {
                 Text("Clear ticks")
             }
         }

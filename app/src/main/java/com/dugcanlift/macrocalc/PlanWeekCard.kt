@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.PlanLog
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 
 /**
  * What you were asked to do, and what you did — a coach's week beside the log that answers it.
@@ -103,7 +104,7 @@ fun PlanWeekCard(
                 // An arrow's name is its glyph unless it is given one, and `‹` is a quotation
                 // mark. `enabled` carries "disabled" on its own; what it cannot carry is which
                 // arrow this is.
-                TextButton(onClick = { previousWeek?.let(onStepWeek) }, enabled = previousWeek != null) {
+                TextButton(onClick = { previousWeek?.let(onStepWeek) }, enabled = previousWeek != null, colors = dclTextButtonColors()) {
                     Text("‹", modifier = Modifier.saidAs("Previous booked week"))
                 }
                 Text(
@@ -112,7 +113,7 @@ fun PlanWeekCard(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f).saidAs(week.spokenHead)
                 )
-                TextButton(onClick = { nextWeek?.let(onStepWeek) }, enabled = nextWeek != null) {
+                TextButton(onClick = { nextWeek?.let(onStepWeek) }, enabled = nextWeek != null, colors = dclTextButtonColors()) {
                     Text("›", modifier = Modifier.saidAs("Next booked week"))
                 }
             }

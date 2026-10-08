@@ -36,6 +36,7 @@ import com.dugcanlift.macrocalc.data.LibraryExercise
 import com.dugcanlift.macrocalc.data.LoggedExercise
 import com.dugcanlift.macrocalc.data.searchExerciseLibrary
 import com.dugcanlift.macrocalc.data.titleCaseAscii
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
 
 /**
  * Picking an exercise: search over the bundled 873, or type one that isn't
@@ -187,7 +188,7 @@ fun ExercisePickerPanel(
         ) {
             Text("Add as typed")
         }
-        OutlinedButton(onClick = onCancel) { Text("Cancel") }
+        OutlinedButton(onClick = onCancel, colors = dclOutlinedButtonColors()) { Text("Cancel") }
     }
 }
 

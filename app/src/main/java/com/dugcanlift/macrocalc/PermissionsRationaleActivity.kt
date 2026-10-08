@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.ui.theme.DugCanLiftCalcTheme
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 
 /**
  * Health Connect requires an activity that responds to
@@ -76,7 +77,7 @@ private fun RationaleFallback(onClose: () -> Unit) {
                 Text(PermissionsRationaleActivity.PRIVACY_POLICY_URL, style = MaterialTheme.typography.bodyLarge)
             }
             Spacer(Modifier.height(16.dp))
-            TextButton(onClick = onClose) { Text("Close") }
+            TextButton(onClick = onClose, colors = dclTextButtonColors()) { Text("Close") }
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -141,7 +142,8 @@ fun OutdoorReviewScreen(
                             onDiscard()
                         }
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = dclTextButtonColors()
                 ) {
                     Text("Discard")
                 }

@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.*
 import com.dugcanlift.kit.PlanDecodeResult
 import kotlinx.coroutines.launch
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 
 @Composable
 fun PlanPreviewDialog(
@@ -41,17 +42,18 @@ fun PlanPreviewDialog(
                                     importing = false
                                 }
                             }
-                        }
+                        },
+                        colors = dclTextButtonColors()
                     ) { Text("Accept") }
                 } else {
-                    TextButton(onClick = onDismiss) { Text("Done") }
+                    TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Done") }
                 }
-                else -> TextButton(onClick = onDismiss) { Text("OK") }
+                else -> TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("OK") }
             }
         },
         dismissButton = {
             if (result is PlanDecodeResult.Success && importResult == null) {
-                TextButton(onClick = onDismiss) { Text("Decline") }
+                TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Decline") }
             }
         }
     )

@@ -2,6 +2,8 @@ package com.dugcanlift.macrocalc
 
 import android.Manifest
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -246,7 +248,7 @@ fun OutdoorRecordingScreen(
                     Text(text = message, style = MaterialTheme.typography.bodyMedium)
                     if (statusNeedsSettings) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = { openAppLocationSettings(context) }) {
+                        TextButton(onClick = { openAppLocationSettings(context) }, colors = dclTextButtonColors()) {
                             Text("Open Settings")
                         }
                     }
@@ -263,7 +265,8 @@ fun OutdoorRecordingScreen(
                         tracker.stop()
                         onDiscard()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = dclOutlinedButtonColors()
                 ) {
                     Text("Cancel")
                 }
