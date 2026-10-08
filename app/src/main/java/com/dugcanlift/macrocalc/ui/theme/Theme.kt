@@ -87,6 +87,17 @@ private object DclError {
 fun dclAccentText(): Color =
     Color(if (LocalDclDark.current) DclPalette.ACCENT_TEXT else DclPalette.ACCENT_TEXT_LIGHT)
 
+/**
+ * The sage for text: the kit's ACCENT2_TEXT. Dark ACCENT2 (#7C8B7A) is 4.4:1 on
+ * the dark surface; this is #879585, 5.03:1 on SURFACE and 5.46:1 on BG. Light
+ * is ACCENT2_TEXT_LIGHT (#56664F), 6.02:1 / 5.38:1. Fills such as the goal bars
+ * stay `colorScheme.secondary`.
+ */
+@Composable
+@ReadOnlyComposable
+fun dclAccent2Text(): Color =
+    Color(if (LocalDclDark.current) DclPalette.ACCENT2_TEXT else DclPalette.ACCENT2_TEXT_LIGHT)
+
 /*
  * Material draws TextButton and OutlinedButton labels, and a focused text field's label, in
  * `colorScheme.primary` -- the brand rust fill, 3.1:1 as text on the dark surface. These give
