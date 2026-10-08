@@ -402,7 +402,7 @@ internal fun RoutePolylineCanvas(
 ) {
     val lineColor = MaterialTheme.colorScheme.primary
     val startColor = lineColor.copy(alpha = 0.5f)
-    val backgroundColor = MaterialTheme.colorScheme.surfaceVariant
+    val backgroundColor = MaterialTheme.colorScheme.surface
 
     Box(
         modifier = modifier

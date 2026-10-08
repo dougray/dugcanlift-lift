@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -102,7 +103,7 @@ fun OutdoorReviewScreen(
                 Text(
                     text = "Exported to Health Connect",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = dclAccentText()
                 )
             } else {
                 Button(

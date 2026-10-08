@@ -46,14 +46,44 @@ private fun scheme(dark: Boolean): ColorScheme {
         secondaryContainer = accent, onSecondaryContainer = onAccent,
         background = bg, onBackground = text,
         surface = surface, onSurface = text,
-        surfaceVariant = surface, onSurfaceVariant = muted,
+        // The palette's RULE, one tonal step off the card, so a progress track
+        // or a placeholder ground reads as a shape. Cards paint with
+        // surfaceContainerHighest, which stays the surface.
+        surfaceVariant = rule, onSurfaceVariant = muted,
         surfaceContainerLowest = surface, surfaceContainerLow = surface,
         surfaceContainer = surface, surfaceContainerHigh = surface,
         surfaceContainerHighest = surface,
         outline = rule, outlineVariant = rule,
-        error = accent, onError = onAccent
+        // Its own hue, not the brand rust, so a problem does not read as a heading.
+        error = Color(if (dark) DclError.DARK else DclError.LIGHT),
+        onError = if (dark) bg else onAccent
     )
 }
+
+/**
+ * Colours the kit's DclPalette does not carry yet, kept here until it does.
+ * Ratios are WCAG 2 contrast against the scheme's SURFACE (#242220 dark,
+ * #FFFCF7 light) and BG (#1C1B19 / #F4EFE7).
+ */
+private object DclError {
+    /** Raspberry, 7.3:1 on surface, 8.0:1 on bg. */
+    const val DARK = 0xFFFF8FA3L
+    /** Crimson, 7.6:1 on surface, 6.8:1 on bg. */
+    const val LIGHT = 0xFFA3123FL
+}
+
+/**
+ * The brand accent for text. Dark ACCENT (#C1442C) is 3.1:1 on the dark surface,
+ * too low for an 18 sp heading, so text takes a lighter rust there: #E06A50 is
+ * 4.8:1 on SURFACE and 5.2:1 on BG. Light keeps ACCENT_LIGHT (5.75:1), unchanged.
+ * Fills, lines and the selected tab stay `colorScheme.primary`.
+ */
+private const val ACCENT_TEXT_DARK = 0xFFE06A50L
+
+@Composable
+@ReadOnlyComposable
+fun dclAccentText(): Color =
+    if (LocalDclDark.current) Color(ACCENT_TEXT_DARK) else Color(DclPalette.ACCENT_LIGHT)
 
 /** Whether the app is currently drawing dark, after the person's choice. */
 val LocalDclDark = staticCompositionLocalOf { true }

@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.compose.foundation.background
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.layout.Arrangement
@@ -188,10 +189,10 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    DashboardBar("Protein", eaten.proteinG, goal.proteinG)
-                    DashboardBar("Fat", eaten.fatG, goal.fatG)
-                    DashboardBar("Carbs", eaten.carbsG, goal.carbsG)
-                    DashboardBar("Fiber", eaten.fiberG, goal.fiberG)
+                    GoalProgressRow("Protein", eaten.proteinG, goal.proteinG)
+                    GoalProgressRow("Fat", eaten.fatG, goal.fatG)
+                    GoalProgressRow("Carbs", eaten.carbsG, goal.carbsG)
+                    GoalProgressRow("Fiber", eaten.fiberG, goal.fiberG)
                 }
             }
         }
@@ -200,9 +201,9 @@ fun DashboardScreen(
     val stepsCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "Steps", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Text(text = "Steps", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
                 Spacer(modifier = Modifier.height(8.dp))
-                DashboardBar("Today", todaySteps.toInt(), stepGoal, unit = "steps")
+                GoalProgressRow("Today", todaySteps.toInt(), stepGoal, unit = "steps")
                 Spacer(modifier = Modifier.height(4.dp))
                 if (!hasStepsAccess && HealthConnectManager.isAvailable(context)) {
                     StepsAccessExplanation(onConnect = {
@@ -217,7 +218,7 @@ fun DashboardScreen(
     val trainingCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "Training", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Text(text = "Training", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
                 Spacer(modifier = Modifier.height(8.dp))
                 if (todaysSessions.isEmpty()) {
                     Text(
@@ -248,7 +249,7 @@ fun DashboardScreen(
     val fuelCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "Fuel so far today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Text(text = "Fuel so far today", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
                 Spacer(modifier = Modifier.height(8.dp))
                 StatRow("Calories", "${eaten.calories} kcal")
                 StatRow("Protein", "${eaten.proteinG} g")
@@ -264,7 +265,7 @@ fun DashboardScreen(
 
     val workoutsSection: @Composable () -> Unit = rememberMovablePart {
         Column {
-            Text(text = "Last 7 days workouts", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(text = "Last 7 days workouts", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -306,7 +307,7 @@ fun DashboardScreen(
 
     val progressionSection: @Composable () -> Unit = rememberMovablePart {
         Column {
-            Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(text = "Exercise progression", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
 
             // Read at composition rather than held in state: the focus is changed on
             // the Train tab, and coming back here recomposes, which is when this card
@@ -515,7 +516,7 @@ fun DashboardScreen(
 
     val fuelingSection: @Composable () -> Unit = rememberMovablePart {
         Column {
-            Text(text = "Last 7 days fueling", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(text = "Last 7 days fueling", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -594,7 +595,7 @@ fun DashboardScreen(
                 Text(
                     text = "Serving Size",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = dclAccentText()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 ChipRow(
@@ -616,7 +617,7 @@ fun DashboardScreen(
                 Text(
                     text = "Appearance",
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = dclAccentText()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 ChipRow(
@@ -668,12 +669,12 @@ fun DashboardScreen(
             Text(
                 text = "LIFT",
                 style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = dclAccentText()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text(text = "Today", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(text = "Today", style = MaterialTheme.typography.titleMedium, color = dclAccentText())
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -772,44 +773,6 @@ private fun totalSets(sessions: List<WorkoutSession>, day: String): Float? {
 }
 
 /* ---------- small pieces ---------- */
-
-@Composable
-private fun DashboardBar(name: String, eaten: Int, goal: Int, unit: String = "g") {
-    val fraction = if (goal <= 0) 0f else (eaten.toFloat() / goal).coerceIn(0f, 1f)
-    val over = goal > 0 && eaten > goal
-    val barColor =
-        if (over) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = name, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = "$eaten / $goal $unit",
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (over) barColor else MaterialTheme.colorScheme.onSurface
-            )
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(barColor)
-            )
-        }
-    }
-}
 
 @Composable
 private fun StepGoalDialog(initial: Int, onSave: (Int) -> Unit, onDismiss: () -> Unit) {

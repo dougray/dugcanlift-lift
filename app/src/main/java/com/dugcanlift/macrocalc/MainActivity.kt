@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
-import com.dugcanlift.macrocalc.ui.adaptive.AppContentInsets
+import com.dugcanlift.macrocalc.ui.adaptive.AppPageInsets
 import com.dugcanlift.macrocalc.ui.adaptive.LiftNavigationRail
 import com.dugcanlift.macrocalc.ui.adaptive.LocalWindowWidth
 import com.dugcanlift.macrocalc.ui.adaptive.ProvideWindowLayout
@@ -23,6 +23,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -88,16 +93,30 @@ class MainActivity : ComponentActivity() {
                     }
                     enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
                 }
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    ProvideWindowLayout(modifier = Modifier.fillMaxSize()) {
-                        AppTabs(
-                            modifier = Modifier.padding(innerPadding),
-                            pendingPlan = pendingPlan,
-                            onPlanDismissed = ::dismissPlan,
-                            // Accepted: the dialog stays up to say so, but the link is answered.
-                            onPlanImported = planLinks::answered,
-                            openTab = pendingOpenTab
-                        )
+                // One snackbar host for the whole app (undo after a delete, backup
+                // results), and a scope that outlives any one tab -- see AppFeedback.
+                val snackbarHostState = remember { SnackbarHostState() }
+                val appScope = rememberCoroutineScope()
+                val feedback = remember(snackbarHostState, appScope) { AppFeedback(snackbarHostState, appScope) }
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    // The keyboard is part of the insets (AppPageInsets), so the page
+                    // shrinks above it instead of drawing under it.
+                    contentWindowInsets = AppPageInsets
+                ) { innerPadding ->
+                    CompositionLocalProvider(LocalAppFeedback provides feedback) {
+                        ProvideWindowLayout(modifier = Modifier.fillMaxSize()) {
+                            AppTabs(
+                                // Consumed once applied, so nothing below pads by the same insets again.
+                                modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding),
+                                pendingPlan = pendingPlan,
+                                onPlanDismissed = ::dismissPlan,
+                                // Accepted: the dialog stays up to say so, but the link is answered.
+                                onPlanImported = planLinks::answered,
+                                openTab = pendingOpenTab
+                            )
+                        }
                     }
                 }
             }
@@ -179,6 +198,10 @@ private fun AppTabs(
 
     BackHandler(enabled = showCalculator) { showCalculator = false }
 
+    // Back from Food, Cook or Train goes Home, and only Back on Home leaves the app. Registered
+    // before every screen's own handlers, so an open panel or a recording still closes first.
+    BackHandler(enabled = !showCalculator && selectedTab != 0) { selectedTab = 0 }
+
     pendingPlan.value?.let { result ->
         PlanPreviewDialog(result = result, onDismiss = onPlanDismissed, onImported = onPlanImported)
     }
@@ -205,7 +228,7 @@ private fun AppTabs(
         val page = Modifier.weight(1f).fillMaxHeight().then(
             if (useRail) {
                 Modifier.windowInsetsPadding(
-                    AppContentInsets.only(WindowInsetsSides.Top + WindowInsetsSides.End + WindowInsetsSides.Bottom)
+                    AppPageInsets.only(WindowInsetsSides.Top + WindowInsetsSides.End + WindowInsetsSides.Bottom)
                 )
             } else {
                 Modifier

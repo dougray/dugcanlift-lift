@@ -1,6 +1,6 @@
 package com.dugcanlift.macrocalc
 
-import android.widget.Toast
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.health.connect.client.PermissionController
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
@@ -61,6 +61,8 @@ fun CoachCard(
 
     var editing by remember { mutableStateOf(!store.isConfigured) }
     var email by remember { mutableStateOf(store.email) }
+    var emailError by remember { mutableStateOf(false) }
+    val feedback = LocalAppFeedback.current
     var name by remember { mutableStateOf(store.lifterName) }
     var weeks by remember { mutableStateOf(store.weeks) }
     var itemised by remember { mutableStateOf(store.itemisedFood) }
@@ -108,7 +110,7 @@ fun CoachCard(
             Text(
                 text = "Coach",
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = dclAccentText()
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -132,10 +134,19 @@ fun CoachCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = {
+                        email = it
+                        emailError = false
+                    },
                     label = { Text("Coach's email") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    // Said beside the field, and kept until it is edited, rather than a
+                    // two-second toast somewhere else on the screen.
+                    isError = emailError,
+                    supportingText = if (emailError) {
+                        { Text("That doesn't look like an email address. Check it has an @ and a dot.") }
+                    } else null,
                     modifier = Modifier.fillMaxWidth()
                 )
                 // Steps come from Health Connect, and Health Connect data goes to
@@ -187,9 +198,7 @@ fun CoachCard(
                     onClick = {
                         val trimmed = email.trim()
                         if (!trimmed.contains("@") || !trimmed.contains(".")) {
-                            Toast.makeText(
-                                context, "That doesn't look like an email address.", Toast.LENGTH_SHORT
-                            ).show()
+                            emailError = true
                             return@Button
                         }
                         store.email = trimmed
@@ -312,11 +321,7 @@ fun CoachCard(
                             context, store, settings, goal, sessions, entries, steps, outdoor
                         )
                         if (!opened) {
-                            Toast.makeText(
-                                context,
-                                "No email app is set up on this phone.",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            feedback.show("No email app is set up on this phone.", long = true)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()

@@ -513,6 +513,7 @@ private fun PlanSection(repo: RecipeRepository, contentWidth: Float) {
     val context = LocalContext.current
     val foodRepo = remember { FoodRepository.get(context) }
     val scope = rememberCoroutineScope()
+    val feedback = LocalAppFeedback.current
 
     val recipes by repo.recipes.collectAsState()
     val plan by repo.plan.collectAsState()
@@ -549,7 +550,10 @@ private fun PlanSection(repo: RecipeRepository, contentWidth: Float) {
                         repo.markLogged(planned.id, entry.id)
                     }
                 },
-                onRemove = { planned -> scope.launch { repo.unplan(planned.id) } }
+                onRemove = { planned ->
+                    scope.launch { repo.unplan(planned.id) }
+                    feedback.showUndo("Removed ${planned.recipeName}") { repo.restorePlanned(planned) }
+                }
             )
         }
         if (columns == 1) {

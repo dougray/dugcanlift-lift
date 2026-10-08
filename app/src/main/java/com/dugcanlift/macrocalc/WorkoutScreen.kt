@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.activity.compose.BackHandler
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.clickable
@@ -79,7 +80,11 @@ import com.dugcanlift.macrocalc.data.sessionsForDate
 import com.dugcanlift.macrocalc.data.toRoutine
 import com.dugcanlift.macrocalc.data.toSession
 import com.dugcanlift.macrocalc.data.todayKey
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.focus.onFocusChanged
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -102,6 +107,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val recipeRepo = remember { RecipeRepository.get(context) }
     val tracker = remember { LocationTracker.get(context) }
     val scope = rememberCoroutineScope()
+    val feedback = LocalAppFeedback.current
 
     LaunchedEffect(Unit) {
         workouts.load()
@@ -482,7 +488,23 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 logsPerSide = { matchKey -> settings.logsPerSide(matchKey) },
                 onLogsPerSideChange = { matchKey, value -> settings.setLogsPerSide(matchKey, value) },
                 onChange = { scope.launch { workouts.save(it) } },
+                // Never brings back a workout that was deleted while its name was pending.
+                onSaveNow = { pending ->
+                    if (workouts.sessions.value.any { it.id == pending.id }) workouts.save(pending)
+                },
                 onDelete = { scope.launch { workouts.delete(session.id) } },
+                // Removed at once and offered back. Undo puts it back where it was in
+                // whatever the session is by then, and only if it is not already there.
+                onExerciseRemoved = { exercise, index ->
+                    feedback.showUndo("Removed ${exercise.displayName}") {
+                        val current = workouts.sessions.value.firstOrNull { it.id == session.id }
+                            ?: return@showUndo
+                        if (current.exercises.any { it.id == exercise.id }) return@showUndo
+                        val restored = current.exercises.toMutableList()
+                        restored.add(index.coerceIn(0, restored.size), exercise)
+                        workouts.save(current.copy(exercises = restored))
+                    }
+                },
                 onSaveAsRoutine = { name, folder ->
                     scope.launch { routineRepo.save(session.toRoutine(name, folder)) }
                 }
@@ -567,6 +589,8 @@ private fun RoutineCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth()
 ) {
+    var confirmingDelete by rememberSaveable(routine.id) { mutableStateOf(false) }
+
     Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
@@ -581,9 +605,27 @@ private fun RoutineCard(
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onStart) { Text("Start routine") }
-                TextButton(onClick = onDelete) { Text("Delete") }
+                TextButton(onClick = { confirmingDelete = true }) { Text("Delete") }
             }
         }
+    }
+
+    // A routine can be a coach's whole prescription, so it is asked about, not undone.
+    if (confirmingDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text("Delete ${routine.name}?") },
+            text = { Text("The routine is removed from this phone. Workouts already logged from it stay.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingDelete = false
+                    onDelete()
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }) { Text("Keep") }
+            }
+        )
     }
 }
 
@@ -612,7 +654,7 @@ private fun OutdoorHighlights(
         Card(modifier = cardModifier, border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Personal bests", style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary)
+                    color = dclAccentText())
                 Spacer(modifier = Modifier.height(8.dp))
                 if (bests.isEmpty()) {
                     Text(
@@ -645,7 +687,7 @@ private fun OutdoorHighlights(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Last route", style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary)
+                    color = dclAccentText())
                 Spacer(modifier = Modifier.height(12.dp))
                 RoutePolylineCanvas(
                     routePoints = last.routePoints,
@@ -748,7 +790,10 @@ private fun SessionCard(
     logsPerSide: (String) -> Boolean,
     onLogsPerSideChange: (String, Boolean) -> Unit,
     onChange: (WorkoutSession) -> Unit,
+    /** Saves straight away, outside any screen scope: the name's last edit as the card goes. */
+    onSaveNow: suspend (WorkoutSession) -> Unit,
     onDelete: () -> Unit,
+    onExerciseRemoved: (LoggedExercise, index: Int) -> Unit,
     onSaveAsRoutine: (String, String) -> Unit
 ) {
     var addingExercise by rememberSaveable(session.id) { mutableStateOf(false) }
@@ -756,13 +801,49 @@ private fun SessionCard(
     var savingRoutine by rememberSaveable(session.id) { mutableStateOf(false) }
     var routineName by rememberSaveable(session.id) { mutableStateOf("") }
     var routineFolder by rememberSaveable(session.id) { mutableStateOf("") }
+    var confirmingDelete by rememberSaveable(session.id) { mutableStateOf(false) }
+
+    // The name is typed into local state and saved once typing pauses, or when the field
+    // loses focus, or when the card leaves the screen. Saving every keystroke rewrote the
+    // whole log file per character, and a slow write landing after a fast one could put
+    // back letters already deleted.
+    var nameText by rememberSaveable(session.id) { mutableStateOf(session.name) }
+    var nameFocused by remember { mutableStateOf(false) }
+    val latestSession by rememberUpdatedState(session)
+    val latestOnChange by rememberUpdatedState(onChange)
+    val feedback = LocalAppFeedback.current
+    // A name changed from elsewhere (a restore) is taken up while nobody is typing here.
+    LaunchedEffect(session.name) {
+        if (!nameFocused && session.name != nameText) nameText = session.name
+    }
+    LaunchedEffect(nameText) {
+        if (nameText == latestSession.name) return@LaunchedEffect
+        delay(NAME_SAVE_DEBOUNCE_MS)
+        latestOnChange(latestSession.copy(name = nameText))
+    }
+    DisposableEffect(session.id) {
+        onDispose {
+            // The screen's scope is going too, so the last few letters go out in the app's.
+            val pending = latestSession.takeIf { it.name != nameText }?.copy(name = nameText)
+            if (pending != null) feedback.scope.launch { onSaveNow(pending) }
+        }
+    }
+    // Every other change to the session carries the name as typed, so an edit to a set
+    // made inside the debounce window does not save the old name back over it.
+    val commit: (WorkoutSession) -> Unit = { updated -> onChange(updated.copy(name = nameText)) }
 
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
             NameField(
-                value = session.name,
-                onValueChange = { onChange(session.copy(name = it)) },
-                label = "Workout name"
+                value = nameText,
+                onValueChange = { nameText = it },
+                label = "Workout name",
+                modifier = Modifier.onFocusChanged { state ->
+                    if (nameFocused && !state.isFocused && nameText != latestSession.name) {
+                        latestOnChange(latestSession.copy(name = nameText))
+                    }
+                    nameFocused = state.isFocused
+                }
             )
 
             if (session.setCount > 0) {
@@ -785,7 +866,7 @@ private fun SessionCard(
                     logsPerSide = logsPerSide,
                     onLogsPerSideChange = onLogsPerSideChange,
                     onChange = { updated ->
-                        onChange(
+                        commit(
                             session.copy(
                                 exercises = session.exercises.map {
                                     if (it.id == updated.id) updated else it
@@ -794,11 +875,13 @@ private fun SessionCard(
                         )
                     },
                     onRemove = {
-                        onChange(
+                        val index = session.exercises.indexOfFirst { it.id == exercise.id }
+                        commit(
                             session.copy(
                                 exercises = session.exercises.filterNot { it.id == exercise.id }
                             )
                         )
+                        onExerciseRemoved(exercise, index)
                     }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -809,7 +892,7 @@ private fun SessionCard(
                     known = known,
                     equipmentOptions = equipmentOptions,
                     onAdd = { name, equipment ->
-                        onChange(
+                        commit(
                             session.copy(
                                 exercises = session.exercises + LoggedExercise(
                                     name = name.trim(),
@@ -853,7 +936,7 @@ private fun SessionCard(
                     OutlinedButton(onClick = { addingExercise = true }) { Text("Add exercise") }
                     if (session.exercises.isNotEmpty()) {
                         OutlinedButton(onClick = {
-                            routineName = session.name
+                            routineName = nameText
                             savingRoutine = true
                         }) {
                             Text("Save as routine")
@@ -861,11 +944,41 @@ private fun SessionCard(
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                TextButton(onClick = onDelete) { Text("Delete workout") }
+                TextButton(onClick = { confirmingDelete = true }) { Text("Delete workout") }
             }
         }
     }
+
+    // Every set in it goes, and the only other copy is a backup file someone may never
+    // have saved: asked, not undone.
+    if (confirmingDelete) {
+        val label = nameText.trim().ifEmpty { "this workout" }
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text("Delete $label?") },
+            text = {
+                Text(
+                    if (session.setCount == 1) "Its 1 logged set goes with it."
+                    else "All ${session.setCount} logged sets go with it."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingDelete = false
+                    // Nothing pending, so the card going away has no name left to save.
+                    nameText = session.name
+                    onDelete()
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }) { Text("Keep") }
+            }
+        )
+    }
 }
+
+/** How long the workout name waits after the last keystroke before it is saved. */
+private const val NAME_SAVE_DEBOUNCE_MS = 500L
 
 @Composable
 private fun ExerciseBlock(

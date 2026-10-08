@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.io.File
@@ -17,6 +19,13 @@ import java.util.Locale
  */
 class WorkoutRepository private constructor(context: Context) {
 
+    /**
+     * Serialises each read-modify-write below. `read()` and `write()` are each
+     * synchronized, but two saves in flight could read the same file and the
+     * slower one write last, losing the other's change.
+     */
+    private val writeLock = Mutex()
+
     private val file = File(context.applicationContext.filesDir, FILE_NAME)
 
     private val _sessions = MutableStateFlow<List<WorkoutSession>>(emptyList())
@@ -27,25 +36,31 @@ class WorkoutRepository private constructor(context: Context) {
     }
 
     suspend fun save(session: WorkoutSession) = withContext(Dispatchers.IO) {
-        val existing = read()
-        val updated = if (existing.any { it.id == session.id }) {
-            existing.map { if (it.id == session.id) session else it }
-        } else {
-            existing + session
+        writeLock.withLock {
+            val existing = read()
+            val updated = if (existing.any { it.id == session.id }) {
+                existing.map { if (it.id == session.id) session else it }
+            } else {
+                existing + session
+            }
+            write(updated)
+            _sessions.value = updated
         }
-        write(updated)
-        _sessions.value = updated
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        val updated = read().filterNot { it.id == id }
-        write(updated)
-        _sessions.value = updated
+        writeLock.withLock {
+            val updated = read().filterNot { it.id == id }
+            write(updated)
+            _sessions.value = updated
+        }
     }
 
     suspend fun clear() = withContext(Dispatchers.IO) {
-        write(emptyList())
-        _sessions.value = emptyList()
+        writeLock.withLock {
+            write(emptyList())
+            _sessions.value = emptyList()
+        }
     }
 
     /**
