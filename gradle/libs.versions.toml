@@ -11,7 +11,7 @@ kotlin = "2.4.20"
 composeBom = "2026.09.00"
 healthConnect = "1.1.0"
 # Not used directly: pins what Health Connect pulls in. See app/build.gradle.kts constraints.
-guava = "33.7.1-android"
+guava = "33.7.2-android"
 json = "20260814"
 robolectric = "4.17"
 androidxTestCore = "1.7.0"
