@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import com.dugcanlift.kit.DclPalette
 import com.dugcanlift.macrocalc.ui.theme.LocalDclDark
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -205,20 +206,21 @@ private fun chartNumber(value: Float): String =
  * Chart line colours, one set per scheme. Every line is at least 3:1 against
  * the card it is drawn on (WCAG non-text contrast), measured on SURFACE:
  *
- * - Dark (#242220): rust #E06A50 4.8, sage #7C8B7A 4.4, blue #5B8DB8 4.5,
- *   gold #D9A441 7.1, violet #8E7CC3 4.4. The rust is the accent-text rust;
- *   the brand ACCENT itself is 3.1.
+ * - Dark (#242220): rust #E0674D 4.7, sage #7C8B7A 4.4, blue #5B8DB8 4.5,
+ *   gold #D9A441 7.1, violet #8E7CC3 4.4. Rust is the kit's ACCENT_TEXT and sage
+ *   its ACCENT2; the brand ACCENT itself is 3.1.
  * - Light (#FFFCF7): rust #B23C25 5.8, sage #56664F 6.0, blue #3F6E96 5.3,
  *   ochre #8C6418 5.2, violet #6B58A8 5.7. The dark set fell to 2.2 (gold) and
- *   about 3.5 (the rest) on parchment.
+ *   about 3.5 (the rest) on parchment. Rust and sage are ACCENT_TEXT_LIGHT and
+ *   ACCENT2_LIGHT; blue, gold/ochre and violet have no kit token yet.
  */
 object ChartColors {
     private fun pick(dark: Long, light: Long): @Composable () -> Color = {
         Color(if (LocalDclDark.current) dark else light)
     }
 
-    private val rust = pick(0xFFE06A50, 0xFFB23C25)
-    private val sage = pick(0xFF7C8B7A, 0xFF56664F)
+    private val rust = pick(DclPalette.ACCENT_TEXT, DclPalette.ACCENT_TEXT_LIGHT)
+    private val sage = pick(DclPalette.ACCENT2, DclPalette.ACCENT2_LIGHT)
     private val blue = pick(0xFF5B8DB8, 0xFF3F6E96)
     private val gold = pick(0xFFD9A441, 0xFF8C6418)
     private val violet = pick(0xFF8E7CC3, 0xFF6B58A8)

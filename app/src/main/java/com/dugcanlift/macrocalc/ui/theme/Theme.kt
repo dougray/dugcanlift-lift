@@ -73,17 +73,15 @@ private object DclError {
 }
 
 /**
- * The brand accent for text. Dark ACCENT (#C1442C) is 3.1:1 on the dark surface,
- * too low for an 18 sp heading, so text takes a lighter rust there: #E06A50 is
- * 4.8:1 on SURFACE and 5.2:1 on BG. Light keeps ACCENT_LIGHT (5.75:1), unchanged.
- * Fills, lines and the selected tab stay `colorScheme.primary`.
+ * The brand accent for text: the kit's ACCENT_TEXT. Dark ACCENT (#C1442C) is
+ * 3.1:1 on the dark surface, too low for an 18 sp heading, so text takes the
+ * kit's lighter rust there (4.69:1 on SURFACE, 5.09:1 on BG). Light equals
+ * ACCENT_LIGHT. Fills, lines and the selected tab stay `colorScheme.primary`.
  */
-private const val ACCENT_TEXT_DARK = 0xFFE06A50L
-
 @Composable
 @ReadOnlyComposable
 fun dclAccentText(): Color =
-    if (LocalDclDark.current) Color(ACCENT_TEXT_DARK) else Color(DclPalette.ACCENT_LIGHT)
+    Color(if (LocalDclDark.current) DclPalette.ACCENT_TEXT else DclPalette.ACCENT_TEXT_LIGHT)
 
 /** Whether the app is currently drawing dark, after the person's choice. */
 val LocalDclDark = staticCompositionLocalOf { true }
@@ -95,7 +93,7 @@ val LocalDclDark = staticCompositionLocalOf { true }
 @Composable
 @ReadOnlyComposable
 fun dclCardBorder(): BorderStroke? =
-    if (LocalDclDark.current) null else BorderStroke(1.dp, Color(DclPalette.RULE_LIGHT))
+    if (LocalDclDark.current) null else BorderStroke(1.dp, Color(DclPalette.CARD_BORDER_LIGHT))
 
 @Composable
 fun DugCanLiftCalcTheme(
