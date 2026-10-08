@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
@@ -349,7 +350,7 @@ private fun Picker(
 @Composable
 private fun SectionHeading(text: String) {
     Spacer(modifier = Modifier.height(8.dp))
-    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Text(text, style = MaterialTheme.typography.titleMedium, color = dclAccentText())
     Spacer(modifier = Modifier.height(8.dp))
 }
 

@@ -1,5 +1,9 @@
 package com.dugcanlift.macrocalc
 
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -197,13 +201,17 @@ private fun ExerciseResultRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
+            .semantics { if (logged) stateDescription = "Logged before" }
             .padding(vertical = 8.dp)
     ) {
         Text(
             // The clock face the iPhone app puts on a lift you have done
-            // before, in the one glyph that needs no legend.
+            // before, in the one glyph that needs no legend -- to the eye.
+            // TalkBack read it as "stopwatch", so it hears the name and the
+            // row's state, "Logged before", instead.
             text = if (logged) "${hit.name}  ⏱" else hit.name,
-            style = MaterialTheme.typography.bodyLarge
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.clearAndSetSemantics { contentDescription = hit.name }
         )
         Text(
             text = hit.detailLabel,

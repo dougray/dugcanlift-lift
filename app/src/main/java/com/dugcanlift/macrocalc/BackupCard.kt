@@ -1,6 +1,5 @@
 package com.dugcanlift.macrocalc
 
-import android.widget.Toast
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +33,9 @@ import com.dugcanlift.macrocalc.data.todayKey
 @Composable
 fun BackupCard(onRestored: () -> Unit = {}) {
     val context = LocalContext.current
+    // Results go to the app's snackbar, which TalkBack announces and which stays
+    // up long enough to read a sentence; a restore's outcome is one.
+    val feedback = LocalAppFeedback.current
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -44,11 +46,10 @@ fun BackupCard(onRestored: () -> Unit = {}) {
                 stream.write(BackupStore.build(context).toByteArray())
             } ?: error("could not open that location")
         }
-        Toast.makeText(
-            context,
+        feedback.show(
             if (result.isSuccess) "Backup saved." else "Could not save the backup.",
-            Toast.LENGTH_LONG
-        ).show()
+            long = result.isFailure
+        )
     }
 
     val loadLauncher = rememberLauncherForActivityResult(
@@ -60,7 +61,7 @@ fun BackupCard(onRestored: () -> Unit = {}) {
         }.getOrNull()
 
         if (text == null) {
-            Toast.makeText(context, "Could not read that file.", Toast.LENGTH_LONG).show()
+            feedback.show("Could not read that file.", long = true)
             return@rememberLauncherForActivityResult
         }
 
@@ -71,7 +72,7 @@ fun BackupCard(onRestored: () -> Unit = {}) {
             outcome.added == 1 -> "Restored. Added 1 entry this phone didn't have."
             else -> "Restored. Added ${outcome.added} entries this phone didn't have."
         }
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        feedback.show(message, long = true)
         // The goal and coach details are held in screen state read once at
         // launch; without this the dashboard kept saying "No goal set yet"
         // after a restore that had just set one, until the app restarted.

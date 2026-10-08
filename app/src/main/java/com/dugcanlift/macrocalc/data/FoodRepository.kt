@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.io.File
@@ -18,6 +20,13 @@ import java.io.File
  */
 class FoodRepository private constructor(context: Context) {
 
+    /**
+     * Serialises each read-modify-write below. `read()` and `write()` are each
+     * synchronized, but two saves in flight could read the same file and the
+     * slower one write last, losing the other's change.
+     */
+    private val writeLock = Mutex()
+
     private val file = File(context.applicationContext.filesDir, FILE_NAME)
 
     private val _entries = MutableStateFlow<List<FoodEntry>>(emptyList())
@@ -29,27 +38,35 @@ class FoodRepository private constructor(context: Context) {
     }
 
     suspend fun add(entry: FoodEntry) = withContext(Dispatchers.IO) {
-        val updated = read() + entry
-        write(updated)
-        _entries.value = updated
+        writeLock.withLock {
+            val updated = read() + entry
+            write(updated)
+            _entries.value = updated
+        }
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        val updated = read().filterNot { it.id == id }
-        write(updated)
-        _entries.value = updated
+        writeLock.withLock {
+            val updated = read().filterNot { it.id == id }
+            write(updated)
+            _entries.value = updated
+        }
     }
 
     suspend fun update(entry: FoodEntry) = withContext(Dispatchers.IO) {
-        val updated = read().map { if (it.id == entry.id) entry else it }
-        write(updated)
-        _entries.value = updated
+        writeLock.withLock {
+            val updated = read().map { if (it.id == entry.id) entry else it }
+            write(updated)
+            _entries.value = updated
+        }
     }
 
     /** Wipes the log. Used by a "clear my data" action. */
     suspend fun clear() = withContext(Dispatchers.IO) {
-        write(emptyList())
-        _entries.value = emptyList()
+        writeLock.withLock {
+            write(emptyList())
+            _entries.value = emptyList()
+        }
     }
 
     /**

@@ -1,6 +1,11 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.clickable
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import androidx.compose.foundation.horizontalScroll
@@ -75,6 +80,7 @@ fun TodayScreen(
     val context = LocalContext.current
     val repo = remember { FoodRepository.get(context) }
     val scope = rememberCoroutineScope()
+    val feedback = LocalAppFeedback.current
 
     LaunchedEffect(Unit) { repo.load() }
 
@@ -105,6 +111,14 @@ fun TodayScreen(
     var prefill by remember { mutableStateOf<FoodEntry?>(null) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     val editing = editingId?.let { id -> allEntries.firstOrNull { it.id == id } }
+
+    // Back closes an open add, search or edit panel, the way its Cancel does, rather than
+    // leaving Food (and, before Back went Home, the app) with the form's contents in it.
+    BackHandler(enabled = panel != Panel.NONE && !showRoadFood) {
+        panel = Panel.NONE
+        prefill = null
+        editingId = null
+    }
 
     // Each part once, placed by width: one column exactly as on the phone, or the day's totals and
     // the add/edit forms beside the meal list once two phone-width panes fit (ui/adaptive).
@@ -251,7 +265,7 @@ fun TodayScreen(
                     Text(
                         text = meal.label,
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+                        color = dclAccentText()
                     )
                     Text(
                         text = "$mealCalories kcal",
@@ -273,7 +287,10 @@ fun TodayScreen(
                                 editingId = null
                                 panel = Panel.NONE
                             }
+                            // Removed now, offered back for the snackbar's lifetime. Undo
+                            // puts the same entry back -- same id, meal and time logged.
                             scope.launch { repo.delete(entry.id) }
+                            feedback.showUndo("Deleted ${entry.name}") { repo.add(entry) }
                         }
                     )
                 }
@@ -378,55 +395,15 @@ private fun SummaryCard(goal: MacroResult, remaining: Remaining, detailRows: Lis
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            MacroProgress("Protein", eaten.proteinG, goal.proteinG)
-            MacroProgress("Fat", eaten.fatG, goal.fatG)
-            MacroProgress("Carbs", eaten.carbsG, goal.carbsG)
-            MacroProgress("Fiber", eaten.fiberG, goal.fiberG)
+            GoalProgressRow("Protein", eaten.proteinG, goal.proteinG)
+            GoalProgressRow("Fat", eaten.fatG, goal.fatG)
+            GoalProgressRow("Carbs", eaten.carbsG, goal.carbsG)
+            GoalProgressRow("Fiber", eaten.fiberG, goal.fiberG)
 
             if (detailRows.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 NutrientDetailRows(detailRows)
             }
-        }
-    }
-}
-
-@Composable
-private fun MacroProgress(name: String, eaten: Int, goal: Int) {
-    val fraction = if (goal <= 0) 0f else (eaten.toFloat() / goal).coerceIn(0f, 1f)
-    val over = goal > 0 && eaten > goal
-    val barColor =
-        if (over) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = name, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = "$eaten / $goal g",
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (over) barColor else MaterialTheme.colorScheme.onSurface
-            )
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(barColor)
-            )
         }
     }
 }
@@ -478,11 +455,18 @@ private fun EntryRow(entry: FoodEntry, onEdit: () -> Unit, onDelete: () -> Unit)
                 )
             }
         }
+        // Still the small "x" on screen, but announced as what it does and to what:
+        // TalkBack used to read "x, button" after every food.
         TextButton(
             onClick = onDelete,
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.semantics { contentDescription = "Delete ${entry.name}" }
         ) {
-            Text(text = "x", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "x",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.clearAndSetSemantics {}
+            )
         }
     }
 }

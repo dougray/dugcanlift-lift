@@ -118,6 +118,18 @@ class RecipeRepository private constructor(context: Context) {
     }
 
     /**
+     * Puts back a planned meal [unplan] just removed -- the same row, id, snapshot,
+     * logged flag and coach marker -- for Undo. Does nothing if it is already there.
+     */
+    suspend fun restorePlanned(meal: PlannedMeal) = withContext(Dispatchers.IO) {
+        val current = readPlan()
+        if (current.any { it.id == meal.id }) return@withContext
+        val updated = current + meal
+        writePlan(updated)
+        _plan.value = updated
+    }
+
+    /**
      * Marks a planned meal as logged. Call after the [FoodEntry] is actually
      * written, never before — this flag is what stops a second log.
      */

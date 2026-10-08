@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.systemBars
@@ -36,9 +37,19 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** The insets the app's Scaffold pads its content by; the rail layout pads the same edges itself. */
+/** The system bars and cutout: what the rail pads its own side by. */
 val AppContentInsets: WindowInsets
     @Composable get() = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+
+/**
+ * What a page is padded by: [AppContentInsets] plus the keyboard. Edge to edge (targetSdk 35+),
+ * `adjustResize` no longer shrinks the window, so without the IME here a focused field low on a
+ * form sits under the keyboard. A union, not a sum: with the keyboard up its height replaces the
+ * navigation bar's at the bottom rather than adding to it. The root Scaffold pads by this on a
+ * phone and the rail layout's page by it on wider windows; the rail itself does not move.
+ */
+val AppPageInsets: WindowInsets
+    @Composable get() = AppContentInsets.union(WindowInsets.ime)
 
 /**
  * The rail for medium and expanded windows, replacing the tab row along the top. A rail rather

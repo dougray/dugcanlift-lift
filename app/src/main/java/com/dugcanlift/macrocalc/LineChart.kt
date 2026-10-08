@@ -21,6 +21,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.dugcanlift.macrocalc.ui.theme.LocalDclDark
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** A named line. Null values mean "no data that day" and leave a gap. */
@@ -72,10 +76,13 @@ fun LineChart(
             )
         }
 
+        // The lines are pixels to TalkBack, so the canvas says what they show.
+        val summary = chartSummary(series, labels)
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(height)
+                .semantics { contentDescription = summary }
         ) {
             val w = size.width
             val h = size.height
@@ -167,15 +174,62 @@ fun LineChart(
     }
 }
 
-/** Chart line colours. Brand palette first, then distinct additions. */
-object ChartColors {
-    val Calories = Color(0xFFC1442C)
-    val Protein = Color(0xFF7C8B7A)
-    val Carbs = Color(0xFF5B8DB8)
-    val Fat = Color(0xFFD9A441)
-    val Fiber = Color(0xFF8E7CC3)
+/**
+ * What a chart shows, in words: per series its range and its latest value, over
+ * the span of [labels]. "Calories, Mon to Sun: 1,850 to 2,400, latest 2,100."
+ */
+internal fun chartSummary(series: List<ChartSeries>, labels: List<String>): String {
+    val span = if (labels.size >= 2) "${labels.first()} to ${labels.last()}" else labels.firstOrNull().orEmpty()
+    return series.joinToString(" ") { line ->
+        val known = line.values.filterNotNull()
+        val head = if (span.isEmpty()) line.label else "${line.label}, $span"
+        if (known.isEmpty()) {
+            "$head: nothing logged."
+        } else {
+            val min = known.minOrNull()!!
+            val max = known.maxOrNull()!!
+            val range = if (min == max) chartNumber(min) else "${chartNumber(min)} to ${chartNumber(max)}"
+            "$head: $range, latest ${chartNumber(known.last())}."
+        }
+    }
+}
 
-    val Weight = Color(0xFFC1442C)
-    val Reps = Color(0xFF5B8DB8)
-    val Sets = Color(0xFF7C8B7A)
+private fun chartNumber(value: Float): String =
+    if (value < 10f && value != value.roundToInt().toFloat()) {
+        String.format(Locale.US, "%.1f", value)
+    } else {
+        String.format(Locale.US, "%,d", value.roundToInt())
+    }
+
+/**
+ * Chart line colours, one set per scheme. Every line is at least 3:1 against
+ * the card it is drawn on (WCAG non-text contrast), measured on SURFACE:
+ *
+ * - Dark (#242220): rust #E06A50 4.8, sage #7C8B7A 4.4, blue #5B8DB8 4.5,
+ *   gold #D9A441 7.1, violet #8E7CC3 4.4. The rust is the accent-text rust;
+ *   the brand ACCENT itself is 3.1.
+ * - Light (#FFFCF7): rust #B23C25 5.8, sage #56664F 6.0, blue #3F6E96 5.3,
+ *   ochre #8C6418 5.2, violet #6B58A8 5.7. The dark set fell to 2.2 (gold) and
+ *   about 3.5 (the rest) on parchment.
+ */
+object ChartColors {
+    private fun pick(dark: Long, light: Long): @Composable () -> Color = {
+        Color(if (LocalDclDark.current) dark else light)
+    }
+
+    private val rust = pick(0xFFE06A50, 0xFFB23C25)
+    private val sage = pick(0xFF7C8B7A, 0xFF56664F)
+    private val blue = pick(0xFF5B8DB8, 0xFF3F6E96)
+    private val gold = pick(0xFFD9A441, 0xFF8C6418)
+    private val violet = pick(0xFF8E7CC3, 0xFF6B58A8)
+
+    val Calories: Color @Composable get() = rust()
+    val Protein: Color @Composable get() = sage()
+    val Carbs: Color @Composable get() = blue()
+    val Fat: Color @Composable get() = gold()
+    val Fiber: Color @Composable get() = violet()
+
+    val Weight: Color @Composable get() = rust()
+    val Reps: Color @Composable get() = blue()
+    val Sets: Color @Composable get() = sage()
 }
