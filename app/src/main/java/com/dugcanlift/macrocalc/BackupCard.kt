@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -94,14 +95,16 @@ fun BackupCard(onRestored: () -> Unit = {}) {
 
             OutlinedButton(
                 onClick = { saveLauncher.launch("lift-${todayKey()}.json") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = dclOutlinedButtonColors()
             ) { Text("Save a backup file") }
 
             Spacer(Modifier.height(8.dp))
 
             OutlinedButton(
                 onClick = { loadLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = dclOutlinedButtonColors()
             ) { Text("Restore from a backup file") }
 
             Spacer(Modifier.height(12.dp))

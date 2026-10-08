@@ -8,6 +8,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.clickable
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -195,7 +197,8 @@ fun TodayScreen(
                 }
                 OutlinedButton(
                     onClick = { panel = Panel.SEARCH },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dclOutlinedButtonColors()
                 ) {
                     Text("Search")
                 }
@@ -203,7 +206,7 @@ fun TodayScreen(
 
             if (hasRoadFood) {
                 Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(onClick = { showRoadFood = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { showRoadFood = true }, modifier = Modifier.fillMaxWidth(), colors = dclOutlinedButtonColors()) {
                     Text("Road Food")
                 }
             }
@@ -366,14 +369,14 @@ private fun DateNavigator(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        TextButton(onClick = onPrevious) { Text("Previous") }
+        TextButton(onClick = onPrevious, colors = dclTextButtonColors()) { Text("Previous") }
 
         Text(
             text = dateLabel(date),
             style = MaterialTheme.typography.headlineSmall
         )
 
-        TextButton(onClick = onNext, enabled = !isToday) { Text("Next") }
+        TextButton(onClick = onNext, enabled = !isToday, colors = dclTextButtonColors()) { Text("Next") }
     }
 }
 
@@ -460,7 +463,8 @@ private fun EntryRow(entry: FoodEntry, onEdit: () -> Unit, onDelete: () -> Unit)
         TextButton(
             onClick = onDelete,
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            modifier = Modifier.semantics { contentDescription = "Delete ${entry.name}" }
+            modifier = Modifier.semantics { contentDescription = "Delete ${entry.name}" },
+            colors = dclTextButtonColors()
         ) {
             Text(
                 text = "x",
@@ -690,7 +694,7 @@ private fun AddFoodForm(
                 ) {
                     Text("Save")
                 }
-                OutlinedButton(onClick = onCancel) { Text("Cancel") }
+                OutlinedButton(onClick = onCancel, colors = dclOutlinedButtonColors()) { Text("Cancel") }
             }
         }
     }
@@ -821,7 +825,7 @@ private fun EditFoodForm(
                 Button(onClick = { saved?.let(onSave) }, enabled = saved != null) {
                     Text("Save")
                 }
-                OutlinedButton(onClick = onCancel) { Text("Cancel") }
+                OutlinedButton(onClick = onCancel, colors = dclOutlinedButtonColors()) { Text("Cancel") }
             }
         }
     }

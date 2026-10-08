@@ -3,6 +3,8 @@ package com.dugcanlift.macrocalc
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.activity.compose.BackHandler
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -188,12 +190,12 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                     tracker.stop()
                     recordingActivityType = null
                     showDiscardRecordingConfirmation = false
-                }) {
+                }, colors = dclTextButtonColors()) {
                     Text("Discard")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDiscardRecordingConfirmation = false }) {
+                TextButton(onClick = { showDiscardRecordingConfirmation = false }, colors = dclTextButtonColors()) {
                     Text("Keep recording")
                 }
             }
@@ -281,7 +283,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                                 }
                             }
                         },
-                        enabled = scheduledRoutine != null
+                        enabled = scheduledRoutine != null,
+                        colors = dclTextButtonColors()
                     ) { Text("Start") }
                 }
             }
@@ -369,7 +372,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 Spacer(modifier = Modifier.height(8.dp))
             }
             if (sortedOutdoorActivities.size > OUTDOOR_HISTORY_PREVIEW_COUNT) {
-                TextButton(onClick = { showAllOutdoorHistory = !showAllOutdoorHistory }) {
+                TextButton(onClick = { showAllOutdoorHistory = !showAllOutdoorHistory }, colors = dclTextButtonColors()) {
                     Text(
                         if (showAllOutdoorHistory) {
                             "Show less"
@@ -605,7 +608,7 @@ private fun RoutineCard(
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onStart) { Text("Start routine") }
-                TextButton(onClick = { confirmingDelete = true }) { Text("Delete") }
+                TextButton(onClick = { confirmingDelete = true }, colors = dclTextButtonColors()) { Text("Delete") }
             }
         }
     }
@@ -620,10 +623,10 @@ private fun RoutineCard(
                 TextButton(onClick = {
                     confirmingDelete = false
                     onDelete()
-                }) { Text("Delete") }
+                }, colors = dclTextButtonColors()) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingDelete = false }) { Text("Keep") }
+                TextButton(onClick = { confirmingDelete = false }, colors = dclTextButtonColors()) { Text("Keep") }
             }
         )
     }
@@ -929,22 +932,22 @@ private fun SessionCard(
                     ) {
                         Text("Save routine")
                     }
-                    OutlinedButton(onClick = { savingRoutine = false }) { Text("Cancel") }
+                    OutlinedButton(onClick = { savingRoutine = false }, colors = dclOutlinedButtonColors()) { Text("Cancel") }
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { addingExercise = true }) { Text("Add exercise") }
+                    OutlinedButton(onClick = { addingExercise = true }, colors = dclOutlinedButtonColors()) { Text("Add exercise") }
                     if (session.exercises.isNotEmpty()) {
                         OutlinedButton(onClick = {
                             routineName = nameText
                             savingRoutine = true
-                        }) {
+                        }, colors = dclOutlinedButtonColors()) {
                             Text("Save as routine")
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                TextButton(onClick = { confirmingDelete = true }) { Text("Delete workout") }
+                TextButton(onClick = { confirmingDelete = true }, colors = dclTextButtonColors()) { Text("Delete workout") }
             }
         }
     }
@@ -968,10 +971,10 @@ private fun SessionCard(
                     // Nothing pending, so the card going away has no name left to save.
                     nameText = session.name
                     onDelete()
-                }) { Text("Delete") }
+                }, colors = dclTextButtonColors()) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingDelete = false }) { Text("Keep") }
+                TextButton(onClick = { confirmingDelete = false }, colors = dclTextButtonColors()) { Text("Keep") }
             }
         )
     }
@@ -1015,7 +1018,7 @@ private fun ExerciseBlock(
                 modifier = Modifier.weight(1f, fill = false)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = onRemove) { Text("Remove", maxLines = 1) }
+            TextButton(onClick = onRemove, colors = dclTextButtonColors()) { Text("Remove", maxLines = 1) }
         }
 
         previous?.let { last ->
@@ -1096,7 +1099,7 @@ private fun ExerciseBlock(
                 )
                 TextButton(onClick = {
                     onChange(exercise.copy(sets = exercise.sets.filterNot { it.id == set.id }))
-                }) {
+                }, colors = dclTextButtonColors()) {
                     Text("x")
                 }
             }
@@ -1134,7 +1137,7 @@ private fun ExerciseBlock(
                 onCancel = { addingSet = false }
             )
         } else {
-            OutlinedButton(onClick = { addingSet = true }) { Text("Add set") }
+            OutlinedButton(onClick = { addingSet = true }, colors = dclOutlinedButtonColors()) { Text("Add set") }
         }
     }
 }
@@ -1249,7 +1252,7 @@ private fun SetForm(
             }) {
                 Text("Add set")
             }
-            OutlinedButton(onClick = onCancel) { Text("Cancel") }
+            OutlinedButton(onClick = onCancel, colors = dclOutlinedButtonColors()) { Text("Cancel") }
         }
     }
 }
@@ -1354,9 +1357,9 @@ private fun WorkoutDateNavigator(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        TextButton(onClick = onPrevious) { Text("Previous") }
+        TextButton(onClick = onPrevious, colors = dclTextButtonColors()) { Text("Previous") }
         Text(text = workoutDateLabel(date), style = MaterialTheme.typography.headlineSmall)
-        TextButton(onClick = onNext, enabled = !isToday) { Text("Next") }
+        TextButton(onClick = onNext, enabled = !isToday, colors = dclTextButtonColors()) { Text("Next") }
     }
 }
 
@@ -1398,7 +1401,7 @@ private fun StarterSplitCard(
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(onClick = onAdd) { Text("Add to my routines") }
+            OutlinedButton(onClick = onAdd, colors = dclOutlinedButtonColors()) { Text("Add to my routines") }
         }
     }
 }

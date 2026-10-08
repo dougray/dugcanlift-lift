@@ -3,6 +3,9 @@ package com.dugcanlift.macrocalc
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.compose.foundation.background
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextFieldColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -210,7 +213,7 @@ fun DashboardScreen(
                         stepsPermissionLauncher.launch(HealthConnectManager.permissionsToRequest)
                     })
                 }
-                TextButton(onClick = { showingStepGoalEditor = true }) { Text("Edit goal") }
+                TextButton(onClick = { showingStepGoalEditor = true }, colors = dclTextButtonColors()) { Text("Edit goal") }
             }
         }
     }
@@ -728,7 +731,8 @@ fun DashboardScreen(
                     onClick = onOpenCalculator,
                     modifier = if (columns == 1) Modifier.fillMaxWidth()
                     else Modifier.align(Alignment.CenterHorizontally)
-                        .widthIn(max = AdaptiveLayout.MAX_WIDE_BUTTON_DP.dp).fillMaxWidth()
+                        .widthIn(max = AdaptiveLayout.MAX_WIDE_BUTTON_DP.dp).fillMaxWidth(),
+                    colors = dclOutlinedButtonColors()
                 ) {
                     Text("Recalculate my goal")
                 }
@@ -787,16 +791,17 @@ private fun StepGoalDialog(initial: Int, onSave: (Int) -> Unit, onDismiss: () ->
                 value = text,
                 onValueChange = { text = it },
                 label = { Text("Steps per day") },
-                singleLine = true
+                singleLine = true,
+                colors = dclTextFieldColors()
             )
         },
         confirmButton = {
-            TextButton(onClick = { value?.let(onSave) }, enabled = value != null && value > 0) {
+            TextButton(onClick = { value?.let(onSave) }, enabled = value != null && value > 0, colors = dclTextButtonColors()) {
                 Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Cancel") }
         }
     )
 }
@@ -849,7 +854,7 @@ internal fun StepsAccessExplanation(onConnect: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedButton(onClick = onConnect) { Text("Read steps from Health Connect") }
+        OutlinedButton(onClick = onConnect, colors = dclOutlinedButtonColors()) { Text("Read steps from Health Connect") }
     }
 }
 

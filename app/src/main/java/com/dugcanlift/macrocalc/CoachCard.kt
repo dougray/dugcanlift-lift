@@ -4,6 +4,8 @@ import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.health.connect.client.PermissionController
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextFieldColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -129,7 +131,8 @@ fun CoachCard(
                     label = { Text("Your name") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dclTextFieldColors()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -147,7 +150,8 @@ fun CoachCard(
                     supportingText = if (emailError) {
                         { Text("That doesn't look like an email address. Check it has an @ and a dot.") }
                     } else null,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = dclTextFieldColors()
                 )
                 // Steps come from Health Connect, and Health Connect data goes to
                 // someone else only with explicit consent: so it is a choice,
@@ -338,7 +342,7 @@ fun CoachCard(
                     )
                 }
 
-                TextButton(onClick = { editing = true }) { Text("Change these details") }
+                TextButton(onClick = { editing = true }, colors = dclTextButtonColors()) { Text("Change these details") }
             }
         }
     }

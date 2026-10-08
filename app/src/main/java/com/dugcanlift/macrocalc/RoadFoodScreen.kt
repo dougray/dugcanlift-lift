@@ -62,6 +62,8 @@ import com.dugcanlift.macrocalc.ui.adaptive.GridRow
 import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
 import com.dugcanlift.macrocalc.ui.adaptive.rowMajor
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
+import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -126,7 +128,7 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = AdaptiveLayout.sideGutter(paneWidth).dp, vertical = 8.dp)
         ) {
-            TextButton(onClick = { if (view == "picker") onClose(loggedAny) else backToPicker() }) {
+            TextButton(onClick = { if (view == "picker") onClose(loggedAny) else backToPicker() }, colors = dclTextButtonColors()) {
                 Text(if (view == "picker") "Back to Food" else "All chains")
             }
 
@@ -277,7 +279,7 @@ private fun Picker(
                 Spacer(modifier = Modifier.height(8.dp))
                 // Retracting is this phone's job: a plan with no picks in it is
                 // silent about them, not a retraction (see RoadPicks).
-                OutlinedButton(onClick = onClearPicks, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onClearPicks, modifier = Modifier.fillMaxWidth(), colors = dclOutlinedButtonColors()) {
                     Text("Clear these picks")
                 }
             }
@@ -407,7 +409,7 @@ private fun Place(
         )
         val source = chain?.source
         if (source != null && source.startsWith("https://")) {
-            TextButton(onClick = { uriHandler.openUri(source) }) { Text("Source") }
+            TextButton(onClick = { uriHandler.openUri(source) }, colors = dclTextButtonColors()) { Text("Source") }
         }
     }
     // The warning keys off the chain's own document date when it states one, and
@@ -602,7 +604,8 @@ private fun ItemRow(item: RoadFoodItem, pickLabel: String?, onLog: (RoadFoodItem
             onClick = { onLog(item) },
             enabled = RoadFood.canLog(item),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
-            modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = "Log ${item.name}" }
+            modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = "Log ${item.name}" },
+            colors = dclOutlinedButtonColors()
         ) {
             Text("Log it")
         }

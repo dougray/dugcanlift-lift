@@ -49,6 +49,7 @@ import com.dugcanlift.macrocalc.data.GoalStore
 import com.dugcanlift.kit.PlanDecodeResult
 import com.dugcanlift.kit.PlanLinkCodec
 import com.dugcanlift.macrocalc.ui.theme.DugCanLiftCalcTheme
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 
 class MainActivity : ComponentActivity() {
     private val pendingPlan = mutableStateOf<PlanDecodeResult?>(null)
@@ -251,7 +252,10 @@ private fun AppTabs(
         } else {
             Column(modifier = page) {
                 if (!useRail) {
-                    TabRow(selectedTabIndex = selectedTab) {
+                    // The labels are text: the readable rust (Material's default is
+                    // `primary`, the fill, 3.1:1 on the dark surface). The indicator
+                    // keeps the brand fill.
+                    TabRow(selectedTabIndex = selectedTab, contentColor = dclAccentText()) {
                         titles.forEachIndexed { index, title ->
                             Tab(
                                 selected = selectedTab == index,
