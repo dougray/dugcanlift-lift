@@ -198,7 +198,7 @@ Coach web's `coach/prescriptions.js` is the rule and LIFT web's `lift/set-types.
 - **Your own routines carry kinds by position: `RoutineExercise.setKinds`.** A routine of your own
   is a count (`targetSets`), so its kinds are a list beside the count -- `List<SetKind?>`, index 0 is
   set 1. Train → a routine's **Exercises** has "Superset with next" and, on an exercise of two sets
-  or more, a quiet **Set types** toggle that opens Straight / Drop / Rest-pause for sets 2..N.
+  or more, a quiet **Drop / rest-pause** toggle (LIFT web's and Coach iPhone's label) that opens Straight / Drop / Rest-pause for sets 2..N.
   `SetTypes.routineSetKinds` is the rule, on every read and write: index 0 always null, nothing past
   `targetSets` (`withTargetSets` trims), trailing nulls trimmed, and **null when every set is
   straight**, so a routine without kinds is stored and backed up byte for byte as before
