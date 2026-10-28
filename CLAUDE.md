@@ -209,10 +209,12 @@ Coach web's `coach/prescriptions.js` is the rule and LIFT web's `lift/set-types.
   keeps it set by set), and `setKinds` is neither written nor read on such an exercise.
   `askedSets` carries either kind, so `Routine.toSession` copies them onto the pre-filled sets (or
   keeps them inside a sided `prescribed`, and the set form copies the kind of the prescribed set it
-  answers). "Save as routine" keeps a superset, not kinds: it flattens a day's sets into targets.
+  answers). "Save as routine" keeps a superset and each set's kind by position, as LIFT web's
+  `fromSession` does -- except for a lift logged a side at a time, where one position is two sets.
 - **The next weight counts straight sets only.** `ProgressionRule.target` asks for the straight sets
   (`targetSets` minus the kinded ones), `sessions` leaves logged drop and rest-pause sets out of a
-  day's working sets, and "Use" never fills one -- a drop set keeps its own lighter weight. Without
+  day's working sets wherever the kind came from (your routine or a coach's plan), and "Use" never
+  fills one -- a drop set keeps its own lighter weight. Without
   that, a four-set routine with two drops never went up.
 - **Shown, never graded, never sent.** "Superset A" (two) / "Circuit A" (three+) above the first
   member, "A1 · …" on each; a set reads side then kind, "30 x 12 L drop". SHARE-FORMAT has no set

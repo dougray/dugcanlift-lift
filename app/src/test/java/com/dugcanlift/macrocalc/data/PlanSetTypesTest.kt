@@ -224,11 +224,15 @@ class PlanSetTypesTest {
     }
 
     @Test
-    fun `saving a session as a routine keeps its superset, not its kinds`() {
+    fun `saving a session as a routine keeps its superset, and its kinds as setKinds`() {
         val session = routine().toSession("2026-11-02")
         val saved = session.toRoutine("Again")
         assertEquals(listOf(null, 1, 1, 2, 2, 2, null, null, null), saved.exercises.map { it.group })
         assertTrue(saved.exercises.all { it.prescribed == null })
+        val byName = saved.exercises.associateBy { it.name }
+        assertEquals(listOf(null, null, SetKind.DROP, SetKind.DROP), byName.getValue("Triceps Pushdown").setKinds)
+        assertEquals(listOf(null, SetKind.REST_PAUSE), byName.getValue("Barbell Curl").setKinds)
+        assertNull(byName.getValue("Dumbbell Bench Press").setKinds)
         // A superset that lost a member on the day is saved as no group at all.
         val lonely = session.copy(exercises = session.exercises.filterNot { it.name == "Seated Cable Rows" })
         assertEquals(listOf(null, null, 1, 1, 1, null, null, null), lonely.toRoutine("Again").exercises.map { it.group })
