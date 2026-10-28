@@ -3,8 +3,8 @@ package com.dugcanlift.macrocalc.data
 import android.content.Context
 
 /**
- * App preferences that aren't the macro goal. Currently just the training
- * focus, which decides which set fields the workout UI shows.
+ * App preferences that aren't the macro goal: the training focus, which decides
+ * which set fields the workout UI shows, and the smaller choices beside it.
  */
 class SettingsStore private constructor(context: Context) {
 
@@ -84,6 +84,20 @@ class SettingsStore private constructor(context: Context) {
                 if (value == null) remove(KEY_ROAD_PICKS) else putString(KEY_ROAD_PICKS, value.toJson())
             }.apply()
         }
+
+    /**
+     * The equipment this lifter does **not** have, as [MyEquipment] spells it. Empty -- and no key
+     * at all -- means everything is owned, so an untouched phone hides nothing. On this phone only,
+     * like [roadFoodRecent].
+     */
+    var equipmentNotOwned: Set<String>
+        get() = MyEquipment.load(prefs)
+        set(value) = MyEquipment.save(value, prefs)
+
+    /** Whether Train suggests the next weight ([ProgressionRule]). On unless turned off. */
+    var suggestsNextWeight: Boolean
+        get() = prefs.getBoolean(ProgressionRule.ENABLED_KEY, true)
+        set(value) { prefs.edit().putBoolean(ProgressionRule.ENABLED_KEY, value).apply() }
 
     companion object {
         private const val KEY_ROAD_RECENT = "road_food_recent"
