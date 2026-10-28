@@ -195,12 +195,25 @@ Coach web's `coach/prescriptions.js` is the rule and LIFT web's `lift/set-types.
   `WorkoutSet.kind`, under BACKUP-FORMAT's spellings (`group`, `kind: "drop" | "restPause"`), each
   omitted otherwise, so a phone with no set types writes byte for byte what it wrote before. JSON
   files, no schema -- the side-car the spec describes is for LIFT iOS's shared `@Model`s.
-- **A kind needs a set to sit on, and your own routines have none.** A routine of your own is a
-  count (`targetSets`), so it gets only "Superset with next" (Train → a routine's **Exercises**).
-  Kinds arrive from a coach's plan, on `prescribed` -- a kind on a later set makes it differ from the
-  first, so `Prescription` keeps it set by set -- and `Routine.toSession` copies them onto the
-  pre-filled sets (or keeps them inside a sided `prescribed`, and the set form copies the kind of the
-  prescribed set it answers). LIFT web draws the same line. No per-set routine model.
+- **Your own routines carry kinds by position: `RoutineExercise.setKinds`.** A routine of your own
+  is a count (`targetSets`), so its kinds are a list beside the count -- `List<SetKind?>`, index 0 is
+  set 1. Train → a routine's **Exercises** has "Superset with next" and, on an exercise of two sets
+  or more, a quiet **Set types** toggle that opens Straight / Drop / Rest-pause for sets 2..N.
+  `SetTypes.routineSetKinds` is the rule, on every read and write: index 0 always null, nothing past
+  `targetSets` (`withTargetSets` trims), trailing nulls trimmed, and **null when every set is
+  straight**, so a routine without kinds is stored and backed up byte for byte as before
+  (`RoutineSetKindsTest` pins that against a frozen copy of main's encoder). BACKUP-FORMAT
+  `"setKinds": [null, "drop", "restPause"]`, LIFT web's shape; read leniently (not an array is none,
+  an unknown entry is straight, a kind on set 1 is dropped). **Never beside `prescribed`**: a coach's
+  kinds arrive on its sets (a kind on a later set makes it differ from the first, so `Prescription`
+  keeps it set by set), and `setKinds` is neither written nor read on such an exercise.
+  `askedSets` carries either kind, so `Routine.toSession` copies them onto the pre-filled sets (or
+  keeps them inside a sided `prescribed`, and the set form copies the kind of the prescribed set it
+  answers). "Save as routine" keeps a superset, not kinds: it flattens a day's sets into targets.
+- **The next weight counts straight sets only.** `ProgressionRule.target` asks for the straight sets
+  (`targetSets` minus the kinded ones), `sessions` leaves logged drop and rest-pause sets out of a
+  day's working sets, and "Use" never fills one -- a drop set keeps its own lighter weight. Without
+  that, a four-set routine with two drops never went up.
 - **Shown, never graded, never sent.** "Superset A" (two) / "Circuit A" (three+) above the first
   member, "A1 · …" on each; a set reads side then kind, "30 x 12 L drop". SHARE-FORMAT has no set
   type, so a drop set reaches a coach as an ordinary set. `PlanLog`, the week card, is unchanged,
@@ -209,7 +222,8 @@ Coach web's `coach/prescriptions.js` is the rule and LIFT web's `lift/set-types.
   the watch shows the sets without types (a protocol bump in both repos if that changes).
 - `fixtures/web-plan-set-types.txt` is Coach web's own encoder's output -- never regenerate it.
   `PlanSetTypesTest` pins the import, an old decoder's view (main's mapping, frozen), plans without
-  types against main, and the backup; `SetTypesTest` the rules.
+  types against main, and the backup; `SetTypesTest` the rules; `RoutineSetKindsTest` your own
+  routines' kinds.
 
 ## Programming: equipment, rotations, the next weight
 

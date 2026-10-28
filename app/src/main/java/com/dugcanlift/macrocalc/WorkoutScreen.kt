@@ -67,6 +67,7 @@ import com.dugcanlift.macrocalc.data.PlanLog
 import com.dugcanlift.macrocalc.data.PrescribedSet
 import com.dugcanlift.macrocalc.data.ProgressionRule
 import com.dugcanlift.macrocalc.data.RoutineRotation
+import com.dugcanlift.macrocalc.data.SetKind
 import com.dugcanlift.macrocalc.data.SetSide
 import com.dugcanlift.macrocalc.data.SetTypes
 import com.dugcanlift.macrocalc.data.groupedWithNext
@@ -726,15 +727,18 @@ private fun RoutineCard(
 }
 
 /**
- * A routine's exercises, opened from its card, with the one thing this build lets you change in a
- * routine: which of them are done together.
+ * A routine's exercises, opened from its card, with what this build lets you change in a routine:
+ * which of them are done together, and which of their sets are drop sets or rest-pause.
  *
  * "Superset with next" is on every exercise but the last, and joins it to the next -- or splits
  * them, when they are already together. Joining onto a superset makes a circuit. The rules are
- * [SetTypes.setGroupedWithNext], Coach web's own. There is no Straight / Drop / Rest-pause control:
- * a routine of your own stores a set count ([com.dugcanlift.macrocalc.data.RoutineExercise.targetSets]),
- * not a list of sets, so there is no set to give a kind to. A coach's plan can still prescribe one,
- * and its kinds are listed here with its sets. LIFT web draws the same line.
+ * [SetTypes.setGroupedWithNext], Coach web's own.
+ *
+ * "Set types" opens a Straight / Drop / Rest-pause choice for each set after the first
+ * ([com.dugcanlift.macrocalc.data.RoutineExercise.setKinds]) -- closed until asked for, so the
+ * screen is no busier for someone who never uses it, and offered only on an exercise of two sets or
+ * more that holds no coach's sets. A coach's kinds live on its own sets and are listed here with
+ * them.
  */
 @Composable
 private fun RoutineExercises(routine: Routine, onChange: (Routine) -> Unit) {
@@ -751,13 +755,55 @@ private fun RoutineExercises(routine: Routine, onChange: (Routine) -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (index + 1 < routine.exercises.size) {
-            val joined = routine.groupedWithNext(index)
-            FilterChip(
-                selected = joined,
-                onClick = { onChange(routine.withGroupedWithNext(index, !joined)) },
-                label = { Text("Superset with next", maxLines = 1) }
-            )
+        val takesKinds = exercise.prescribed == null && exercise.targetSets >= 2
+        // Where you are on the screen, like the card's own Exercises toggle: not stored.
+        var showingKinds by rememberSaveable(routine.id, exercise.id) { mutableStateOf(false) }
+        val joinable = index + 1 < routine.exercises.size
+        if (joinable || takesKinds) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (joinable) {
+                    val joined = routine.groupedWithNext(index)
+                    FilterChip(
+                        selected = joined,
+                        onClick = { onChange(routine.withGroupedWithNext(index, !joined)) },
+                        label = { Text("Superset with next", maxLines = 1) }
+                    )
+                }
+                if (takesKinds) {
+                    TextButton(onClick = { showingKinds = !showingKinds }, colors = dclTextButtonColors()) {
+                        Text(if (showingKinds) "Hide set types" else "Set types", maxLines = 1)
+                    }
+                }
+            }
+        }
+        if (takesKinds && showingKinds) {
+            for (set in 1 until exercise.targetSets) {
+                val kind = exercise.setKind(set)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Set ${set + 1}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.width(52.dp)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
+                        listOf(null to "Straight", SetKind.DROP to "Drop", SetKind.REST_PAUSE to "Rest-pause")
+                            .forEach { (choice, word) ->
+                                FilterChip(
+                                    selected = kind == choice,
+                                    onClick = {
+                                        onChange(routine.copy(exercises = routine.exercises.mapIndexed { i, e ->
+                                            if (i == index) e.withSetKind(set, choice) else e
+                                        }))
+                                    },
+                                    label = { Text(word, maxLines = 1) }
+                                )
+                            }
+                    }
+                }
+            }
         }
     }
 }

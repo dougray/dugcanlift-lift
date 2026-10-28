@@ -79,11 +79,13 @@ enum class SetKind(val wire: String, val label: String, internal val bits: Int) 
  *   `CoachShare` writes a logged set field by field, so a drop set logged here reaches a coach as
  *   an ordinary set with its real numbers.
  * - **your routines**: `group`, set with "Superset with next" ([setGroupedWithNext]). A routine of
- *   your own stores a set count ([RoutineExercise.targetSets]), not a list of sets, so it has no set
- *   to put a kind on: kinds arrive only from a coach's plan.
+ *   your own stores a set count ([RoutineExercise.targetSets]), not a list of sets, so its kinds are
+ *   a list beside that count, by position ([RoutineExercise.setKinds], [routineSetKinds]), set from
+ *   the routine's Exercises. An exercise holding a coach's sets keeps its kinds on them instead.
  *
  * Counted and shown, never graded. Nothing here says whether a superset was done as one, and
- * progression, the imbalance figure and volume read the log, never a plan.
+ * the imbalance figure and volume read the log, never a plan. The next weight ([ProgressionRule])
+ * reads straight sets only: a drop set is lighter on purpose and a rest-pause set short on purpose.
  *
  * Pure and free of Android, like [Prescription] and [SideBalance].
  */
@@ -98,6 +100,29 @@ object SetTypes {
      */
     fun <T> kindAt(sets: List<T>, index: Int, kind: (T) -> SetKind?): SetKind? =
         if (index > 0) sets.getOrNull(index)?.let(kind) else null
+
+    /**
+     * A routine of your own's kinds as they are stored ([RoutineExercise.setKinds]): by set position,
+     * set 1 straight whatever the list says, nothing past [targetSets], trailing straights trimmed,
+     * and null -- not a list of nulls -- when every set is straight, so a routine without kinds is
+     * the object it always was. Applied on every write and every read.
+     */
+    fun routineSetKinds(kinds: List<SetKind?>?, targetSets: Int): List<SetKind?>? {
+        if (kinds == null) return null
+        val kept = kinds.take(targetSets.coerceAtLeast(0)).mapIndexed { i, kind -> if (i == 0) null else kind }
+        val last = kept.indexOfLast { it != null }
+        return if (last < 0) null else kept.subList(0, last + 1).toList()
+    }
+
+    /**
+     * BACKUP-FORMAT's `setKinds`, read leniently: anything but an array is none, an entry that is not
+     * `"drop"` or `"restPause"` (case and space forgiven, as [SetKind.fromWire] forgives them) is
+     * straight, and the result is [routineSetKinds]'s.
+     */
+    fun routineSetKindsOf(value: Any?, targetSets: Int): List<SetKind?>? {
+        val array = value as? JSONArray ?: return null
+        return routineSetKinds((0 until array.length()).map { SetKind.fromWire(array.opt(it)) }, targetSets)
+    }
 
     /** " drop", " rest-pause", or nothing: said after a set's side. */
     fun suffix(kind: SetKind?): String = kind?.let { " ${it.label}" } ?: ""
