@@ -86,12 +86,7 @@ object PlanImporter {
             )
         }
 
-        val routines = payload.workouts.map { pw ->
-            Routine(
-                name = pw.name,
-                exercises = pw.exercises.map { pe -> toRoutineExercise(pe) }
-            )
-        }
+        val routines = routinesOf(payload)
 
         val validSessions = payload.sessions.mapNotNull { ps ->
             val workout = payload.workouts.getOrNull(ps.workoutIndex) ?: return@mapNotNull null
@@ -201,6 +196,30 @@ object PlanImporter {
     }
 
     /**
+     * The plan's workouts as routines, with their set types on them.
+     *
+     * `g` and flags bits 3-4 are read off the plan's own JSON ([SetTypes.planTypes]): the pinned kit
+     * decodes neither. A workout whose raw shape does not line up with what the kit decoded -- which
+     * the shared walk should make impossible -- takes no set types at all rather than putting a
+     * group or a kind on the wrong exercise. A plan without set types builds exactly what it did.
+     */
+    internal fun routinesOf(payload: PlanPayload): List<Routine> {
+        val types = SetTypes.planTypes(payload.rawJson)
+        return payload.workouts.mapIndexed { wi, pw ->
+            val t = types.getOrNull(wi)?.takeIf { typed ->
+                typed.groups.size == pw.exercises.size &&
+                    typed.kinds.indices.all { typed.kinds[it].size == pw.exercises[it].sets.size }
+            }
+            Routine(
+                name = pw.name,
+                exercises = pw.exercises.mapIndexed { ei, pe ->
+                    toRoutineExercise(pe, group = t?.groups?.get(ei), kinds = t?.kinds?.get(ei).orEmpty())
+                }
+            )
+        }
+    }
+
+    /**
      * One prescribed exercise, kept as the coach wrote it.
      *
      * The coach's sets go on [RoutineExercise.prescribed], one by one, whenever
@@ -218,7 +237,7 @@ object PlanImporter {
      * of a workout performed: what the coach literally wrote as a set beats a
      * weight/rep combination synthesised from the extremes.
      */
-    private fun toRoutineExercise(pe: PlanWorkoutExercise): RoutineExercise {
+    private fun toRoutineExercise(pe: PlanWorkoutExercise, group: Int?, kinds: List<SetKind?>): RoutineExercise {
         fun <T> mostCommon(values: List<T?>): T? =
             values.filterNotNull().groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
 
@@ -235,14 +254,16 @@ object PlanImporter {
             // The targets above cannot say 60/60/70, "you pick the weight",
             // "each side" or "plus one on the left", so a prescription that
             // says any of those is kept set by set as well. One they say in
-            // full is exactly what it was.
-            prescribed = pe.sets.map(::toPrescribedSet)
+            // full is exactly what it was. A drop or rest-pause set differs from the straight
+            // first set before it, so a prescription with a kind in it is always kept set by set.
+            prescribed = pe.sets.mapIndexed { i, set -> toPrescribedSet(set, kinds.getOrNull(i)) }
                 .takeIf { Prescription.needsSetBySet(it, pe.eachSide) },
-            eachSide = pe.eachSide
+            eachSide = pe.eachSide,
+            group = group
         )
     }
 
-    private fun toPrescribedSet(set: PlanSet) = PrescribedSet(
+    private fun toPrescribedSet(set: PlanSet, kind: SetKind?) = PrescribedSet(
         weightLb = set.weightLb,
         reps = set.reps,
         rpe = set.rpe,
@@ -252,7 +273,8 @@ object PlanImporter {
             ShareSide.LEFT -> SetSide.LEFT
             ShareSide.RIGHT -> SetSide.RIGHT
             null -> null
-        }
+        },
+        kind = kind
     )
 
     private fun sha256(text: String): String =
