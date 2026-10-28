@@ -66,6 +66,9 @@ import com.dugcanlift.macrocalc.data.PerSideLogging
 import com.dugcanlift.macrocalc.data.PlanLog
 import com.dugcanlift.macrocalc.data.PrescribedSet
 import com.dugcanlift.macrocalc.data.SetSide
+import com.dugcanlift.macrocalc.data.SetTypes
+import com.dugcanlift.macrocalc.data.groupedWithNext
+import com.dugcanlift.macrocalc.data.withGroupedWithNext
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.TrainingFocus
 import com.dugcanlift.macrocalc.data.WorkoutRepository
@@ -412,6 +415,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                         onStart = {
                             scope.launch { workouts.save(routine.toSession(selectedDate)) }
                         },
+                        onChange = { updated -> scope.launch { routineRepo.save(updated) } },
                         onDelete = { scope.launch { routineRepo.delete(routine.id) } }
                     )
                 }
@@ -589,10 +593,14 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 private fun RoutineCard(
     routine: Routine,
     onStart: () -> Unit,
+    /** The routine with an exercise joined to or split from the next: "Superset with next". */
+    onChange: (Routine) -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth()
 ) {
     var confirmingDelete by rememberSaveable(routine.id) { mutableStateOf(false) }
+    // Where you are on the screen, not something you chose, so it is not stored with the routine.
+    var showingExercises by rememberSaveable(routine.id) { mutableStateOf(false) }
 
     Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -605,9 +613,15 @@ private fun RoutineCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            if (showingExercises) RoutineExercises(routine = routine, onChange = onChange)
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onStart) { Text("Start routine") }
+                if (routine.exercises.isNotEmpty()) {
+                    TextButton(onClick = { showingExercises = !showingExercises }, colors = dclTextButtonColors()) {
+                        Text(if (showingExercises) "Hide exercises" else "Exercises", maxLines = 1)
+                    }
+                }
                 TextButton(onClick = { confirmingDelete = true }, colors = dclTextButtonColors()) { Text("Delete") }
             }
         }
@@ -630,6 +644,51 @@ private fun RoutineCard(
             }
         )
     }
+}
+
+/**
+ * A routine's exercises, opened from its card, with the one thing this build lets you change in a
+ * routine: which of them are done together.
+ *
+ * "Superset with next" is on every exercise but the last, and joins it to the next -- or splits
+ * them, when they are already together. Joining onto a superset makes a circuit. The rules are
+ * [SetTypes.setGroupedWithNext], Coach web's own. There is no Straight / Drop / Rest-pause control:
+ * a routine of your own stores a set count ([com.dugcanlift.macrocalc.data.RoutineExercise.targetSets]),
+ * not a list of sets, so there is no set to give a kind to. A coach's plan can still prescribe one,
+ * and its kinds are listed here with its sets. LIFT web draws the same line.
+ */
+@Composable
+private fun RoutineExercises(routine: Routine, onChange: (Routine) -> Unit) {
+    val labels = SetTypes.labels(routine.exercises.map { it.group })
+    routine.exercises.forEachIndexed { index, exercise ->
+        Spacer(modifier = Modifier.height(12.dp))
+        GroupHeading(labels[index])
+        Text(
+            text = SetTypes.heading(exercise.displayName, labels[index]),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Text(
+            text = exercise.summary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (index + 1 < routine.exercises.size) {
+            val joined = routine.groupedWithNext(index)
+            FilterChip(
+                selected = joined,
+                onClick = { onChange(routine.withGroupedWithNext(index, !joined)) },
+                label = { Text("Superset with next", maxLines = 1) }
+            )
+        }
+    }
+}
+
+/** "Superset A" or "Circuit A", once, above a group's first member. Nothing for anything else. */
+@Composable
+private fun GroupHeading(label: SetTypes.GroupLabel?) {
+    if (label == null || !label.first) return
+    Text(text = label.group, style = MaterialTheme.typography.labelLarge, color = dclAccentText())
+    Spacer(modifier = Modifier.height(2.dp))
 }
 
 /**
@@ -860,9 +919,13 @@ private fun SessionCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            session.exercises.forEach { exercise ->
+            // Labelled as the routine or the coach's plan labelled them: a group is copied onto the
+            // day when it starts. "Superset A" above the first member, "A1 · ..." on each.
+            val groupLabels = SetTypes.labels(session.exercises.map { it.group })
+            session.exercises.forEachIndexed { exerciseIndex, exercise ->
                 ExerciseBlock(
                     exercise = exercise,
+                    groupLabel = groupLabels[exerciseIndex],
                     focus = focus,
                     previous = lastFor(exercise.name, exercise.equipment)
                         .takeIf { it?.id != exercise.id },
@@ -986,6 +1049,8 @@ private const val NAME_SAVE_DEBOUNCE_MS = 500L
 @Composable
 private fun ExerciseBlock(
     exercise: LoggedExercise,
+    /** Its place in a superset or circuit, or null. */
+    groupLabel: SetTypes.GroupLabel?,
     focus: TrainingFocus,
     previous: LoggedExercise?,
     logsPerSide: (String) -> Boolean,
@@ -1003,6 +1068,7 @@ private fun ExerciseBlock(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        GroupHeading(groupLabel)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1013,7 +1079,7 @@ private fun ExerciseBlock(
             // -- which every library name is -- squeezed "Remove" down to one
             // letter per line.
             Text(
-                text = exercise.displayName,
+                text = SetTypes.heading(exercise.displayName, groupLabel),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f, fill = false)
             )
@@ -1042,7 +1108,9 @@ private fun ExerciseBlock(
             val targets = PerSideLogging.prescribedTargets(asked, exercise.eachSide)
             Text(
                 text = (if (exercise.eachSide) "Each side · L ${targets.left} · R ${targets.right}\n" else "") +
-                    "Coach: " + asked.joinToString(", ") { formatPrescribed(it) },
+                    "Coach: " + asked.indices.joinToString(", ") { i ->
+                        formatPrescribed(asked[i]) + SetTypes.suffix(SetTypes.kindAt(asked, i) { it.kind })
+                    },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1094,7 +1162,9 @@ private fun ExerciseBlock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${index + 1}.  ${formatSet(set)}",
+                    // "drop" or "rest-pause" when the plan asked for one: "3.  50 x 10 drop".
+                    text = "${index + 1}.  ${formatSet(set)}" +
+                        SetTypes.suffix(SetTypes.kindAt(exercise.sets, index) { it.kind }),
                     style = MaterialTheme.typography.bodyLarge
                 )
                 TextButton(onClick = {
@@ -1246,7 +1316,10 @@ private fun SetForm(
                     rpe = rpe.toDoubleOrNull(),
                     durationSec = parseDuration(time),
                     distanceMeters = distance.toDoubleOrNull(),
-                    side = side
+                    side = side,
+                    // The kind of the coach's set this one answers, as a pre-filled set carries it:
+                    // what was asked, so the row can say "drop". See SetTypes.
+                    kind = prescribedFor(side)?.kind
                 )
                 if (!set.isEmpty) onAdd(set)
             }) {

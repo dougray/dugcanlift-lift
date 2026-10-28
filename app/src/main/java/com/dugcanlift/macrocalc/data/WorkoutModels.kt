@@ -98,7 +98,14 @@ data class WorkoutSet(
     val rpe: Double? = null,
     val durationSec: Int? = null,
     val distanceMeters: Double? = null,
-    val side: SetSide? = null
+    val side: SetSide? = null,
+    /**
+     * What a coach's plan asked this set to be -- a drop set or rest-pause -- copied from the
+     * prescription when the session started, so its row can say so. Null is straight. What was
+     * asked, not a claim about what was done, and it never reaches a coach: SHARE-FORMAT has no set
+     * type. An exercise's first set is straight whatever this says ([SetTypes.kindAt]).
+     */
+    val kind: SetKind? = null
 ) {
     /** Weight moved, for the sets where that means something. */
     val volumeLb: Double
@@ -135,7 +142,9 @@ data class PrescribedSet(
     val rpe: Double? = null,
     val durationSec: Int? = null,
     val distanceMeters: Double? = null,
-    val side: SetSide? = null
+    val side: SetSide? = null,
+    /** PLAN-FORMAT "Set types", flags bits 3-4: a drop set or rest-pause. Null is straight, and an exercise's first set always is. */
+    val kind: SetKind? = null
 ) {
     /**
      * "185 x 5", "5 reps", "600s 1600m L", for [RoutineExercise.summary]'s list
@@ -154,7 +163,8 @@ data class PrescribedSet(
             durationSec?.let { parts += "${it}s" }
             distanceMeters?.let { parts += "${it.trimZeros()}m" }
             side?.let { parts += it.short }
-            return if (parts.isEmpty()) "as written" else parts.joinToString(" ")
+            // Side then kind, Coach web's order: "30 x 12 L drop".
+            return (if (parts.isEmpty()) "as written" else parts.joinToString(" ")) + SetTypes.suffix(kind)
         }
 }
 
@@ -182,7 +192,13 @@ data class LoggedExercise(
      */
     val prescribed: List<PrescribedSet>? = null,
     /** PLAN-FORMAT's `b: 1`: every set in [prescribed] is done on both sides. */
-    val eachSide: Boolean = false
+    val eachSide: Boolean = false,
+    /**
+     * The superset or circuit this exercise is in, copied from the routine or plan it started from
+     * -- adjacent exercises sharing it are one group ([SetTypes]). Null is not grouped.
+     * Informational, like [prescribed]: nothing that reads the log reads this.
+     */
+    val group: Int? = null
 ) {
     val volumeLb: Double get() = sets.sumOf { it.volumeLb }
 
@@ -254,6 +270,7 @@ internal fun WorkoutSet.toJson(): JSONObject = JSONObject().apply {
     durationSec?.let { put("durationSec", it) }
     distanceMeters?.let { put("distanceMeters", it) }
     side?.let { put("side", it.wire) }
+    kind?.let { put("kind", it.wire) }
 }
 
 internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
@@ -265,7 +282,9 @@ internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
     distanceMeters = o.finiteDoubleOrNull("distanceMeters"),
     // No `side`, or a spelling this build does not know, is both. A backup
     // written before per-limb tracking restores exactly as it always did.
-    side = SetSide.fromWire(if (o.isNull("side")) null else o.optString("side", ""))
+    side = SetSide.fromWire(if (o.isNull("side")) null else o.optString("side", "")),
+    // BACKUP-FORMAT's `kind`, read leniently: anything but "drop" or "restPause" is straight.
+    kind = SetKind.fromWire(o.opt("kind"))
 )
 
 internal fun LoggedExercise.toJson(): JSONObject = JSONObject().apply {
@@ -273,16 +292,33 @@ internal fun LoggedExercise.toJson(): JSONObject = JSONObject().apply {
     put("name", name)
     put("equipment", equipment)
     put("note", note)
-    put("sets", JSONArray().also { array -> sets.forEach { array.put(it.toJson()) } })
+    // An exercise's first set is written straight whatever it holds: there is no set before it.
+    put("sets", JSONArray().also { array -> sets.firstStraight { copy(kind = null) }.forEach { array.put(it.toJson()) } })
     // LIFT web's spellings (BACKUP-FORMAT, a logged exercise started from a
     // per-side prescription), both omitted when absent -- so an exercise
     // without one writes the same object it always did.
     putPrescription(prescribed, eachSide)
+    group?.let { put("group", it) }
+}
+
+/**
+ * The list with its first set made straight: there is no set before it to drop from or pause
+ * after, so a file never holds a kind there and a read never keeps one (BACKUP-FORMAT, PLAN-FORMAT
+ * "Set types"). The same list when the first set has no kind -- every list written before set types.
+ */
+internal fun <T> List<T>.firstStraight(straighten: T.() -> T): List<T> {
+    val first = firstOrNull() ?: return this
+    val straight = first.straighten()
+    return if (straight == first) this else listOf(straight) + drop(1)
 }
 
 /** `prescribed` and `eachSide: true`, each omitted when there is nothing to say. */
 internal fun JSONObject.putPrescription(prescribed: List<PrescribedSet>?, eachSide: Boolean) {
-    prescribed?.let { sets -> put("prescribed", JSONArray().also { array -> sets.forEach { array.put(it.toJson()) } }) }
+    prescribed?.let { sets ->
+        put("prescribed", JSONArray().also { array ->
+            sets.firstStraight { copy(kind = null) }.forEach { array.put(it.toJson()) }
+        })
+    }
     if (eachSide) put("eachSide", true)
 }
 
@@ -294,6 +330,7 @@ internal fun PrescribedSet.toJson(): JSONObject = JSONObject().apply {
     durationSec?.let { put("durationSec", it) }
     distanceMeters?.let { put("distanceMeters", it) }
     side?.let { put("side", it.wire) }
+    kind?.let { put("kind", it.wire) }
 }
 
 internal fun prescribedSetFromJson(o: JSONObject): PrescribedSet = PrescribedSet(
@@ -302,13 +339,15 @@ internal fun prescribedSetFromJson(o: JSONObject): PrescribedSet = PrescribedSet
     rpe = o.finiteDoubleOrNull("rpe"),
     durationSec = o.finiteIntOrNull("durationSec"),
     distanceMeters = o.finiteDoubleOrNull("distanceMeters"),
-    side = SetSide.fromWire(if (o.isNull("side")) null else o.optString("side", ""))
+    side = SetSide.fromWire(if (o.isNull("side")) null else o.optString("side", "")),
+    kind = SetKind.fromWire(o.opt("kind"))
 )
 
 /** Lenient: a missing or malformed `prescribed` is none, a set that is not an object is skipped. */
 internal fun JSONObject.prescribedOrNull(): List<PrescribedSet>? {
     val array = optJSONArray("prescribed") ?: return null
     return (0 until array.length()).mapNotNull { array.optJSONObject(it)?.let(::prescribedSetFromJson) }
+        .firstStraight { copy(kind = null) }
 }
 
 /** Only `true` is each side; anything else, or nothing, is not. */
@@ -318,6 +357,7 @@ internal fun loggedExerciseFromJson(o: JSONObject): LoggedExercise {
     val setsArray = o.optJSONArray("sets")
     val sets = if (setsArray == null) emptyList() else
         (0 until setsArray.length()).map { workoutSetFromJson(setsArray.getJSONObject(it)) }
+            .firstStraight { copy(kind = null) }
     return LoggedExercise(
         id = o.optString("id", UUID.randomUUID().toString()),
         name = o.optString("name", ""),
@@ -325,7 +365,10 @@ internal fun loggedExerciseFromJson(o: JSONObject): LoggedExercise {
         sets = sets,
         note = o.optString("note", ""),
         prescribed = o.prescribedOrNull(),
-        eachSide = o.eachSideFlag()
+        eachSide = o.eachSideFlag(),
+        // Lenient: anything but a positive integer is not grouped. The session's runs are
+        // renumbered as it is read ([workoutSessionFromJson]), so a group of one is none.
+        group = SetTypes.groupOf(o.opt("group"))
     )
 }
 
@@ -335,7 +378,12 @@ internal fun WorkoutSession.toJson(): JSONObject = JSONObject().apply {
     put("name", name)
     put("note", note)
     put("startedAt", startedAt)
-    put("exercises", JSONArray().also { array -> exercises.forEach { array.put(it.toJson()) } })
+    // Groups as the wire would number them: a superset left with one member, after the other was
+    // removed from the day, is written as no group at all.
+    val groups = SetTypes.runs(exercises.map { it.group })
+    put("exercises", JSONArray().also { array ->
+        exercises.forEachIndexed { i, e -> array.put(e.copy(group = groups[i]).toJson()) }
+    })
 }
 
 internal fun workoutSessionFromJson(o: JSONObject): WorkoutSession {
@@ -343,7 +391,7 @@ internal fun workoutSessionFromJson(o: JSONObject): WorkoutSession {
     val exercises = if (exercisesArray == null) emptyList() else
         (0 until exercisesArray.length()).map {
             loggedExerciseFromJson(exercisesArray.getJSONObject(it))
-        }
+        }.regrouped({ group }) { copy(group = it) }
     return WorkoutSession(
         id = o.optString("id", UUID.randomUUID().toString()),
         date = o.optString("date", todayKey()),
@@ -352,4 +400,15 @@ internal fun workoutSessionFromJson(o: JSONObject): WorkoutSession {
         exercises = exercises,
         startedAt = o.finiteLong("startedAt", 0L)
     )
+}
+
+/**
+ * A list of exercises with its groups renumbered as the wire would number them ([SetTypes.runs]):
+ * 1, 2, 3... in order, a group of one removed. The same list when nothing changes -- every list
+ * written before set types.
+ */
+internal fun <T> List<T>.regrouped(group: T.() -> Int?, withGroup: T.(Int?) -> T): List<T> {
+    val runs = SetTypes.runs(map { it.group() })
+    if (runs == map { it.group() }) return this
+    return mapIndexed { i, e -> e.withGroup(runs[i]) }
 }
