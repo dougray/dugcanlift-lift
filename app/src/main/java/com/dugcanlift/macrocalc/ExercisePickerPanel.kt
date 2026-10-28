@@ -34,9 +34,14 @@ import com.dugcanlift.macrocalc.data.EQUIPMENT_FILTERS
 import com.dugcanlift.macrocalc.data.ExerciseLibraryStore
 import com.dugcanlift.macrocalc.data.LibraryExercise
 import com.dugcanlift.macrocalc.data.LoggedExercise
-import com.dugcanlift.macrocalc.data.searchExerciseLibrary
+import com.dugcanlift.macrocalc.data.MyEquipment
+import com.dugcanlift.macrocalc.data.SettingsStore
+import com.dugcanlift.macrocalc.data.searchExerciseLibraryOwned
 import com.dugcanlift.macrocalc.data.titleCaseAscii
 import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
 
 /**
  * Picking an exercise: search over the bundled 873, or type one that isn't
@@ -67,6 +72,12 @@ fun ExercisePickerPanel(
     var equipment by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("") }
 
+    // My equipment, read as the panel opens: what is switched off on Home is left out of the
+    // results, and said so. "Show all" is for this search, without changing the setting.
+    val notOwned = remember { SettingsStore.get(context).equipmentNotOwned }
+    var showsEverything by remember { mutableStateOf(false) }
+    val filtering = notOwned.isNotEmpty() && !showsEverything
+
     // First open pays for the parse; someone who only tracks food never does.
     LaunchedEffect(Unit) {
         library = ExerciseLibraryStore.load(context)
@@ -75,9 +86,13 @@ fun ExercisePickerPanel(
     }
 
     val recentKeys = remember(known) { known.map { it.matchKey } }
-    val results = remember(library, query, filter, recentKeys) {
-        library?.let { searchExerciseLibrary(it, query, filter, recentKeys) }.orEmpty()
+    val search = remember(library, query, filter, recentKeys, filtering) {
+        library?.let {
+            searchExerciseLibraryOwned(it, query, filter, recentKeys, notOwned = if (filtering) notOwned else emptySet())
+        }
     }
+    val results = search?.shown.orEmpty()
+    val leftOut = search?.leftOut ?: 0
 
     NameField(value = query, onValueChange = { query = it }, label = "Exercise")
 
@@ -134,7 +149,29 @@ fun ExercisePickerPanel(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (results.isEmpty()) {
+            // Says the list is narrowed, and by how much, with the way out.
+            if (notOwned.isNotEmpty()) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = MyEquipment.statusText(filtering, leftOut),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { showsEverything = !showsEverything }, colors = dclTextButtonColors()) {
+                        Text(if (filtering) "Show all" else "Only mine", maxLines = 1)
+                    }
+                }
+            }
+
+            if (results.isEmpty() && leftOut > 0) {
+                Text(text = "Nothing with your equipment", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = MyEquipment.leftOutText(leftOut),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (results.isEmpty()) {
                 Text(
                     text = "Nothing matches that.",
                     style = MaterialTheme.typography.bodySmall,

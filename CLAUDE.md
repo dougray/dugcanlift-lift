@@ -211,6 +211,40 @@ Coach web's `coach/prescriptions.js` is the rule and LIFT web's `lift/set-types.
   `PlanSetTypesTest` pins the import, an old decoder's view (main's mapping, frozen), plans without
   types against main, and the backup; `SetTypesTest` the rules.
 
+## Programming: equipment, rotations, the next weight
+
+Ports of LIFT iPhone's `MyEquipment`, `RoutineRotation` and `ProgressionRule` (its CLAUDE.md
+section of the same name), function for function and word for word; each test file is a port of
+the iPhone's, case for case. All app-side: no new file, nothing in the kit, nothing on the wire,
+nothing in the backup.
+
+- **My equipment** (`data/MyEquipment.kt`, Home → Training settings) is stored as what the lifter
+  does *not* have (`SettingsStore.equipmentNotOwned`), so an untouched phone hides nothing and
+  owning everything removes the key. An exercise with no equipment listed is never hidden. The
+  picker filters every match before the 40-row cap (`searchExerciseLibraryOwned`), says "Your
+  equipment · N left out" and offers "Show all" for that search. `MyEquipmentTest` fails if
+  `exercises.json` gains an equipment value with no switch.
+- **A folder is a rotation** (`data/RoutineRotation.kt`). Up next is the routine after the last one
+  started from that folder, wrapping; a blank folder ("My Routines") and a folder of one are not
+  rotations. **This build records no routine on a session**: `Routine.toSession` copies the routine's
+  name and gives the exercises fresh ids. So a session is a routine's when a booking's
+  `startedSessionId` names it, or else by its name (trimmed, case ignored). A renamed session counts
+  as no routine, a hand-logged workout given a routine's name counts as that routine, and a renamed
+  routine loses its history. Order is `createdAt`, then the order in `routines.json` -- not the
+  iPhone's name tie-break, because a starter split's routines share an instant. Routines lists a
+  named folder in that order and marks "Up next"; Train offers "Up next: Pull · PPL" only today,
+  only while today has nothing logged and no coach booked it, and only from a rotation someone has
+  started.
+- **The next weight** (`data/ProgressionRule.kt`) is double progression: every working set at last
+  session's top weight reached the routine's reps (`askedSets`: the most any asks for, and how many
+  do), as many sets as it asks for, is up 5 lb; short is the same again; short at the same weight two
+  sessions running backs off about 10%, down to a step. **Pounds and 5 lb, always**: no unit and no
+  plate data here, so the iPhone's bar step (two of the smallest plate) has nothing to read. A line
+  with its reason and "Use", which fills only rows still exactly as the routine laid them out --
+  this build has no done tick, so that is the only "not done" it can tell. None for a routine any
+  booking names, a lift logged a side at a time, a bodyweight lift, a first session, a session whose
+  name matches two routines, or with "Suggest the next weight" off (`SettingsStore.suggestsNextWeight`).
+
 ## What you were asked to do, and what you did
 
 `PlanLog` puts the week a coach booked beside the week this device logged, as a
