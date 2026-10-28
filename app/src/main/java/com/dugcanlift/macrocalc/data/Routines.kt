@@ -323,10 +323,12 @@ fun WorkoutSession.toRoutine(routineName: String, folder: String = ""): Routine 
                 .maxByOrNull { it.value }?.key,
             targetWeightLb = logged.sets.mapNotNull { it.weightLb }.maxOrNull(),
             note = logged.note,
-            // A superset done today is kept as one. A set's kind is not: this path flattens a day's
-            // sets into targets on purpose (most common reps, heaviest weight), and a kind by
-            // position would describe sets it just rewrote. LIFT web's `fromSession`, rule for rule.
-            group = logged.group
+            // A superset done today is kept as one, and each set's kind by its position -- except
+            // for a lift logged a side at a time, where one position is two logged sets. LIFT web's
+            // `fromSession`, rule for rule.
+            group = logged.group,
+            setKinds = if (logged.sets.any { it.side != null }) null else
+                SetTypes.routineSetKinds(logged.sets.map { it.kind }, logged.sets.size.coerceAtLeast(1))
         )
     }.regrouped({ group }) { copy(group = it) }
 )

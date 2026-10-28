@@ -192,6 +192,45 @@ class RoutineSetKindsTest {
         assertTrue(Routine(name = "Push", exercises = listOf(bench)).toSession("2027-01-11").exercises.single().sets.all { it.kind == null })
     }
 
+    /* ---------- "Save as routine" ---------- */
+
+    /** LIFT web's `fromSession`: a set's kind is kept by its position, as a superset already is. */
+    @Test
+    fun `saving a workout as a routine keeps each set's kind by position`() {
+        val day = WorkoutSession(date = "2027-01-11", name = "Push", exercises = listOf(
+            LoggedExercise(name = bench.name, equipment = bench.equipment, sets = listOf(
+                WorkoutSet(weightLb = 185.0, reps = 8),
+                WorkoutSet(weightLb = 185.0, reps = 8),
+                WorkoutSet(weightLb = 135.0, reps = 10, kind = SetKind.DROP),
+                WorkoutSet(weightLb = 135.0, reps = 4, kind = SetKind.REST_PAUSE),
+                WorkoutSet(weightLb = 185.0, reps = 8)
+            )),
+            LoggedExercise(name = "Standing Military Press", equipment = "Barbell",
+                sets = List(3) { WorkoutSet(weightLb = 95.0, reps = 10) })
+        ))
+        val saved = day.toRoutine("Again").exercises
+        assertEquals(5, saved[0].targetSets)
+        assertEquals(listOf(null, null, SetKind.DROP, SetKind.REST_PAUSE), saved[0].setKinds)
+        assertNull(saved[1].setKinds)
+        // And starting it again lays the kinds back out where they were.
+        assertEquals(listOf(null, null, SetKind.DROP, SetKind.REST_PAUSE, null),
+            Routine(name = "Again", exercises = saved).toSession("2027-01-18").exercises[0].sets.map { it.kind })
+    }
+
+    /** A side at a time, one position is two logged sets, so a position cannot carry a kind. */
+    @Test
+    fun `saving a workout as a routine keeps no kinds for a lift logged a side at a time`() {
+        val day = WorkoutSession(date = "2027-01-11", name = "Pull", exercises = listOf(
+            LoggedExercise(name = "Single-Arm Dumbbell Row", equipment = "Dumbbell", sets = listOf(
+                WorkoutSet(weightLb = 60.0, reps = 10, side = SetSide.LEFT),
+                WorkoutSet(weightLb = 60.0, reps = 10, side = SetSide.RIGHT),
+                WorkoutSet(weightLb = 40.0, reps = 12, side = SetSide.LEFT, kind = SetKind.DROP),
+                WorkoutSet(weightLb = 40.0, reps = 12, side = SetSide.RIGHT, kind = SetKind.DROP)
+            ))
+        ))
+        assertNull(day.toRoutine("Again").exercises.single().setKinds)
+    }
+
     /* ---------- storage and the backup ---------- */
 
     @Test
