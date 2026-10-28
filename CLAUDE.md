@@ -401,6 +401,34 @@ further away. The debug fixture is pinned the same way against
 `road-food-sample.sha256`, and is shared with LIFT web and lift-ios, so changing
 it means changing it in all three repos.
 
+**Avoiding allergens is one-sided on purpose** (`RoadFoodAllergens`, a port of
+LIFT iPhone's, tested case for case by `RoadFoodAllergensTest`; LIFT web has no
+filter yet, so the iPhone is the reference and the rule changes there first).
+The data is what each chain's own chart says an item **contains**
+(`dugcanlift-kit/data/README.md` "Allergens").
+- An item containing something avoided is hidden and counted.
+- An item the chart is silent on (no `allergens`), or an avoided allergen the
+  chain's `allergensCovered` does not name -- absent covers nothing -- stays on
+  screen with "Milk not stated". A list that hid only what it knew about would
+  read as safe when it is not. Nothing says "safe".
+- The note under the Avoid row has three cases, keyed on `allergenSource` and
+  `allergensCovered`: no chart read; a chart that lists contents but never says
+  what it covers, so it hides and never clears; a chart that says both. Every
+  case says cross-contact is not covered. Same words on all three LIFT builds.
+- The avoid list is `SettingsStore.roadFoodAvoid`, shared by every place, on
+  this phone only; avoiding nothing removes the key.
+
+**A meal can be put together before it is ordered** (`RoadFoodMeal`, a port of
+LIFT iPhone's, `RoadFoodMealTest`). "+" on a row adds it to a tray pinned under
+the list: "2 items · 520 kcal · 40 g protein · fits, 380 kcal to spare",
+against the same `remainingFor` the list ranks with, each item rounded as its
+entry will be. "Log meal" logs each item as its own entry through
+`RoadFood.entryFor`, exactly as "Log it" does. Only what `RoadFood.canLog`
+accepts can be added -- a calorie figure, which is this platform's rule (the
+iPhone also needs protein, carbs and fat). The tray is not kept across places,
+and at the gas station it totals against every snack, not just the category on
+screen. Nothing goes on the wire.
+
 **A coach's picks.** A plan link can carry `rf`, a flat list of Road Food item
 ids a coach is happy with for this client (`coach/PLAN-FORMAT.md` "Road picks").
 `RoadPicks` holds them, `SettingsStore.roadPicks` stores them, and
