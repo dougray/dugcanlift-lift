@@ -30,7 +30,12 @@ import kotlin.math.floor
  *   CLAUDE.md), so the step is the iPhone's pound step, 5 lb, and every line says "lb".
  * - **No plate data.** The iPhone makes a bar lift's step two of the smallest plate the lifter
  *   owns; nothing here records plates, so every lift steps 5 lb.
- * - **No warmup flag.** Every logged set is a working set, as [PlanLog] already says.
+ * - **No warmup flag.** Every logged straight set is a working set, as [PlanLog] already says.
+ * - **Drop sets and rest-pause are not working sets.** A drop set is lighter on purpose and a
+ *   rest-pause set short on purpose, so neither is asked for ([target]), counted ([sessions]) or
+ *   filled by "Use" ([open]) -- otherwise a four-set routine with two drops could never go up. The
+ *   kind is the one the set was laid out with: from a coach's sets or the routine's own
+ *   [RoutineExercise.setKinds].
  * - **No "done" tick.** A routine lays its sets out as rows the moment it starts, and a row is
  *   logged from then on. So "a set not done" is a row still exactly as the routine laid it out
  *   ([open]); a set lifted at exactly those numbers cannot be told from one not lifted yet.
@@ -169,11 +174,14 @@ object ProgressionRule {
     fun routineExercise(exercise: LoggedExercise, routine: Routine): RoutineExercise? =
         routine.exercises.firstOrNull { matchKey(it.name, it.equipment) == exercise.matchKey }
 
-    /** The routine's reps -- the most any set asks for -- and how many sets ask for reps. */
+    /** The routine's reps -- the most any straight set asks for -- and how many straight sets ask for reps. */
     data class Target(val reps: Int, val sets: Int)
 
     fun target(routineExercise: RoutineExercise): Target? {
-        val reps = routineExercise.askedSets.mapNotNull { it.reps }
+        // Straight sets only. A drop set is lighter on purpose and a rest-pause set short on purpose,
+        // so counting them would ask for sets at the top weight that the routine never meant to be
+        // there: a four-set routine with two drops could never go up.
+        val reps = routineExercise.askedSets.filter { it.kind == null }.mapNotNull { it.reps }
         val most = reps.maxOrNull() ?: return null
         return Target(most, reps.size)
     }
@@ -195,6 +203,8 @@ object ProgressionRule {
                     .flatMap { it.sets }
                 if (sets.any { it.side != null }) return@mapNotNull null
                 val working = sets.mapNotNull { set ->
+                    // A drop or rest-pause set is not a working set: see [target].
+                    if (set.kind != null) return@mapNotNull null
                     val weight = set.weightLb ?: return@mapNotNull null
                     val reps = set.reps ?: return@mapNotNull null
                     if (weight > 0 && reps > 0) LoggedSet(weight, reps) else null
@@ -231,13 +241,14 @@ object ProgressionRule {
     data class Suggestion(val next: Next, val laidOut: List<PrescribedSet>)
 
     /**
-     * The sets "Use" fills: two-sided rows still exactly as the routine laid them out, whose weight
-     * is not already the one. A row the lifter added is a set they logged; this build has no tick
+     * The sets "Use" fills: two-sided straight rows still exactly as the routine laid them out, whose
+     * weight is not already the one. A drop or rest-pause row is never filled: it keeps its own weight. A row the lifter added is a set they logged; this build has no tick
      * to tell a laid-out row done from one not done, so a laid-out row is taken as not done.
      */
     fun open(sets: List<WorkoutSet>, laidOut: List<PrescribedSet>, weight: Double): List<WorkoutSet> =
         sets.filter { set ->
-            set.side == null &&
+            // A drop set keeps its own, lighter weight, and a rest-pause set's is the lifter's call.
+            set.side == null && set.kind == null &&
                 laidOut.any { it.laysOut(set) } &&
                 (set.weightLb?.let { abs(it - weight) > 0.001 } ?: true)
         }
