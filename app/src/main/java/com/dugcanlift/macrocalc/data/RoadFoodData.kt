@@ -14,6 +14,11 @@ import java.io.FileNotFoundException
  * that is not a finite, non-negative number -- never zero ([roadNumber]).
  * A snack also carries its own [category], [barcode], [checkedOn] and [source];
  * a chain's item takes those from its chain.
+ *
+ * [allergens] is what the chain's own allergen chart says the item
+ * **contains**, known names only, in [RoadFoodAllergens.ALL]'s order. Null is
+ * "not stated"; empty is "listed, and none of what the chart covers" -- which
+ * clears it only of what [RoadFoodChain.allergensCovered] names.
  */
 data class RoadFoodItem(
     val id: String,
@@ -31,7 +36,8 @@ data class RoadFoodItem(
     val category: String? = null,
     val barcode: String? = null,
     val checkedOn: String? = null,
-    val source: String? = null
+    val source: String? = null,
+    val allergens: List<String>? = null
 )
 
 /**
@@ -40,6 +46,11 @@ data class RoadFoodItem(
  * is absent when the document states none -- only as precise as the document
  * is, so "2022-11" where a chart says only "NOVEMBER 2022". [kind] picks its
  * rules.
+ *
+ * [allergenSource] is where its allergen chart was read, null when none was.
+ * [allergensCovered] is which of the nine that chart says it covers,
+ * and is empty when the file does not say -- a chart that never states what it
+ * covers can hide an item, never clear one ([RoadFoodAllergens]).
  */
 data class RoadFoodChain(
     val id: String,
@@ -48,7 +59,9 @@ data class RoadFoodChain(
     val publishedOn: String? = null,
     val checkedOn: String? = null,
     val source: String? = null,
-    val items: List<RoadFoodItem>
+    val items: List<RoadFoodItem>,
+    val allergenSource: String? = null,
+    val allergensCovered: List<String> = emptyList()
 )
 
 /**
@@ -90,7 +103,9 @@ fun parseRoadFood(json: String): RoadFoodData {
                 publishedOn = c.text("publishedOn"),
                 checkedOn = c.text("checkedOn"),
                 source = c.text("source"),
-                items = items.objects().map(::roadItem)
+                items = items.objects().map(::roadItem),
+                allergenSource = c.text("allergenSource"),
+                allergensCovered = c.allergenList("allergensCovered") ?: emptyList()
             )
         },
         snacks = root.optJSONArray("snacks")?.objects()?.map(::roadItem) ?: emptyList(),
@@ -128,8 +143,20 @@ private fun roadItem(o: JSONObject): RoadFoodItem = RoadFoodItem(
     category = o.text("category"),
     barcode = o.text("barcode"),
     checkedOn = o.text("checkedOn"),
-    source = o.text("source")
+    source = o.text("source"),
+    allergens = o.allergenList("allergens")
 )
+
+/**
+ * An allergen list: known names only, in display order ([RoadFoodAllergens.known]).
+ * Null when the key is absent, or is not an array of strings -- a list that
+ * cannot be read says nothing, which is "not stated", never "none".
+ */
+private fun JSONObject.allergenList(key: String): List<String>? {
+    val array = opt(key) as? JSONArray ?: return null
+    val strings = (0 until array.length()).map { array.opt(it) as? String ?: return null }
+    return RoadFoodAllergens.known(strings)
+}
 
 /**
  * `road-food.js`'s `num`: a finite, non-negative number, or null. A numeric
