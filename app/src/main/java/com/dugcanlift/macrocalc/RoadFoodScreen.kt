@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -29,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,7 +53,9 @@ import com.dugcanlift.macrocalc.data.Remaining
 import com.dugcanlift.macrocalc.data.RoadFood
 import com.dugcanlift.macrocalc.data.RoadFoodChain
 import com.dugcanlift.macrocalc.data.RoadFoodData
+import com.dugcanlift.macrocalc.data.RoadFoodAllergens
 import com.dugcanlift.macrocalc.data.RoadFoodItem
+import com.dugcanlift.macrocalc.data.RoadFoodMeal
 import com.dugcanlift.macrocalc.data.RoadFoodStore
 import com.dugcanlift.macrocalc.data.RoadPicks
 import com.dugcanlift.macrocalc.data.SettingsStore
@@ -109,6 +115,13 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
     // What a coach marked and sent in a plan link, or null when none has. Held
     // here so clearing them re-draws the whole screen, not just one card.
     var picks by remember { mutableStateOf(settings.roadPicks) }
+    // Allergens avoided, kept across places and launches (RoadFoodAllergens).
+    var avoiding by remember { mutableStateOf(settings.roadFoodAvoid) }
+    // Items put together before ordering (RoadFoodMeal). Saveable so a theme
+    // change keeps it, but never kept across places: a new place is a new order.
+    var plate by rememberSaveable(
+        stateSaver = Saver<RoadFoodMeal, ArrayList<String>>(save = { it.toSaved() }, restore = { RoadFoodMeal.fromSaved(it) })
+    ) { mutableStateOf(RoadFoodMeal()) }
 
     val allEntries by repo.entries.collectAsState()
     val today = todayKey()
@@ -117,16 +130,32 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
     fun backToPicker() {
         view = "picker"
         note = ""
+        plate = RoadFoodMeal()
     }
     BackHandler { if (view == "picker") onClose(loggedAny) else backToPicker() }
 
+    val loadedData = data
+    val openChain = view.removePrefix("chain:").takeIf { view.startsWith("chain:") }
+        ?.let { id -> loadedData?.chains?.firstOrNull { it.id == id } }
+    val openSnacks = view.startsWith("snacks:")
+    // The whole place's menu, every category of the gas station included, so a
+    // snack added under Jerky is still in the meal while Drinks is showing.
+    val placeMenu = when {
+        openChain != null -> openChain.items
+        openSnacks -> loadedData?.snacks.orEmpty()
+        else -> emptyList()
+    }
+
     MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
         val contentWidth = AdaptiveLayout.contentWidth(paneWidth)
+        val gutter = AdaptiveLayout.sideGutter(paneWidth).dp
+        Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = AdaptiveLayout.sideGutter(paneWidth).dp, vertical = 8.dp)
+                .padding(horizontal = gutter, vertical = 8.dp)
         ) {
             TextButton(onClick = { if (view == "picker") onClose(loggedAny) else backToPicker() }, colors = dclTextButtonColors()) {
                 Text(if (view == "picker") "Back to Food" else "All chains")
@@ -155,8 +184,7 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
                 return@Column
             }
 
-            val chain = view.removePrefix("chain:").takeIf { view.startsWith("chain:") }
-                ?.let { id -> loaded.chains.firstOrNull { it.id == id } }
+            val chain = openChain
             val snackCategory = view.removePrefix("snacks:").takeIf { view.startsWith("snacks:") }
 
             if (chain == null && snackCategory == null) {
@@ -174,10 +202,12 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
                         settings.roadFoodRecent = recent
                         view = "chain:$id"
                         note = ""
+                        plate = RoadFoodMeal()
                     },
                     onSnacks = {
                         view = "snacks:"
                         note = ""
+                        plate = RoadFoodMeal()
                     }
                 )
             } else {
@@ -190,6 +220,14 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
                     meal = Meal.entries.firstOrNull { it.name == mealName } ?: Meal.SNACK,
                     note = note,
                     picks = picks,
+                    avoiding = avoiding,
+                    onAvoid = { allergen ->
+                        avoiding = if (allergen in avoiding) avoiding - allergen else avoiding + allergen
+                        settings.roadFoodAvoid = avoiding
+                    },
+                    plate = plate,
+                    onPlateAdd = { plate = plate.add(it) },
+                    onPlateRemove = { plate = plate.remove(it) },
                     twoPane = AdaptiveLayout.roadFoodIsTwoPane(contentWidth),
                     onCategory = { view = "snacks:$it" },
                     onMeal = { mealName = it.name },
@@ -208,6 +246,52 @@ fun RoadFoodScreen(goal: MacroResult?, onClose: (loggedAny: Boolean) -> Unit, mo
                 )
             }
             Spacer(modifier = Modifier.height(32.dp))
+        }
+        // Pinned below the list rather than placed in it, so it is seen wherever
+        // the row that was added had been scrolled to.
+        if (!plate.isEmpty && placeMenu.isNotEmpty()) {
+            PlateTray(
+                line = plate.line(placeMenu, remaining),
+                modifier = Modifier.padding(horizontal = gutter, vertical = 8.dp),
+                onClear = { plate = RoadFoodMeal() },
+                onLog = {
+                    // Each item as its own entry, exactly as "Log it" writes one.
+                    val meal = Meal.entries.firstOrNull { it.name == mealName } ?: Meal.SNACK
+                    val now = System.currentTimeMillis()
+                    val entries = plate.items(placeMenu).mapIndexed { i, item ->
+                        RoadFood.entryFor(item, openChain?.name, meal, date = today, loggedAt = now + i)
+                    }
+                    if (entries.isNotEmpty()) {
+                        scope.launch { entries.forEach { repo.add(it) } }
+                        loggedAny = true
+                        val after = remainingFor(goal, allEntries.forDate(today) + entries)
+                        note = "Logged ${if (entries.size == 1) "1 item" else "${entries.size} items"} to ${meal.label}." + when {
+                            after == null -> ""
+                            after.calories >= 0 -> " ${after.calories} kcal left today."
+                            else -> " ${-after.calories} kcal over today."
+                        }
+                    }
+                    plate = RoadFoodMeal()
+                }
+            )
+        }
+        }
+    }
+}
+
+/** The meal being put together: its total against what is left, Clear, and Log meal. */
+@Composable
+private fun PlateTray(line: String, modifier: Modifier, onClear: () -> Unit, onLog: () -> Unit) {
+    Card(modifier = modifier.fillMaxWidth(), border = dclCardBorder()) {
+        Row(modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }) {
+                Text("Your meal", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(line, style = MaterialTheme.typography.bodyMedium)
+            }
+            TextButton(onClick = onClear, colors = dclTextButtonColors()) { Text("Clear") }
+            Button(onClick = onLog, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)) {
+                Text("Log meal")
+            }
         }
     }
 }
@@ -377,6 +461,11 @@ private fun Place(
     meal: Meal,
     note: String,
     picks: RoadPicks?,
+    avoiding: Set<String>,
+    onAvoid: (String) -> Unit,
+    plate: RoadFoodMeal,
+    onPlateAdd: (RoadFoodItem) -> Unit,
+    onPlateRemove: (RoadFoodItem) -> Unit,
     twoPane: Boolean,
     onCategory: (String) -> Unit,
     onMeal: (Meal) -> Unit,
@@ -385,6 +474,9 @@ private fun Place(
     val isSnacks = chain == null
     val items = if (chain != null) chain.items
     else data.snacks.filter { snackCategory.isNullOrEmpty() || it.category == snackCategory }
+    // What the chain's allergen chart says it covers; nothing for the gas station.
+    val covered = chain?.allergensCovered.orEmpty()
+    val allergenFiltered = RoadFoodAllergens.filter(items, covered, avoiding)
 
     Text(chain?.name ?: "Gas station", style = MaterialTheme.typography.headlineSmall)
 
@@ -445,10 +537,36 @@ private fun Place(
         }
     }
 
+    // Avoid: what the chain's own chart says an item contains hides it, and is
+    // counted. An item the chart is silent on stays, and says so on its row.
+    Spacer(modifier = Modifier.height(8.dp))
+    Text("Avoid", style = MaterialTheme.typography.labelLarge)
+    Spacer(modifier = Modifier.height(4.dp))
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+    ) {
+        RoadFoodAllergens.ALL.forEach { allergen ->
+            FilterChip(
+                selected = allergen in avoiding,
+                onClick = { onAvoid(allergen) },
+                label = { Text(RoadFoodAllergens.label(allergen)) }
+            )
+        }
+    }
+    if (avoiding.isNotEmpty()) {
+        Text(
+            RoadFoodAllergens.avoidNote(allergenFiltered.hiddenCount, chain),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+    }
+
     // Ranked first, then the coach's picks floated to the top of each group.
     // Nothing about the ranking changes: the same items fit, in the same order
     // among themselves, and the same ones are left out.
-    val ranked = RoadFood.withPicks(RoadFood.rank(items, remaining?.calories), picks?.ids.orEmpty())
+    val ranked = RoadFood.withPicks(RoadFood.rank(allergenFiltered.shown, remaining?.calories), picks?.ids.orEmpty())
     Spacer(modifier = Modifier.height(12.dp))
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -505,6 +623,17 @@ private fun Place(
     // "Doug's pick", or nothing at all on an item nobody picked.
     val pickLabel: (RoadFoodItem) -> String? =
         { item -> picks?.takeIf { item in ranked }?.label("pick") }
+    val row: @Composable (RoadFoodItem) -> Unit = { item ->
+        ItemRow(
+            item = item,
+            pickLabel = pickLabel(item),
+            notStated = RoadFoodAllergens.notStatedLine(RoadFoodAllergens.verdict(item, covered, avoiding)),
+            inPlate = plate.count(item.id),
+            onPlateAdd = onPlateAdd,
+            onPlateRemove = onPlateRemove,
+            onLog = onLog
+        )
+    }
     val list: @Composable () -> Unit = {
         Spacer(modifier = Modifier.height(12.dp))
         Text("Log to", style = MaterialTheme.typography.labelLarge)
@@ -519,7 +648,7 @@ private fun Place(
         }
         if (ranked.fits.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
-            ItemList(ranked.fits, pickLabel, onLog)
+            ItemList(ranked.fits, row)
         }
         if (ranked.over.isNotEmpty()) {
             SectionHeading("A little over")
@@ -531,7 +660,7 @@ private fun Place(
             Spacer(modifier = Modifier.height(8.dp))
             // A pick that is over stays over: the pick is about the food, and
             // what is left of the day is the lifter's own arithmetic.
-            ItemList(ranked.over, pickLabel, onLog)
+            ItemList(ranked.over, row)
         }
     }
     val ordering: @Composable () -> Unit = {
@@ -557,23 +686,27 @@ private fun Place(
 }
 
 @Composable
-private fun ItemList(
-    items: List<RoadFoodItem>,
-    pickLabel: (RoadFoodItem) -> String?,
-    onLog: (RoadFoodItem) -> Unit
-) {
+private fun ItemList(items: List<RoadFoodItem>, row: @Composable (RoadFoodItem) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
             items.forEachIndexed { i, item ->
                 if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                ItemRow(item, pickLabel(item), onLog)
+                row(item)
             }
         }
     }
 }
 
 @Composable
-private fun ItemRow(item: RoadFoodItem, pickLabel: String?, onLog: (RoadFoodItem) -> Unit) {
+private fun ItemRow(
+    item: RoadFoodItem,
+    pickLabel: String?,
+    notStated: String?,
+    inPlate: Int,
+    onPlateAdd: (RoadFoodItem) -> Unit,
+    onPlateRemove: (RoadFoodItem) -> Unit,
+    onLog: (RoadFoodItem) -> Unit
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
@@ -597,7 +730,33 @@ private fun ItemRow(item: RoadFoodItem, pickLabel: String?, onLog: (RoadFoodItem
                 Text(it, style = MaterialTheme.typography.bodySmall, color = muted)
             }
             item.modification?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted) }
+            RoadFoodAllergens.containsLine(item)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = muted)
+            }
+            // In the body colour, not muted: this is the line someone avoiding
+            // an allergen needs to read before ordering.
+            notStated?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             item.barcode?.let { Text("Barcode $it", style = MaterialTheme.typography.bodySmall, color = muted) }
+        }
+        // "+" adds one to the meal being put together; once there is one, the
+        // count and "−" show beside it. Only what can be logged can be added.
+        if (inPlate > 0) {
+            IconButton(
+                onClick = { onPlateRemove(item) },
+                modifier = Modifier.size(40.dp).semantics { contentDescription = "One less ${item.name} in the meal" }
+            ) { Text("\u2212", style = MaterialTheme.typography.titleLarge, color = dclAccentText()) }
+            Text("$inPlate", style = MaterialTheme.typography.titleSmall)
+        }
+        IconButton(
+            onClick = { onPlateAdd(item) },
+            enabled = RoadFood.canLog(item),
+            modifier = Modifier.size(40.dp).semantics { contentDescription = "Add ${item.name} to the meal" }
+        ) {
+            Text(
+                "+",
+                style = MaterialTheme.typography.titleLarge,
+                color = if (RoadFood.canLog(item)) dclAccentText() else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
         }
         // Nothing to log without a calorie figure; every entry in LIFT has one.
         OutlinedButton(

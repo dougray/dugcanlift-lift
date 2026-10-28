@@ -346,6 +346,9 @@ object RoadFood {
 
     fun canLog(item: RoadFoodItem): Boolean = item.kcal != null
 
-    /** JavaScript's `Math.round`: halves go up, as `road-food.js` rounds them. */
-    private fun jsRound(v: Double): Long = Math.floor(v + 0.5).toLong()
+    /**
+     * JavaScript's `Math.round`: halves go up, as `road-food.js` rounds them.
+     * [RoadFoodMeal.total] reads it too, so a meal's total is what its entries log.
+     */
+    internal fun jsRound(v: Double): Long = Math.floor(v + 0.5).toLong()
 }
