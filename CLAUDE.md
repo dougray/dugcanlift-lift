@@ -176,6 +176,41 @@ a separate path.** It is a lifter's own log being turned into a template, and it
 synthesises on purpose (most common reps, *heaviest* weight). Nothing a coach
 sent goes through it.
 
+## Set types: supersets, drop sets, rest-pause
+
+PLAN-FORMAT "Set types"; spec `LIFT/docs/superpowers/specs/2026-10-28-set-types-design.md`.
+Coach web's `coach/prescriptions.js` is the rule and LIFT web's `lift/set-types.js` its port;
+`data/SetTypes.kt` is that port again, function for function -- change it there first.
+
+- **Read app-side, not in the kit.** Kit 1.8.0 models neither `g` nor flags bits 3-4, so
+  `SetTypes.planTypes` reads them off `PlanPayload.rawJson`, walking the JSON exactly as
+  `PlanLinkCodec` does (non-objects and non-array sets skipped) so positions line up. The side
+  stays the kit's (`(flags shr 1) and 3`); the kind is `(flags shr 3) and 3`, **masked, never
+  compared** -- a left drop set is `10`.
+- **`g` is a JSON positive integer** (`2.0` is 2; strings, fractions, 0, negatives, booleans are
+  not). Adjacency makes a group and a group of one is none: storage is always renumbered 1, 2, 3
+  (`SetTypes.runs`), on read and on write. Kind `1` drop, `2` rest-pause, `3`/junk straight, and an
+  exercise's first set is straight whatever it says -- dropped on read and never written.
+- **Stored as plain fields**: `RoutineExercise.group`, `LoggedExercise.group`, `PrescribedSet.kind`,
+  `WorkoutSet.kind`, under BACKUP-FORMAT's spellings (`group`, `kind: "drop" | "restPause"`), each
+  omitted otherwise, so a phone with no set types writes byte for byte what it wrote before. JSON
+  files, no schema -- the side-car the spec describes is for LIFT iOS's shared `@Model`s.
+- **A kind needs a set to sit on, and your own routines have none.** A routine of your own is a
+  count (`targetSets`), so it gets only "Superset with next" (Train → a routine's **Exercises**).
+  Kinds arrive from a coach's plan, on `prescribed` -- a kind on a later set makes it differ from the
+  first, so `Prescription` keeps it set by set -- and `Routine.toSession` copies them onto the
+  pre-filled sets (or keeps them inside a sided `prescribed`, and the set form copies the kind of the
+  prescribed set it answers). LIFT web draws the same line. No per-set routine model.
+- **Shown, never graded, never sent.** "Superset A" (two) / "Circuit A" (three+) above the first
+  member, "A1 · …" on each; a set reads side then kind, "30 x 12 L drop". SHARE-FORMAT has no set
+  type, so a drop set reaches a coach as an ordinary set. `PlanLog`, the week card, is unchanged,
+  as Coach web and LIFT web left theirs.
+- **No rest rules**: this app has no rest timer. **No watch**: LIFT Link carries neither field, so
+  the watch shows the sets without types (a protocol bump in both repos if that changes).
+- `fixtures/web-plan-set-types.txt` is Coach web's own encoder's output -- never regenerate it.
+  `PlanSetTypesTest` pins the import, an old decoder's view (main's mapping, frozen), plans without
+  types against main, and the backup; `SetTypesTest` the rules.
+
 ## What you were asked to do, and what you did
 
 `PlanLog` puts the week a coach booked beside the week this device logged, as a

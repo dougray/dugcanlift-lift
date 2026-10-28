@@ -39,7 +39,15 @@ data class RoutineExercise(
      */
     val prescribed: List<PrescribedSet>? = null,
     /** PLAN-FORMAT's `b: 1`: every set in [prescribed] is done on both sides. */
-    val eachSide: Boolean = false
+    val eachSide: Boolean = false,
+    /**
+     * The superset or circuit this exercise is in: adjacent exercises sharing a positive integer are
+     * one group, done round by round (PLAN-FORMAT "Set types", `g`). Null is not grouped. Stored
+     * renumbered 1, 2, 3... with a group of one removed -- [SetTypes] is the rule. Set by a coach's
+     * plan or by "Superset with next"; a routine of your own has no list of sets, so a set's kind
+     * arrives only from a coach, on [prescribed].
+     */
+    val group: Int? = null
 ) {
     val displayName: String
         get() = if (equipment.isBlank()) name else "$name ($equipment)"
@@ -78,6 +86,19 @@ data class Routine(
         get() = exercises.joinToString(", ") { it.displayName }
 }
 
+/** Whether exercise [index] is done round by round with the next -- the "Superset with next" chip. */
+fun Routine.groupedWithNext(index: Int): Boolean = SetTypes.groupedWithNext(exercises.map { it.group }, index)
+
+/**
+ * The routine with exercise [index] joined to the next, or split from it -- [SetTypes.setGroupedWithNext],
+ * Coach web's rules: joining onto a superset makes a circuit, and a split keeps the earlier
+ * exercises grouped and gives the later ones a group of their own (or none, if one is left).
+ */
+fun Routine.withGroupedWithNext(index: Int, on: Boolean): Routine {
+    val groups = SetTypes.setGroupedWithNext(exercises.map { it.group }, index, on)
+    return copy(exercises = exercises.mapIndexed { i, e -> e.copy(group = groups[i]) })
+}
+
 /* ---------- JSON ---------- */
 
 internal fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
@@ -92,6 +113,9 @@ internal fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
     targetDistanceMeters?.let { put("targetDistanceMeters", it) }
     put("note", note)
     putPrescription(prescribed, eachSide)
+    // BACKUP-FORMAT's `group`, omitted when not grouped -- so a routine without one writes the
+    // object it always did.
+    group?.let { put("group", it) }
 }
 
 internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
@@ -106,7 +130,10 @@ internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
     targetDistanceMeters = o.finiteDoubleOrNull("targetDistanceMeters"),
     note = o.optString("note", ""),
     prescribed = o.prescribedOrNull(),
-    eachSide = o.eachSideFlag()
+    eachSide = o.eachSideFlag(),
+    // Lenient: anything but a positive integer is not grouped. [routineFromJson] renumbers the
+    // routine's runs, so a group of one is none.
+    group = SetTypes.groupOf(o.opt("group"))
 )
 
 internal fun Routine.toJson(): JSONObject = JSONObject().apply {
@@ -114,13 +141,16 @@ internal fun Routine.toJson(): JSONObject = JSONObject().apply {
     put("name", name)
     put("folder", folder)
     put("createdAt", createdAt)
-    put("exercises", JSONArray().also { array -> exercises.forEach { array.put(it.toJson()) } })
+    put("exercises", JSONArray().also { array ->
+        exercises.regrouped({ group }) { copy(group = it) }.forEach { array.put(it.toJson()) }
+    })
 }
 
 internal fun routineFromJson(o: JSONObject): Routine {
     val array = o.optJSONArray("exercises")
     val exercises = if (array == null) emptyList() else
         (0 until array.length()).map { routineExerciseFromJson(array.getJSONObject(it)) }
+            .regrouped({ group }) { copy(group = it) }
     return Routine(
         id = o.optString("id", UUID.randomUUID().toString()),
         name = o.optString("name", ""),
@@ -191,19 +221,25 @@ fun Routine.toSession(date: String): WorkoutSession = WorkoutSession(
             // file that reads it back as nothing.
             prescribed = prescribed.takeIf { PerSideLogging.prescribesSides(it, template.eachSide) },
             eachSide = template.eachSide,
+            group = template.group,
             sets = prescribed.filter { !template.eachSide && it.side == null }.map {
                 WorkoutSet(
                     weightLb = it.weightLb,
                     reps = it.reps,
                     rpe = it.rpe,
                     durationSec = it.durationSec,
-                    distanceMeters = it.distanceMeters
+                    distanceMeters = it.distanceMeters,
+                    // What the coach asked this set to be, so its row can say "drop". It never
+                    // reaches the coach: SHARE-FORMAT has no set type. See SetTypes.
+                    kind = it.kind
                 )
             }
         ) else LoggedExercise(
             name = template.name,
             equipment = template.equipment,
             note = template.note,
+            // A superset stays one on the day, so the session can label it as the routine does.
+            group = template.group,
             // The targets, repeated -- [askedSets], which is the one place that knows how a
             // prescription with none of its own expands.
             sets = template.askedSets.map {
@@ -234,9 +270,12 @@ fun WorkoutSession.toRoutine(routineName: String, folder: String = ""): Routine 
                 .groupingBy { it }.eachCount()
                 .maxByOrNull { it.value }?.key,
             targetWeightLb = logged.sets.mapNotNull { it.weightLb }.maxOrNull(),
-            note = logged.note
+            note = logged.note,
+            // A superset done today is kept as one. A set's kind is not: a routine of your own
+            // holds a set count, not a list of sets. LIFT web's `fromSession`, rule for rule.
+            group = logged.group
         )
-    }
+    }.regrouped({ group }) { copy(group = it) }
 )
 
 /* ---------- storage ---------- */
