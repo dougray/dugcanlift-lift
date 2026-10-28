@@ -44,10 +44,22 @@ data class RoutineExercise(
      * The superset or circuit this exercise is in: adjacent exercises sharing a positive integer are
      * one group, done round by round (PLAN-FORMAT "Set types", `g`). Null is not grouped. Stored
      * renumbered 1, 2, 3... with a group of one removed -- [SetTypes] is the rule. Set by a coach's
-     * plan or by "Superset with next"; a routine of your own has no list of sets, so a set's kind
-     * arrives only from a coach, on [prescribed].
+     * plan or by "Superset with next".
      */
-    val group: Int? = null
+    val group: Int? = null,
+    /**
+     * Drop sets and rest-pause on a routine of your own, **by set position**: index 0 is set 1, which
+     * is always straight, so it is always null. A routine of your own is a set count, not a list of
+     * sets, so the kinds are a list beside that count -- never longer than [targetSets], trailing
+     * straights trimmed, and null when every set is straight, so a routine without kinds is stored
+     * and backed up as the object it always was. [SetTypes.routineSetKinds] is the rule, applied on
+     * every read and write; [withSetKind] and [withTargetSets] keep it in memory.
+     *
+     * Only for an exercise without [prescribed]: a coach's sets carry their own kinds, on
+     * [PrescribedSet.kind], and this is never written beside them. BACKUP-FORMAT
+     * `"setKinds": [null, "drop", "restPause"]`, LIFT web's spelling.
+     */
+    val setKinds: List<SetKind?>? = null
 ) {
     val displayName: String
         get() = if (equipment.isBlank()) name else "$name ($equipment)"
@@ -70,8 +82,32 @@ data class RoutineExercise(
             targetRpe?.let { parts += "RPE ${it}" }
             targetDurationSec?.let { parts += "${it}s" }
             targetDistanceMeters?.let { parts += "${it.toInt()}m" }
-            return parts.joinToString(" ")
+            // "4 sets x 8 @ 185 lb · set 3 drop, set 4 rest-pause": the kinded sets, by number.
+            val kinded = (1 until targetSets).mapNotNull { i -> setKind(i)?.let { "set ${i + 1} ${it.label}" } }
+            return parts.joinToString(" ") + if (kinded.isEmpty()) "" else " · " + kinded.joinToString(", ")
         }
+
+    /**
+     * The kind of set [index] (0 is set 1) of a routine of your own, or null for straight: set 1, a
+     * set past [targetSets] and an exercise holding a coach's [prescribed] sets all are.
+     */
+    fun setKind(index: Int): SetKind? =
+        if (prescribed != null || index <= 0 || index >= targetSets) null else setKinds?.getOrNull(index)
+
+    /**
+     * The exercise with set [index] made [kind] (null is straight). Nothing changes for set 1, a set
+     * past [targetSets], or an exercise holding a coach's sets, whose kinds live on [prescribed].
+     */
+    fun withSetKind(index: Int, kind: SetKind?): RoutineExercise {
+        if (prescribed != null || index <= 0 || index >= targetSets) return this
+        val kinds = MutableList(targetSets) { setKind(it) }
+        kinds[index] = kind
+        return copy(setKinds = SetTypes.routineSetKinds(kinds, targetSets))
+    }
+
+    /** The exercise with [sets] sets, its kinds trimmed to fit: a kind on a set that is gone goes with it. */
+    fun withTargetSets(sets: Int): RoutineExercise =
+        copy(targetSets = sets, setKinds = SetTypes.routineSetKinds(setKinds, sets))
 }
 
 data class Routine(
@@ -116,25 +152,36 @@ internal fun RoutineExercise.toJson(): JSONObject = JSONObject().apply {
     // BACKUP-FORMAT's `group`, omitted when not grouped -- so a routine without one writes the
     // object it always did.
     group?.let { put("group", it) }
+    // BACKUP-FORMAT's `setKinds`, omitted when every set is straight and never beside a coach's
+    // sets -- so a routine without kinds writes the object it always did.
+    if (prescribed == null) SetTypes.routineSetKinds(setKinds, targetSets)?.let { kinds ->
+        put("setKinds", JSONArray().also { array -> kinds.forEach { array.put(it?.wire ?: JSONObject.NULL) } })
+    }
 }
 
-internal fun routineExerciseFromJson(o: JSONObject) = RoutineExercise(
+internal fun routineExerciseFromJson(o: JSONObject): RoutineExercise {
+    val targetSets = o.finiteInt("targetSets", 3)
+    val prescribed = o.prescribedOrNull()
+    return RoutineExercise(
     id = o.optString("id", UUID.randomUUID().toString()),
     name = o.optString("name", ""),
     equipment = o.optString("equipment", ""),
-    targetSets = o.finiteInt("targetSets", 3),
+    targetSets = targetSets,
     targetReps = o.finiteIntOrNull("targetReps"),
     targetWeightLb = o.finiteDoubleOrNull("targetWeightLb"),
     targetRpe = o.finiteDoubleOrNull("targetRpe"),
     targetDurationSec = o.finiteIntOrNull("targetDurationSec"),
     targetDistanceMeters = o.finiteDoubleOrNull("targetDistanceMeters"),
     note = o.optString("note", ""),
-    prescribed = o.prescribedOrNull(),
+    prescribed = prescribed,
     eachSide = o.eachSideFlag(),
     // Lenient: anything but a positive integer is not grouped. [routineFromJson] renumbers the
     // routine's runs, so a group of one is none.
-    group = SetTypes.groupOf(o.opt("group"))
-)
+    group = SetTypes.groupOf(o.opt("group")),
+    // Lenient, and never beside a coach's sets: see [RoutineExercise.setKinds].
+    setKinds = if (prescribed != null) null else SetTypes.routineSetKindsOf(o.opt("setKinds"), targetSets)
+    )
+}
 
 internal fun Routine.toJson(): JSONObject = JSONObject().apply {
     put("id", id)
@@ -182,7 +229,9 @@ val RoutineExercise.askedSets: List<PrescribedSet>
             reps = targetReps,
             rpe = targetRpe,
             durationSec = targetDurationSec,
-            distanceMeters = targetDistanceMeters
+            distanceMeters = targetDistanceMeters,
+            // A routine of your own's drop sets and rest-pause, by position ([RoutineExercise.setKinds]).
+            kind = setKind(it)
         )
     }
 
@@ -248,7 +297,10 @@ fun Routine.toSession(date: String): WorkoutSession = WorkoutSession(
                     reps = it.reps,
                     rpe = it.rpe,
                     durationSec = it.durationSec,
-                    distanceMeters = it.distanceMeters
+                    distanceMeters = it.distanceMeters,
+                    // A drop set or rest-pause you set on the routine, so its row can say so. Never
+                    // sent: SHARE-FORMAT has no set type.
+                    kind = it.kind
                 )
             }
         )
@@ -271,9 +323,12 @@ fun WorkoutSession.toRoutine(routineName: String, folder: String = ""): Routine 
                 .maxByOrNull { it.value }?.key,
             targetWeightLb = logged.sets.mapNotNull { it.weightLb }.maxOrNull(),
             note = logged.note,
-            // A superset done today is kept as one. A set's kind is not: a routine of your own
-            // holds a set count, not a list of sets. LIFT web's `fromSession`, rule for rule.
-            group = logged.group
+            // A superset done today is kept as one, and each set's kind by its position -- except
+            // for a lift logged a side at a time, where one position is two logged sets. LIFT web's
+            // `fromSession`, rule for rule.
+            group = logged.group,
+            setKinds = if (logged.sets.any { it.side != null }) null else
+                SetTypes.routineSetKinds(logged.sets.map { it.kind }, logged.sets.size.coerceAtLeast(1))
         )
     }.regrouped({ group }) { copy(group = it) }
 )

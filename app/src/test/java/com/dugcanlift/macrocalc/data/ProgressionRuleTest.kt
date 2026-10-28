@@ -213,4 +213,85 @@ class ProgressionRuleTest {
         val ramp = bench.copy(prescribed = listOf(PrescribedSet(reps = 8), PrescribedSet(reps = 8), PrescribedSet(reps = 6), PrescribedSet()))
         assertEquals(ProgressionRule.Target(reps = 8, sets = 3), ProgressionRule.target(ramp))
     }
+
+    /* ---------- drop sets and rest-pause ---------- */
+
+    /** Four sets, the last two a drop and a rest-pause: two straight sets are what the routine asks to reach 8. */
+    private val kindedBench = bench.copy(targetSets = 4, targetWeightLb = 185.0)
+        .withSetKind(2, SetKind.DROP).withSetKind(3, SetKind.REST_PAUSE)
+    private val kindedPush = push.copy(exercises = listOf(kindedBench))
+
+    @Test fun `drop and rest-pause sets are not what the routine asks to reach`() {
+        assertEquals(ProgressionRule.Target(reps = 8, sets = 2), ProgressionRule.target(kindedBench))
+        // A coach's kinds, on their own sets, are read the same way.
+        val coach = bench.copy(prescribed = listOf(
+            PrescribedSet(weightLb = 70.0, reps = 12), PrescribedSet(weightLb = 70.0, reps = 12),
+            PrescribedSet(weightLb = 50.0, reps = 10, kind = SetKind.DROP)
+        ))
+        assertEquals(ProgressionRule.Target(reps = 12, sets = 2), ProgressionRule.target(coach))
+    }
+
+    /**
+     * Without this a four-set routine with two drop sets could never go up: the drops are lighter, so
+     * only two sets are ever at the top weight, and the rule wanted four.
+     */
+    @Test fun `a routine with drop sets still goes up when its straight sets got there`() {
+        val before = WorkoutSession(
+            date = monday, name = "Push",
+            exercises = listOf(LoggedExercise(name = bench.name, equipment = bench.equipment, sets = listOf(
+                WorkoutSet(weightLb = 185.0, reps = 8),
+                WorkoutSet(weightLb = 185.0, reps = 8),
+                WorkoutSet(weightLb = 135.0, reps = 10, kind = SetKind.DROP),
+                // At the top weight and short of 8, as a rest-pause set is: it is not a working set.
+                WorkoutSet(weightLb = 185.0, reps = 3, kind = SetKind.REST_PAUSE)
+            )))
+        )
+        val got = suggest(kindedPush.toSession(today), listOf(before), routines = listOf(kindedPush))
+        assertEquals(ProgressionRule.Next.Up(190.0, 185.0, 8, monday), got?.next)
+    }
+
+    @Test fun `a logged drop or rest-pause set is not one of the day's working sets`() {
+        val before = WorkoutSession(
+            date = monday, name = "Push",
+            exercises = listOf(LoggedExercise(name = bench.name, equipment = bench.equipment, sets = listOf(
+                WorkoutSet(weightLb = 185.0, reps = 8),
+                WorkoutSet(weightLb = 135.0, reps = 10, kind = SetKind.DROP),
+                WorkoutSet(weightLb = 185.0, reps = 3, kind = SetKind.REST_PAUSE)
+            )))
+        )
+        val exercise = kindedPush.toSession(today).exercises.single()
+        assertEquals(
+            listOf(ProgressionRule.Session(monday, listOf(ProgressionRule.LoggedSet(185.0, 8)))),
+            ProgressionRule.sessions(exercise, today, listOf(before))
+        )
+        // A day of nothing but kinded sets is no day of this lift at all.
+        val onlyKinded = before.copy(exercises = listOf(before.exercises.single().let { it.copy(sets = it.sets.drop(1)) }))
+        assertTrue(ProgressionRule.sessions(exercise, today, listOf(onlyKinded)).isEmpty())
+    }
+
+    /** A drop set keeps its own, lighter weight; a rest-pause set is the lifter's call. "Use" fills straight sets only. */
+    @Test fun `use leaves drop and rest-pause sets alone`() {
+        val todays = kindedPush.toSession(today)
+        val history = listOf(WorkoutSession(
+            date = monday, name = "Push",
+            exercises = listOf(LoggedExercise(name = bench.name, equipment = bench.equipment,
+                sets = listOf(WorkoutSet(weightLb = 185.0, reps = 8), WorkoutSet(weightLb = 185.0, reps = 9))))
+        ))
+        val got = suggest(todays, history, routines = listOf(kindedPush))!!
+        assertEquals(190.0, got.next.weight, 0.0)
+        val exercise = todays.exercises.single()
+        assertEquals(exercise.sets.take(2).map { it.id }, ProgressionRule.open(exercise.sets, got.laidOut, got.next.weight).map { it.id })
+        val used = ProgressionRule.use(exercise, got)
+        assertEquals(listOf(190.0, 190.0, 185.0, 185.0), used.sets.map { it.weightLb })
+        assertEquals(listOf(null, null, SetKind.DROP, SetKind.REST_PAUSE), used.sets.map { it.kind })
+
+        // The same for a coach's drop set, on a routine nobody booked.
+        val coach = push.copy(exercises = listOf(bench.copy(prescribed = listOf(
+            PrescribedSet(weightLb = 185.0, reps = 8), PrescribedSet(weightLb = 185.0, reps = 8),
+            PrescribedSet(weightLb = 135.0, reps = 10, kind = SetKind.DROP)
+        ))))
+        val coachDay = coach.toSession(today)
+        val coachGot = suggest(coachDay, history, routines = listOf(coach))!!
+        assertEquals(listOf(190.0, 190.0, 135.0), ProgressionRule.use(coachDay.exercises.single(), coachGot).sets.map { it.weightLb })
+    }
 }
