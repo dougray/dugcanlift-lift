@@ -734,7 +734,7 @@ private fun RoutineCard(
  * them, when they are already together. Joining onto a superset makes a circuit. The rules are
  * [SetTypes.setGroupedWithNext], Coach web's own.
  *
- * "Set types" opens a Straight / Drop / Rest-pause choice for each set after the first
+ * "Drop / rest-pause" opens a Straight / Drop / Rest-pause choice for each set after the first
  * ([com.dugcanlift.macrocalc.data.RoutineExercise.setKinds]) -- closed until asked for, so the
  * screen is no busier for someone who never uses it, and offered only on an exercise of two sets or
  * more that holds no coach's sets. A coach's kinds live on its own sets and are listed here with
@@ -771,7 +771,7 @@ private fun RoutineExercises(routine: Routine, onChange: (Routine) -> Unit) {
                 }
                 if (takesKinds) {
                     TextButton(onClick = { showingKinds = !showingKinds }, colors = dclTextButtonColors()) {
-                        Text(if (showingKinds) "Hide set types" else "Set types", maxLines = 1)
+                        Text(if (showingKinds) "Hide drop / rest-pause" else "Drop / rest-pause", maxLines = 1)
                     }
                 }
             }
