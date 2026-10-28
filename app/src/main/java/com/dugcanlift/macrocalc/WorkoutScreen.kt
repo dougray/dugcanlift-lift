@@ -65,6 +65,8 @@ import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.PerSideLogging
 import com.dugcanlift.macrocalc.data.PlanLog
 import com.dugcanlift.macrocalc.data.PrescribedSet
+import com.dugcanlift.macrocalc.data.ProgressionRule
+import com.dugcanlift.macrocalc.data.RoutineRotation
 import com.dugcanlift.macrocalc.data.SetSide
 import com.dugcanlift.macrocalc.data.SetTypes
 import com.dugcanlift.macrocalc.data.groupedWithNext
@@ -134,6 +136,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
     var selectedDate by rememberSaveable { mutableStateOf(todayKey()) }
     var focus by remember { mutableStateOf(settings.focus) }
+    // Read as Train opens; the switch is on Home, and leaving Train for Home disposes this screen.
+    val suggestsNextWeight = remember { settings.suggestsNextWeight }
 
     // The week the coach's-plan-beside-your-log card is showing, and the day of it it has open.
     // Both null means "follow Train": the week containing the day on screen, with that day open.
@@ -295,6 +299,40 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    // Which routines each date's sessions came from, as rotations read them: a recorded booking or
+    // the session's name (RoutineRotation says what that cannot tell).
+    val rotationDays = remember(sessions, scheduledSessions) { RoutineRotation.days(sessions, scheduledSessions) }
+
+    /* "Up next: Pull · Push/Pull/Legs", on today's page while nothing has been logged on it and no
+     * coach has booked it: the next routine of the rotation most recently trained. A suggestion,
+     * started by a tap the way any routine is. Only today, because a rotation's next step is about
+     * now: on a day gone by it would be a guess about what came after. */
+    val upNextBlock: @Composable () -> Unit = rememberMovablePart {
+        val suggestion = remember(routines, rotationDays, scheduledSessions, sessions, selectedDate) {
+            if (selectedDate != todayKey() || scheduledSessions.onDate(selectedDate).isNotEmpty() ||
+                sessions.sessionsForDate(selectedDate).any { it.exercises.isNotEmpty() }
+            ) null
+            else RoutineRotation.current(RoutineRotation.folders(routines), rotationDays)?.let { current ->
+                routines.firstOrNull { it.id == current.upNext.routineId }?.let { it to current.folder }
+            }
+        }
+        suggestion?.let { (routine, folder) ->
+            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), border = dclCardBorder()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(RoutineRotation.offer(routine.name, folder), modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = { scope.launch { workouts.save(routine.toSession(selectedDate)) } },
+                        colors = dclTextButtonColors()
+                    ) { Text("Start") }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+
     /* The coach's week beside your own log, under the coach's card for the day.
      *
      * A week rather than a marker on the day screen, because Train shows one day at a time and
@@ -401,7 +439,13 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
             Text(text = "Routines", style = MaterialTheme.typography.labelLarge)
             Spacer(modifier = Modifier.height(8.dp))
 
-            routines.byFolder().forEach { (folder, list) ->
+            val upNext = RoutineRotation.upNextIds(routines, rotationDays)
+            val byFolder = routines.byFolder()
+            // Said once, under the first folder it applies to.
+            val firstRotation = byFolder.entries.firstOrNull { (_, list) -> list.any { it.id in upNext } }?.key
+            byFolder.forEach { (folder, folderRoutines) ->
+                // A named folder in rotation order, so it reads as the rotation it is.
+                val list = RoutineRotation.listed(folderRoutines)
                 Text(
                     text = "$folder (${list.size})",
                     style = MaterialTheme.typography.bodyMedium,
@@ -411,6 +455,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 val routineCard: @Composable (Routine, Modifier) -> Unit = { routine, cardModifier ->
                     RoutineCard(
                         routine = routine,
+                        isUpNext = routine.id in upNext,
                         modifier = cardModifier,
                         onStart = {
                             scope.launch { workouts.save(routine.toSession(selectedDate)) }
@@ -429,6 +474,14 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                         GridRow(cells = row, columns = cardColumns) { routineCard(it, Modifier.fillMaxSize()) }
                         Spacer(modifier = Modifier.height(12.dp))
                     }
+                }
+                if (folder == firstRotation) {
+                    Text(
+                        text = RoutineRotation.FOOTER,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
 
@@ -494,6 +547,18 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 lastFor = { name, equipment -> sessions.lastPerformed(name, equipment) },
                 logsPerSide = { matchKey -> settings.logsPerSide(matchKey) },
                 onLogsPerSideChange = { matchKey, value -> settings.setLogsPerSide(matchKey, value) },
+                nextWeight = { exercise, perSide ->
+                    ProgressionRule.suggestion(
+                        enabled = suggestsNextWeight,
+                        perSide = perSide,
+                        exercise = exercise,
+                        session = session,
+                        today = todayKey(),
+                        all = sessions,
+                        routines = routines,
+                        bookings = scheduledSessions
+                    )
+                },
                 onChange = { scope.launch { workouts.save(it) } },
                 // Never brings back a workout that was deleted while its name was pending.
                 onSaveNow = { pending ->
@@ -558,6 +623,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 focusBlock()
                 Spacer(modifier = Modifier.height(24.dp))
                 scheduledBlock()
+                upNextBlock()
                 planWeekBlock()
                 outdoorBlock()
                 Spacer(modifier = Modifier.height(16.dp))
@@ -571,6 +637,7 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                         focusBlock()
                         Spacer(modifier = Modifier.height(24.dp))
                         scheduledBlock()
+                        upNextBlock()
                         planWeekBlock()
                         sessionsBlock()
                     }
@@ -592,6 +659,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 @Composable
 private fun RoutineCard(
     routine: Routine,
+    /** The next routine of its folder's rotation ([RoutineRotation]). */
+    isUpNext: Boolean,
     onStart: () -> Unit,
     /** The routine with an exercise joined to or split from the next: "Superset with next". */
     onChange: (Routine) -> Unit,
@@ -604,7 +673,17 @@ private fun RoutineCard(
 
     Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = routine.name, style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = routine.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (isUpNext) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Up next", style = MaterialTheme.typography.labelLarge, color = dclAccentText())
+                }
+            }
             if (routine.preview.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -851,6 +930,8 @@ private fun SessionCard(
     lastFor: (String, String) -> LoggedExercise?,
     logsPerSide: (String) -> Boolean,
     onLogsPerSideChange: (String, Boolean) -> Unit,
+    /** The next weight for an exercise of this session, given whether it is logged per side. */
+    nextWeight: (LoggedExercise, Boolean) -> ProgressionRule.Suggestion?,
     onChange: (WorkoutSession) -> Unit,
     /** Saves straight away, outside any screen scope: the name's last edit as the card goes. */
     onSaveNow: suspend (WorkoutSession) -> Unit,
@@ -931,6 +1012,7 @@ private fun SessionCard(
                         .takeIf { it?.id != exercise.id },
                     logsPerSide = logsPerSide,
                     onLogsPerSideChange = onLogsPerSideChange,
+                    nextWeight = nextWeight,
                     onChange = { updated ->
                         commit(
                             session.copy(
@@ -1055,6 +1137,7 @@ private fun ExerciseBlock(
     previous: LoggedExercise?,
     logsPerSide: (String) -> Boolean,
     onLogsPerSideChange: (String, Boolean) -> Unit,
+    nextWeight: (LoggedExercise, Boolean) -> ProgressionRule.Suggestion?,
     onChange: (LoggedExercise) -> Unit,
     onRemove: () -> Unit
 ) {
@@ -1125,6 +1208,23 @@ private fun ExerciseBlock(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        // The next weight, with why, for an exercise of the lifter's own routine (ProgressionRule):
+        // none for a coach's booking, a lift logged a side at a time, or a first session. "Use" puts
+        // it in the rows the routine laid out and nothing else.
+        nextWeight(exercise, perSide)?.let { suggestion ->
+            Text(
+                text = ProgressionRule.line(suggestion.next),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (ProgressionRule.open(exercise.sets, suggestion.laidOut, suggestion.next.weight).isNotEmpty()) {
+                TextButton(
+                    onClick = { onChange(ProgressionRule.use(exercise, suggestion)) },
+                    colors = dclTextButtonColors()
+                ) { Text(ProgressionRule.useLabel(suggestion.next)) }
+            }
         }
 
         Spacer(modifier = Modifier.height(4.dp))

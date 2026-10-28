@@ -134,7 +134,23 @@ fun searchExerciseLibrary(
     equipmentFilter: String = "",
     recentKeys: List<String> = emptyList(),
     limit: Int = EXERCISE_SEARCH_LIMIT,
-): List<LibraryExercise> {
+): List<LibraryExercise> =
+    searchExerciseLibraryOwned(library, query, equipmentFilter, recentKeys, emptySet(), limit).shown
+
+/**
+ * [searchExerciseLibrary] narrowed to the equipment someone has ([MyEquipment]), with how many it
+ * left out so the picker can say so. The equipment is filtered **before** the cap, over every match:
+ * the first 40 matches for "row" could all be cable rows, and capping first would leave nothing to
+ * show and no honest count. With [notOwned] empty it is exactly [searchExerciseLibrary].
+ */
+fun searchExerciseLibraryOwned(
+    library: List<LibraryExercise>,
+    query: String,
+    equipmentFilter: String = "",
+    recentKeys: List<String> = emptyList(),
+    notOwned: Set<String> = emptySet(),
+    limit: Int = EXERCISE_SEARCH_LIMIT,
+): MyEquipment.Filtered<LibraryExercise> {
     val needle = query.trim().lowercase(Locale.US)
 
     val hits = library.filter { candidate ->
@@ -143,8 +159,9 @@ fun searchExerciseLibrary(
                 candidate.name.lowercase(Locale.US).contains(needle) ||
                 candidate.muscle.lowercase(Locale.US).contains(needle))
     }
+    val narrowed = MyEquipment.filter(hits, notOwned) { it.equipment }
 
-    return rankByHistory(hits, recentKeys).take(limit)
+    return MyEquipment.Filtered(rankByHistory(narrowed.shown, recentKeys).take(limit), narrowed.leftOut)
 }
 
 /**
