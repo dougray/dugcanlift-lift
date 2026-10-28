@@ -68,6 +68,21 @@ class SettingsStore private constructor(context: Context) {
         set(value) { prefs.edit().putString(KEY_ROAD_RECENT, value.joinToString("\n")).apply() }
 
     /**
+     * The allergens Road Food hides items for, shared by every place
+     * ([RoadFoodAllergens]). Avoiding nothing removes the key, as LIFT
+     * iPhone's `roadFoodAvoid` does. A preference about one screen, so on this
+     * phone only, like [roadFoodRecent].
+     */
+    var roadFoodAvoid: Set<String>
+        get() = RoadFoodAllergens.decode(prefs.getString(KEY_ROAD_AVOID, null))
+        set(value) {
+            val stored = RoadFoodAllergens.encode(value)
+            prefs.edit().apply {
+                if (stored == null) remove(KEY_ROAD_AVOID) else putString(KEY_ROAD_AVOID, stored)
+            }.apply()
+        }
+
+    /**
      * The road picks a coach's plan brought, or null when no plan has brought
      * any (and after "Clear these picks").
      *
@@ -88,6 +103,7 @@ class SettingsStore private constructor(context: Context) {
     companion object {
         private const val KEY_ROAD_RECENT = "road_food_recent"
         private const val KEY_ROAD_PICKS = "road_food_picks"
+        private const val KEY_ROAD_AVOID = "road_food_avoid"
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
         private const val KEY_SERVING_UNIT = "serving_unit"
