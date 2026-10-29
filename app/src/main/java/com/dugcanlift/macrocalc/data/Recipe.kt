@@ -154,7 +154,7 @@ data class PlannedMeal(
                 proteinG = scaled.proteinG.roundToIntSafe(),
                 fatG = scaled.fatG.roundToIntSafe(),
                 carbsG = scaled.carbsG.roundToIntSafe(),
-                fiberG = scaled.fiberG.roundToIntSafe(),
+                fiberG = scaled.fiberG.loggedFiber(),
                 date = date,
                 meal = meal,
                 saturatedFatG = details.saturatedFatG,
@@ -172,7 +172,7 @@ data class PlannedMeal(
             proteinG = perServing.proteinG.roundToIntSafe(),
             fatG = perServing.fatG.roundToIntSafe(),
             carbsG = perServing.carbsG.roundToIntSafe(),
-            fiberG = perServing.fiberG.roundToIntSafe(),
+            fiberG = perServing.fiberG.loggedFiber(),
             date = date,
             meal = meal,
             saturatedFatG = details.saturatedFatG,
@@ -181,6 +181,14 @@ data class PlannedMeal(
         )
     }
 }
+
+/**
+ * A recipe's fiber as a [FoodEntry] holds it. A recipe can say "fiber unknown" (null); a log
+ * entry cannot -- [FoodEntry.fiberG] is a whole number across the whole food log, and its day
+ * total is a plain sum. Unknown logs as 0, which is what the day total does with it on LIFT
+ * iPhone as well (`totals.fiberG ?? 0`), so the day reads the same on both phones.
+ */
+internal fun Double?.loggedFiber(): Int = this?.roundToIntSafe() ?: 0
 
 /* ---------- shopping list ---------- */
 
@@ -331,7 +339,8 @@ fun recipeNutritionFromText(
         proteinG = typed[1] ?: 0.0,
         carbsG = typed[2] ?: 0.0,
         fatG = typed[3] ?: 0.0,
-        fiberG = typed[4] ?: 0.0,
+        // Blank is unknown, never 0 g: LIFT iPhone's NutritionFacts.fiberG rule.
+        fiberG = typed[4],
         estimated = estimated,
         saturatedFatG = NutrientDetailsText.parse(saturatedFat),
         sugarG = NutrientDetailsText.parse(sugar),
@@ -351,9 +360,9 @@ internal fun RecipeNutrition.toJson(): JSONObject = JSONObject().apply {
     put("proteinG", proteinG)
     put("carbsG", carbsG)
     put("fatG", fatG)
-    put("fiberG", fiberG)
     put("estimated", estimated)
     // Written only when known. Absent is unknown, never zero (BACKUP-FORMAT).
+    fiberG?.let { put("fiberG", it) }
     saturatedFatG?.let { put("saturatedFatG", it) }
     sugarG?.let { put("sugarG", it) }
     sodiumMg?.let { put("sodiumMg", it) }
@@ -366,7 +375,10 @@ internal fun recipeNutritionFromJson(o: JSONObject?): RecipeNutrition? {
         proteinG = o.finiteDouble("proteinG", 0.0),
         carbsG = o.finiteDouble("carbsG", 0.0),
         fatG = o.finiteDouble("fatG", 0.0),
-        fiberG = o.finiteDouble("fiberG", 0.0),
+        // Absent or null is unknown (LIFT iPhone writes no key for nil). Every recipe an
+        // earlier build stored has the key, so its zeros stay zeros: nobody can say now
+        // which of them were unknown.
+        fiberG = o.finiteDoubleOrNull("fiberG"),
         estimated = o.optBoolean("estimated", false),
         saturatedFatG = optNutrient(o, "saturatedFatG"),
         sugarG = optNutrient(o, "sugarG"),

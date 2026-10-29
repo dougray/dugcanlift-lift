@@ -63,7 +63,7 @@ class BackupStoreTest {
         assertEquals("Beef Chilli", recipe.name)
         assertEquals(4.0, recipe.servings, 1e-9)
         assertEquals(listOf("Brown the beef", "Simmer for an hour"), recipe.steps)
-        assertEquals(9.0, recipe.nutritionPerServing!!.fiberG, 1e-9)
+        assertEquals(9.0, recipe.nutritionPerServing!!.fiberG!!, 1e-9)
 
         val meal = repo.planForBackup().single()
         assertEquals(recipe.id, meal.recipeId)
