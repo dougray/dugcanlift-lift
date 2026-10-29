@@ -112,6 +112,18 @@
                     android:host="www.dugcanlift.com"
                     android:pathPrefix="/lift/" />
             </intent-filter>
+            <!-- "Send to LIFT": the kit's bookmarklet opens dugcanliftlift://recipe#r1... with a
+                 recipe page's JSON-LD in the fragment (RecipeLink). LIFT iPhone's own scheme, so one
+                 bookmark works on either phone. Its own filter, never merged into the one above:
+                 a custom scheme inside an autoVerify filter would break App Link verification. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="dugcanliftlift"
+                    android:host="recipe" />
+            </intent-filter>
         </activity>
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
