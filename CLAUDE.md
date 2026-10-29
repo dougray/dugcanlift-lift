@@ -550,6 +550,38 @@ screen.
   of going there. LIFT web opens its Road Food screen; that is the one place
   this deliberately differs.
 
+## Recipe catalogue
+
+Cook -> New recipe -> **Browse the catalogue**, beside "Paste a recipe": 622 recipes to
+browse, search and copy into the library. A port of LIFT iPhone's `RecipeCatalogView`, its
+wording and rules; the data rules are `data/RecipeCatalog.kt`, a port of LiftReference's
+`CatalogRecipe`/`CatalogEntry`, tested case for case by `RecipeCatalogTest`.
+
+- **The data is `assets/recipes.json`**, the kit's JSON export of LiftReference's `recipes.db`
+  (`dugcanlift-kit/Tools/export_recipes_json.py`), with **`recipes.sha256`** beside it.
+  `RecipeCatalogTest` hashes the asset against it, as `RoadFoodTest` does for Road Food. When it
+  fails, copy both files from `dugcanlift-kit/data/` together; never edit either here, and never
+  write the checksum by hand.
+- **Nothing is re-costed.** The catalogue's macros and its `nutritionNote` are already decided.
+- **A null `servings` is a source that stated no yield** (every `gutenberg-*` book). The detail
+  shows a stepper (1-48, starting at 4) for **every** one of them, including those with no
+  macros, because the copy stores a serving count either way (`statesNoYield`). Where they carry
+  whole-dish totals, the per-serving figure is the total divided by the count at the moment of
+  Add, **stored as the raw quotient, unrounded**. A published per-serving figure never moves
+  with anything. Never guess a yield.
+- **A whole-number macro on screen rounds half away from zero** (`RecipeCatalog.wholeNumber`),
+  never truncates: Beef Pot Pie at 4 servings reads 225 kcal. With no search typed, all 622 are
+  listed by name. These four rules are the ones every catalogue build follows.
+- **Add is an ordinary library recipe**, saved through `RecipeRepository.addRecipe`, its
+  ingredients the raw lines through `ingredientsFromLines` -- the editor's own path. Attribution,
+  licence and the note travel in `sourceTranscript`; every recipe's `license` and `attribution`
+  are on its detail, and the list carries "Credits and licences" (CC BY-SA asks for the credit).
+- **Search** is every query word beginning a word of the name, summary or country code (the
+  columns the iPhone's FTS5 index holds), case and accents ignored, 40 results, two-character
+  floor. No SQLite here, so no `bm25` and no Porter stemming: name hits rank first, then the
+  shorter name, and a plural query word falls back to its singular.
+- An asset, never a request.
+
 ## Recording a route needs no background location
 
 The manifest does **not** declare `ACCESS_BACKGROUND_LOCATION`, and nothing asks
