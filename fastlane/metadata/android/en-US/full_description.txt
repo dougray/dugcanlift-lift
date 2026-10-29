@@ -10,13 +10,13 @@ MACRO CALCULATOR
 Mifflin-St Jeor from your sex, age, weight, height and activity level. Pick lose, maintain or gain, protein and fat targets, and save it as your goal.
 
 FOOD LOG
-Log food by weight in grams or ounces. Meals get subtotals, and fibre is tracked with protein, fat and carbs. Search Open Food Facts or scan a barcode, enter anything by hand, re-log a recent food in one tap, and edit any entry.
+Log food by weight in grams or ounces. Meals get subtotals, and fiber is tracked with protein, fat and carbs. Search Open Food Facts or scan a barcode, enter anything by hand, re-log a recent food in one tap, and edit any entry.
 
 ROAD FOOD
 On the road, pick the chain you're at or a gas station and see what fits what you have left today, most protein per calorie first, and log it in one tap. Numbers come from each chain's published nutrition, with the date they were checked. Works offline and never asks where you are.
 
 COOK
-Write recipes, or paste a recipe's text from a blog or a video caption and edit it into shape. Labelled macros per serving, and the finished dish's weight so a portion can be logged by weight. Plan the week's meals, log a planned meal in one tap, and get one shopping list for the week.
+Write recipes, or paste a recipe's text from a blog or a video caption and edit it into shape. Labeled macros per serving, and the finished dish's weight so a portion can be logged by weight. Plan the week's meals, log a planned meal in one tap, and get one shopping list for the week.
 
 WORKOUT LOG
 Each set records weight, reps, RPE, time and distance, all optional. A training focus - bodybuilding, powerlifting, CrossFit, Hyrox, endurance or everything - decides which fields you see without ever discarding data. 873 bundled exercises, what you lifted last time, and sets that prefill from the one before. Save routines in folders, or add ten starter routines in one tap.
