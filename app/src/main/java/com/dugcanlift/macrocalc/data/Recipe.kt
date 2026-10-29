@@ -280,6 +280,16 @@ fun Double.cookDisplay(): String {
 /* ---------- editing ---------- */
 
 /**
+ * A recipe's ingredient lines as stored: each trimmed, blanks dropped, and each
+ * parsed by [IngredientParser], which keeps the raw line beside the parse.
+ *
+ * The one path a typed, pasted or catalogue recipe's ingredients take on save,
+ * so the three cannot disagree about what a line means.
+ */
+fun ingredientsFromLines(lines: List<String>): List<RecipeIngredient> =
+    lines.map { it.trim() }.filter { it.isNotEmpty() }.map { IngredientParser.parse(it) }
+
+/**
  * A recipe's per-serving nutrition from the editor's text fields, or null.
  *
  * Null unless a macro was actually typed -- an untouched form must not write
