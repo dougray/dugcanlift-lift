@@ -277,6 +277,20 @@ fun Double.cookDisplay(): String {
     return rounded.stripTrailingZeros().toPlainString()
 }
 
+/**
+ * The word a library card adds after its macros when they are an estimate:
+ * LIFT iPhone's CookView row, word for word, drawn in the accent text colour.
+ * A catalogue copy is the usual way to have one, and a backup from another
+ * build can carry it too, so it is read off [RecipeNutrition.estimated], not
+ * the source. Null -- nothing new on the card -- for a recipe whose macros
+ * are not an estimate, or that has no macros: an estimate of nothing says
+ * nothing. Display only.
+ */
+const val ESTIMATED_MARK = "estimated"
+
+fun estimatedMark(nutrition: RecipeNutrition?): String? =
+    if (nutrition?.estimated == true) ESTIMATED_MARK else null
+
 /* ---------- editing ---------- */
 
 /**

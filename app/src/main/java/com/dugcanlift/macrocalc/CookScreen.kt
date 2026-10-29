@@ -1,6 +1,7 @@
 package com.dugcanlift.macrocalc
 
 import androidx.compose.foundation.layout.Arrangement
+import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
 import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
@@ -43,7 +44,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.kit.CaptionRecipe
 import com.dugcanlift.kit.RecipeIngredient
@@ -63,6 +67,7 @@ import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.planBetween
 import com.dugcanlift.macrocalc.data.shoppingAmountLabel
 import com.dugcanlift.macrocalc.data.cookDisplay
+import com.dugcanlift.macrocalc.data.estimatedMark
 import com.dugcanlift.macrocalc.data.todayKey
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -235,11 +240,24 @@ private fun RecipeCard(recipe: Recipe, modifier: Modifier, onClick: () -> Unit) 
                 // cookDisplay, not trimZeros: a catalogue recipe whose source stated
                 // no yield stores its whole-dish totals divided by the servings
                 // chosen (898.1 / 6), and that is a computed Cook amount.
-                text = if (nutrition == null) "Macros not set" else
-                    "${nutrition.calories.cookDisplay()} kcal  " +
-                        "P ${nutrition.proteinG.cookDisplay()}  " +
-                        "C ${nutrition.carbsG.cookDisplay()}  " +
-                        "F ${nutrition.fatG.cookDisplay()}",
+                // "estimated" after the macros, in the accent, when they are an
+                // estimate -- LIFT iPhone's card.
+                text = buildAnnotatedString {
+                    if (nutrition == null) {
+                        append("Macros not set")
+                    } else {
+                        append(
+                            "${nutrition.calories.cookDisplay()} kcal  " +
+                                "P ${nutrition.proteinG.cookDisplay()}  " +
+                                "C ${nutrition.carbsG.cookDisplay()}  " +
+                                "F ${nutrition.fatG.cookDisplay()}"
+                        )
+                        estimatedMark(nutrition)?.let { mark ->
+                            append("  ")
+                            withStyle(SpanStyle(color = dclAccentText())) { append(mark) }
+                        }
+                    }
+                },
                 style = MaterialTheme.typography.bodySmall
             )
             NutrientDetailsText.line(nutrition?.details)?.let { line ->
