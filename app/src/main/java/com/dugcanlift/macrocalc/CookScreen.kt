@@ -60,6 +60,7 @@ import com.dugcanlift.macrocalc.data.ingredientsFromLines
 import com.dugcanlift.macrocalc.data.recipeNutritionFromText
 import com.dugcanlift.macrocalc.data.PlannedMeal
 import com.dugcanlift.macrocalc.data.Recipe
+import com.dugcanlift.macrocalc.data.RecipeDraft
 import com.dugcanlift.macrocalc.data.RecipeRepository
 import com.dugcanlift.macrocalc.data.ShoppingList
 import com.dugcanlift.macrocalc.data.FoodRepository
@@ -281,11 +282,17 @@ private fun RecipeCard(recipe: Recipe, modifier: Modifier, onClick: () -> Unit) 
  * and what the shopping list falls back to when the parse fails.
  */
 @Composable
-private fun RecipeEditorDialog(
+internal fun RecipeEditorDialog(
     repo: RecipeRepository,
     existing: Recipe?,
     /** Offered beside "Paste a recipe", on a new recipe only. */
     onBrowseCatalogue: (() -> Unit)? = null,
+    /**
+     * A recipe read off a page by the "Send to LIFT" bookmarklet ([RecipeLink]). It fills a new
+     * recipe for the person to check, and nothing is kept until they tap Save. Never with
+     * [existing].
+     */
+    draft: RecipeDraft? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -293,9 +300,15 @@ private fun RecipeEditorDialog(
     // Read once per dialog open, same convention as Task 3/4's amount
     // entry — the real Serving Size preference lives in Settings.
     val servingUnit = remember { SettingsStore.get(context).servingUnit }
+    // What the fields start from: the recipe being edited, or the page's recipe being checked.
+    val start = existing ?: draft?.recipe
+    // A page that stated no yield leaves Servings empty, and Save waits for it: never a guess.
+    val servingsAsked = draft != null && !draft.servingsStated
 
-    var name by rememberSaveable { mutableStateOf(existing?.name ?: "") }
-    var servings by rememberSaveable { mutableStateOf((existing?.servings ?: 1.0).trimZeros()) }
+    var name by rememberSaveable { mutableStateOf(start?.name ?: "") }
+    var servings by rememberSaveable {
+        mutableStateOf(if (servingsAsked) "" else (start?.servings ?: 1.0).trimZeros())
+    }
     var totalWeightText by rememberSaveable {
         mutableStateOf(
             existing?.totalWeightGrams
@@ -304,29 +317,37 @@ private fun RecipeEditorDialog(
         )
     }
     var ingredientText by rememberSaveable {
-        mutableStateOf(existing?.ingredients.orEmpty().joinToString("\n") { it.rawText })
+        mutableStateOf(start?.ingredients.orEmpty().joinToString("\n") { it.rawText })
     }
-    var stepText by rememberSaveable { mutableStateOf(existing?.steps.orEmpty().joinToString("\n")) }
+    var stepText by rememberSaveable { mutableStateOf(start?.steps.orEmpty().joinToString("\n")) }
     // Paste-a-recipe, offered only on a new recipe: pasting over a recipe that
     // already exists would replace work rather than start from it.
     var pasting by rememberSaveable { mutableStateOf(false) }
     var pasteText by rememberSaveable { mutableStateOf("") }
     var splitAdvice by rememberSaveable { mutableStateOf<String?>(null) }
+    var showingBookmarklet by rememberSaveable { mutableStateOf(false) }
 
-    var calories by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.calories?.trimZeros() ?: "") }
-    var protein by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.proteinG?.trimZeros() ?: "") }
-    var carbs by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.carbsG?.trimZeros() ?: "") }
-    var fat by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.fatG?.trimZeros() ?: "") }
-    var fiber by rememberSaveable { mutableStateOf(existing?.nutritionPerServing?.fiberG?.trimZeros() ?: "") }
-    var saturatedFat by rememberSaveable { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.saturatedFatG)) }
-    var sugar by rememberSaveable { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sugarG)) }
-    var sodium by rememberSaveable { mutableStateOf(NutrientDetailsText.field(existing?.nutritionPerServing?.sodiumMg)) }
+    var calories by rememberSaveable { mutableStateOf(start?.nutritionPerServing?.calories?.trimZeros() ?: "") }
+    var protein by rememberSaveable { mutableStateOf(start?.nutritionPerServing?.proteinG?.trimZeros() ?: "") }
+    var carbs by rememberSaveable { mutableStateOf(start?.nutritionPerServing?.carbsG?.trimZeros() ?: "") }
+    var fat by rememberSaveable { mutableStateOf(start?.nutritionPerServing?.fatG?.trimZeros() ?: "") }
+    var fiber by rememberSaveable { mutableStateOf(start?.nutritionPerServing?.fiberG?.trimZeros() ?: "") }
+    var saturatedFat by rememberSaveable { mutableStateOf(NutrientDetailsText.field(start?.nutritionPerServing?.saturatedFatG)) }
+    var sugar by rememberSaveable { mutableStateOf(NutrientDetailsText.field(start?.nutritionPerServing?.sugarG)) }
+    var sodium by rememberSaveable { mutableStateOf(NutrientDetailsText.field(start?.nutritionPerServing?.sodiumMg)) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existing == null) "New recipe" else "Edit recipe") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                if (draft != null) {
+                    Text(
+                        text = recipeDraftNote(draft),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 // Paste a recipe written out as text -- a video caption, an
                 // email, a card off the fridge. `CaptionRecipe` only PROPOSES
                 // a split; it fills the fields below and they are checked
@@ -334,13 +355,18 @@ private fun RecipeEditorDialog(
                 // wrong split costs an edit, never a number, because
                 // `IngredientParser` still reads the quantities on save and
                 // still refuses to weigh a volume.
-                if (existing == null) {
+                if (existing == null && draft == null) {
                     if (!pasting) {
                         TextButton(onClick = { pasting = true }, colors = dclTextButtonColors()) { Text("Paste a recipe") }
                         // The one way in that needs no typing: 600+ recipes ship
                         // in the app as an asset, so it needs no connection either.
                         onBrowseCatalogue?.let { browse ->
                             TextButton(onClick = browse, colors = dclTextButtonColors()) { Text("Browse the catalogue") }
+                        }
+                        // The third way in: a bookmark that hands over the recipe on a page the
+                        // browser already has open. See RecipeLink.
+                        TextButton(onClick = { showingBookmarklet = true }, colors = dclTextButtonColors()) {
+                            Text(SEND_FROM_BROWSER)
                         }
                     } else {
                         OutlinedTextField(
@@ -351,6 +377,7 @@ private fun RecipeEditorDialog(
                             modifier = Modifier.fillMaxWidth(),
                             colors = dclTextFieldColors()
                         )
+                        Text(text = PASTE_WEBSITE_NOTE, style = MaterialTheme.typography.bodySmall)
                         Row {
                             TextButton(
                                 enabled = pasteText.isNotBlank(),
@@ -490,10 +517,12 @@ private fun RecipeEditorDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank(),
+                enabled = name.isNotBlank() &&
+                    (!servingsAsked || (servings.trim().toDoubleOrNull() ?: 0.0) > 0),
                 onClick = {
                     val recipe = buildRecipe(
                         existing = existing,
+                        draft = draft?.recipe,
                         name = name.trim(),
                         servings = servings.toDoubleOrNull() ?: 1.0,
                         totalWeightGrams = totalWeightText.trim().toDoubleOrNull()
@@ -513,10 +542,31 @@ private fun RecipeEditorDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("Cancel") } }
     )
+
+    if (showingBookmarklet) {
+        BookmarkletDialog(onDismiss = { showingBookmarklet = false })
+    }
 }
 
-private fun buildRecipe(
+/**
+ * The form note above a page's recipe, and the yield line when the page gave none. The wording
+ * every build shares, with {App} = LIFT: change it in every build or in none.
+ */
+internal fun recipeDraftNote(draft: RecipeDraft): String {
+    val site = draft.sourceHost ?: draft.recipe.sourceUrl.orEmpty()
+    val note = "From $site. Check it, then Save."
+    return if (draft.servingsStated) note
+    else "$note The page did not say how many this serves; set it before saving."
+}
+
+/** Under the paste box: the shared sentence that points a website at the bookmarklet instead. */
+internal const val PASTE_WEBSITE_NOTE =
+    "A recipe website's address will not work here. Use Send recipes from your browser for a website instead."
+
+internal fun buildRecipe(
     existing: Recipe?,
+    /** A page's recipe being checked: what the editor has no field for comes from here. */
+    draft: Recipe? = null,
     name: String,
     servings: Double,
     totalWeightGrams: Double?,
@@ -544,10 +594,10 @@ private fun buildRecipe(
         // Likewise `estimated`: rebuilding the figure reset the flag, so an
         // imported recipe stopped admitting it was an estimate the first time
         // anyone opened it. Editing a number does not make it a measurement.
-        estimated = existing?.nutritionPerServing?.estimated ?: false
+        estimated = (existing ?: draft)?.nutritionPerServing?.estimated ?: false
     )
 
-    val base = existing ?: Recipe(name = name)
+    val base = existing ?: draft ?: Recipe(name = name)
     return base.copy(
         name = name,
         servings = if (servings > 0) servings else 1.0,

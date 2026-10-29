@@ -21,7 +21,10 @@ import com.dugcanlift.macrocalc.ui.adaptive.LocalWindowWidth
 import com.dugcanlift.macrocalc.ui.adaptive.ProvideWindowLayout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
+import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -44,6 +47,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.dugcanlift.macrocalc.data.CoachStore
+import com.dugcanlift.macrocalc.data.RecipeLink
+import com.dugcanlift.macrocalc.data.RecipeRepository
 import com.dugcanlift.macrocalc.watchlink.WatchLinkTransport
 import com.dugcanlift.macrocalc.data.GoalStore
 import com.dugcanlift.kit.PlanDecodeResult
@@ -56,6 +61,10 @@ class MainActivity : ComponentActivity() {
 
     /** Reads a plan link once, so a recreation never asks about it again. */
     private val planLinks = PlanLinkPrompt()
+
+    /** A "Send to LIFT" recipe link, read once by the same rule ([RecipeLink]). */
+    private val recipeLinks = RecipeLinkPrompt()
+    private val pendingRecipe = mutableStateOf<RecipeLink.Opened?>(null)
 
     // A plain property (not a delegated `by`) so `onNewIntent` can update it
     // directly — `AppTabs` observes it via `State<Int?>` and re-selects the
@@ -71,6 +80,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         planLinks.onCreate(intent, savedInstanceState)?.let(::askAboutPlan)
+        recipeLinks.onCreate(intent, savedInstanceState)?.let(::openRecipe)
         if (savedInstanceState == null) {
             // Lets the ongoing route-recording notification (LocationRecordingService)
             // bring the user back to the Train tab instead of leaving a live
@@ -115,6 +125,8 @@ class MainActivity : ComponentActivity() {
                                 onPlanDismissed = ::dismissPlan,
                                 // Accepted: the dialog stays up to say so, but the link is answered.
                                 onPlanImported = planLinks::answered,
+                                pendingRecipe = pendingRecipe,
+                                onRecipeDone = ::dismissRecipe,
                                 openTab = pendingOpenTab
                             )
                         }
@@ -140,12 +152,25 @@ class MainActivity : ComponentActivity() {
         // without this it would keep returning the intent the Activity was originally launched with.
         setIntent(intent)
         planLinks.onNewIntent(intent)?.let(::askAboutPlan)
+        recipeLinks.onNewIntent(intent)?.let(::openRecipe)
         pendingOpenTab.value = extractOpenTab(intent)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         planLinks.save(outState)
+        recipeLinks.save(outState)
+    }
+
+    /** Unwraps the link and reads its recipe. Nothing is saved here: the editor's Save does it. */
+    private fun openRecipe(link: String) {
+        pendingRecipe.value = RecipeLink.open(link)
+    }
+
+    /** Saved, cancelled, or the message read: a recreation now opens nothing. */
+    private fun dismissRecipe() {
+        recipeLinks.answered()
+        pendingRecipe.value = null
     }
 
     private fun askAboutPlan(fragment: String) {
@@ -168,6 +193,9 @@ class MainActivity : ComponentActivity() {
 
         /** Index of the Train tab within [AppTabs]'s tab order (`titles` there), for [EXTRA_OPEN_TAB] callers. */
         const val TRAIN_TAB_INDEX = 3
+
+        /** Index of the Cook tab, where a recipe link opens. */
+        const val COOK_TAB_INDEX = 2
     }
 }
 
@@ -177,6 +205,8 @@ private fun AppTabs(
     pendingPlan: State<PlanDecodeResult?>,
     onPlanDismissed: () -> Unit,
     onPlanImported: () -> Unit,
+    pendingRecipe: State<RecipeLink.Opened?>,
+    onRecipeDone: () -> Unit,
     openTab: State<Int?> = remember { mutableStateOf(null) }
 ) {
     val context = LocalContext.current
@@ -205,6 +235,21 @@ private fun AppTabs(
 
     pendingPlan.value?.let { result ->
         PlanPreviewDialog(result = result, onDismiss = onPlanDismissed, onImported = onPlanImported)
+    }
+
+    // A recipe from the "Send to LIFT" bookmarklet opens Cook with the editor filled for review;
+    // a link that cannot be read, or holds no recipe, says so and fills nothing.
+    when (val opened = pendingRecipe.value) {
+        is RecipeLink.Opened.Review -> {
+            LaunchedEffect(opened) {
+                showCalculator = false
+                selectedTab = MainActivity.COOK_TAB_INDEX
+            }
+            val recipeRepo = remember { RecipeRepository.get(context) }
+            RecipeEditorDialog(repo = recipeRepo, existing = null, draft = opened.draft, onDismiss = onRecipeDone)
+        }
+        RecipeLink.Opened.Unreadable, RecipeLink.Opened.NoRecipe -> RecipeLinkMessage(opened, onDismiss = onRecipeDone)
+        null -> Unit
     }
 
     val titles = listOf("Home", "Food", "Cook", "Train")
@@ -281,4 +326,28 @@ private fun AppTabs(
             }
         }
     }
+}
+
+/** The plain message for a recipe link that fills nothing ([RecipeLink.Opened]). */
+@Composable
+private fun RecipeLinkMessage(opened: RecipeLink.Opened, onDismiss: () -> Unit) {
+    val body = recipeLinkMessage(opened) ?: return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        text = { Text(body) },
+        confirmButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("OK") } }
+    )
+}
+
+/**
+ * The message for a link that fills nothing, or null for one that opens a recipe. The wording
+ * every build shares, with {App} = LIFT: change it in every build or in none.
+ */
+internal fun recipeLinkMessage(opened: RecipeLink.Opened): String? = when (opened) {
+    RecipeLink.Opened.Unreadable ->
+        "That recipe link could not be read, so nothing was added. " +
+            "Open the recipe page and tap Send to LIFT again."
+    RecipeLink.Opened.NoRecipe ->
+        "That page has no recipe LIFT can read. Copy the recipe text and use Paste a recipe instead."
+    is RecipeLink.Opened.Review -> null
 }
