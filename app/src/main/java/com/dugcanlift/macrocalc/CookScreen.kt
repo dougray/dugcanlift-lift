@@ -46,13 +46,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.kit.CaptionRecipe
-import com.dugcanlift.kit.IngredientParser
 import com.dugcanlift.kit.RecipeIngredient
 import com.dugcanlift.kit.Split
 import com.dugcanlift.kit.trimZeros
 import com.dugcanlift.macrocalc.data.CookSampleData
 import com.dugcanlift.macrocalc.data.Meal
 import com.dugcanlift.macrocalc.data.NutrientDetailsText
+import com.dugcanlift.macrocalc.data.ingredientsFromLines
 import com.dugcanlift.macrocalc.data.recipeNutritionFromText
 import com.dugcanlift.macrocalc.data.PlannedMeal
 import com.dugcanlift.macrocalc.data.Recipe
@@ -96,6 +96,17 @@ fun CookScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) { repo.load() }
 
     var section by rememberSaveable { mutableStateOf(CookSection.RECIPES) }
+    // The catalogue takes the whole tab while it is open, as Road Food takes Food's.
+    var browsingCatalogue by rememberSaveable { mutableStateOf(false) }
+
+    if (browsingCatalogue) {
+        RecipeCatalogScreen(
+            repo = repo,
+            onClose = { browsingCatalogue = false },
+            modifier = modifier
+        )
+        return
+    }
 
     // Each section decides its own columns from the width it is actually given (ui/adaptive).
     MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
@@ -115,7 +126,7 @@ fun CookScreen(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(16.dp))
 
             when (section) {
-                CookSection.RECIPES -> RecipesSection(repo, contentWidth)
+                CookSection.RECIPES -> RecipesSection(repo, contentWidth, onBrowseCatalogue = { browsingCatalogue = true })
                 CookSection.PLAN -> PlanSection(repo, contentWidth)
                 CookSection.SHOPPING -> ShoppingSection(repo, contentWidth)
             }
@@ -126,7 +137,7 @@ fun CookScreen(modifier: Modifier = Modifier) {
 /* ---------- recipes ---------- */
 
 @Composable
-private fun RecipesSection(repo: RecipeRepository, contentWidth: Float) {
+private fun RecipesSection(repo: RecipeRepository, contentWidth: Float, onBrowseCatalogue: () -> Unit) {
     val scope = rememberCoroutineScope()
     val recipes by repo.recipes.collectAsState()
     // By id and saveable, so an open editor outlives the activity being recreated.
@@ -185,7 +196,14 @@ private fun RecipesSection(repo: RecipeRepository, contentWidth: Float) {
     }
 
     if (creating) {
-        RecipeEditorDialog(repo = repo, existing = null) { creating = false }
+        RecipeEditorDialog(
+            repo = repo,
+            existing = null,
+            onBrowseCatalogue = {
+                creating = false
+                onBrowseCatalogue()
+            }
+        ) { creating = false }
     }
     editing?.let { recipe ->
         RecipeEditorDialog(repo = repo, existing = recipe) { editingId = null }
@@ -214,11 +232,14 @@ private fun RecipeCard(recipe: Recipe, modifier: Modifier, onClick: () -> Unit) 
             Text(
                 // Deliberately not "0 kcal". An unknown that renders
                 // as zero becomes a zero-calorie dinner in a day total.
+                // cookDisplay, not trimZeros: a catalogue recipe whose source stated
+                // no yield stores its whole-dish totals divided by the servings
+                // chosen (898.1 / 6), and that is a computed Cook amount.
                 text = if (nutrition == null) "Macros not set" else
-                    "${nutrition.calories.trimZeros()} kcal  " +
-                        "P ${nutrition.proteinG.trimZeros()}  " +
-                        "C ${nutrition.carbsG.trimZeros()}  " +
-                        "F ${nutrition.fatG.trimZeros()}",
+                    "${nutrition.calories.cookDisplay()} kcal  " +
+                        "P ${nutrition.proteinG.cookDisplay()}  " +
+                        "C ${nutrition.carbsG.cookDisplay()}  " +
+                        "F ${nutrition.fatG.cookDisplay()}",
                 style = MaterialTheme.typography.bodySmall
             )
             NutrientDetailsText.line(nutrition?.details)?.let { line ->
@@ -245,6 +266,8 @@ private fun RecipeCard(recipe: Recipe, modifier: Modifier, onClick: () -> Unit) 
 private fun RecipeEditorDialog(
     repo: RecipeRepository,
     existing: Recipe?,
+    /** Offered beside "Paste a recipe", on a new recipe only. */
+    onBrowseCatalogue: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -296,6 +319,11 @@ private fun RecipeEditorDialog(
                 if (existing == null) {
                     if (!pasting) {
                         TextButton(onClick = { pasting = true }, colors = dclTextButtonColors()) { Text("Paste a recipe") }
+                        // The one way in that needs no typing: 600+ recipes ship
+                        // in the app as an asset, so it needs no connection either.
+                        onBrowseCatalogue?.let { browse ->
+                            TextButton(onClick = browse, colors = dclTextButtonColors()) { Text("Browse the catalogue") }
+                        }
                     } else {
                         OutlinedTextField(
                             value = pasteText,
@@ -485,11 +513,7 @@ private fun buildRecipe(
     sugar: String,
     sodium: String
 ): Recipe {
-    val ingredients: List<RecipeIngredient> = ingredientText
-        .lines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .map { IngredientParser.parse(it) }
+    val ingredients: List<RecipeIngredient> = ingredientsFromLines(ingredientText.lines())
 
     val steps = stepText.lines().map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -953,7 +977,7 @@ private fun dayLabel(key: String): String {
 private fun isDebuggable(context: android.content.Context): Boolean =
     (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-private fun servingsLabel(value: Double): String =
+internal fun servingsLabel(value: Double): String =
     if (value == 1.0) "1 serving" else "${value.cookDisplay()} servings"
 
 private val DAY_KEY_FORMAT: SimpleDateFormat
