@@ -87,11 +87,11 @@ android {
 // the file, which is exactly the half-done copy this pair exists to catch --
 // come back up to date from the cache without the test ever running.
 // RecipeCatalogTest reads recipes.json and recipes.sha256 the same way, for the
-// same reason.
+// same reason, and RecipeLinkTest bookmarklets.json and bookmarklets.sha256.
 tasks.withType<Test>().configureEach {
     inputs.file("src/main/AndroidManifest.xml")
         .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.files(fileTree("src/main/assets") { include("road-food*", "recipes*") }, fileTree("src/debug/assets"))
+    inputs.files(fileTree("src/main/assets") { include("road-food*", "recipes*", "bookmarklets*") }, fileTree("src/debug/assets"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 

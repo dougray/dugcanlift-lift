@@ -2,6 +2,7 @@ package com.dugcanlift.macrocalc
 
 import android.content.Intent
 import android.os.Bundle
+import com.dugcanlift.macrocalc.data.RecipeLink
 
 /**
  * Which coach's plan link [MainActivity] should ask about, read once per link.
@@ -13,7 +14,35 @@ import android.os.Bundle
  * second time. The launch intent is now read on a fresh start only; a
  * recreation brings the question back only if it was still unanswered.
  */
-internal class PlanLinkPrompt {
+internal class PlanLinkPrompt : LinkPrompt(
+    stateKey = "unanswered_plan_fragment",
+    // A recipe link is not a plan: it has a prompt of its own, [RecipeLinkPrompt]. Every other
+    // link reads exactly as it always has.
+    linkOf = { intent ->
+        val data = intent.data
+        if (data == null || RecipeLink.isRecipeLink(data.scheme, data.host)) null else data.fragment
+    }
+)
+
+/**
+ * The same read-once rule for a "Send to LIFT" recipe link (`dugcanliftlift://recipe#r1…`), so a
+ * recreation or a relaunch from recents never opens the same recipe a second time once it was
+ * saved or cancelled, and an unanswered one comes back. Holds the whole link: an empty or
+ * unreadable one still has to be answered, by its message.
+ */
+internal class RecipeLinkPrompt : LinkPrompt(
+    stateKey = "unanswered_recipe_link",
+    linkOf = { intent ->
+        val data = intent.data
+        if (data != null && RecipeLink.isRecipeLink(data.scheme, data.host)) intent.dataString else null
+    }
+)
+
+/** One link, asked about once. See [PlanLinkPrompt]. */
+internal open class LinkPrompt(
+    private val stateKey: String,
+    private val linkOf: (Intent) -> String?
+) {
 
     /** The link being asked about, until it is answered. */
     var unanswered: String? = null
@@ -28,7 +57,7 @@ internal class PlanLinkPrompt {
      */
     fun onCreate(intent: Intent?, savedInstanceState: Bundle?): String? {
         val link = if (savedInstanceState != null) {
-            savedInstanceState.getString(STATE_UNANSWERED)
+            savedInstanceState.getString(stateKey)
         } else if (intent != null && intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
             fragmentOf(intent)
         } else {
@@ -51,12 +80,8 @@ internal class PlanLinkPrompt {
     }
 
     fun save(outState: Bundle) {
-        unanswered?.let { outState.putString(STATE_UNANSWERED, it) }
+        unanswered?.let { outState.putString(stateKey, it) }
     }
 
-    private fun fragmentOf(intent: Intent?): String? = intent?.data?.fragment
-
-    private companion object {
-        const val STATE_UNANSWERED = "unanswered_plan_fragment"
-    }
+    private fun fragmentOf(intent: Intent?): String? = intent?.let(linkOf)
 }
