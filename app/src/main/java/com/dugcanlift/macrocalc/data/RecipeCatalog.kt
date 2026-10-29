@@ -5,6 +5,8 @@ import com.dugcanlift.kit.RecipeNutrition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.Normalizer
 
 /**
@@ -60,10 +62,19 @@ data class CatalogRecipe(
     val ingredients: List<String> = emptyList()
 ) {
     /**
-     * True when the macros describe the whole dish because the source stated no
-     * yield. The person supplies a serving count on add.
+     * True when the source stated no yield, whether or not it has macros. The
+     * servings stepper shows for every one of these: the person supplies the
+     * count on add, because the copy stores a serving count either way, and one
+     * nobody chose would be a guess.
      */
-    val needsServings: Boolean get() = servings == null && caloriesTotal != null
+    val statesNoYield: Boolean get() = servings == null
+
+    /**
+     * True when the macros describe the whole dish because the source stated no
+     * yield, so they divide by the count chosen. A yieldless recipe with no macros
+     * [statesNoYield] but has nothing to divide.
+     */
+    val needsServings: Boolean get() = statesNoYield && caloriesTotal != null
 
     /**
      * Per serving at [count].
@@ -132,6 +143,16 @@ object RecipeCatalog {
     const val DEFAULT_SERVINGS = 4.0
     const val MIN_SERVINGS = 1.0
     const val MAX_SERVINGS = 48.0
+
+    /**
+     * A macro as a whole number on screen: rounded half away from zero, never
+     * truncated, so 224.525 kcal reads 225 (Swift's `Int(x)` would print 224).
+     * Display only: the stored per-serving value is the raw quotient.
+     */
+    fun wholeNumber(value: Double): Long {
+        if (!value.isFinite()) return 0
+        return BigDecimal.valueOf(value).setScale(0, RoundingMode.HALF_UP).toLong()
+    }
 
     /**
      * Every recipe, ordered by name, so the two collections interleave rather

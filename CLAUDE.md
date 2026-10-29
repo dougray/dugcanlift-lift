@@ -563,10 +563,15 @@ wording and rules; the data rules are `data/RecipeCatalog.kt`, a port of LiftRef
   fails, copy both files from `dugcanlift-kit/data/` together; never edit either here, and never
   write the checksum by hand.
 - **Nothing is re-costed.** The catalogue's macros and its `nutritionNote` are already decided.
-- **A null `servings` is a source that stated no yield** (every `gutenberg-*` book). Those rows
-  carry whole-dish totals; the detail shows a stepper (1-48, starting at 4), and the per-serving
-  figure is the total divided by it at the moment of Add. A published per-serving figure never
-  moves with anything. Never guess a yield.
+- **A null `servings` is a source that stated no yield** (every `gutenberg-*` book). The detail
+  shows a stepper (1-48, starting at 4) for **every** one of them, including those with no
+  macros, because the copy stores a serving count either way (`statesNoYield`). Where they carry
+  whole-dish totals, the per-serving figure is the total divided by the count at the moment of
+  Add, **stored as the raw quotient, unrounded**. A published per-serving figure never moves
+  with anything. Never guess a yield.
+- **A whole-number macro on screen rounds half away from zero** (`RecipeCatalog.wholeNumber`),
+  never truncates: Beef Pot Pie at 4 servings reads 225 kcal. With no search typed, all 622 are
+  listed by name. These four rules are the ones every catalogue build follows.
 - **Add is an ordinary library recipe**, saved through `RecipeRepository.addRecipe`, its
   ingredients the raw lines through `ingredientsFromLines` -- the editor's own path. Attribution,
   licence and the note travel in `sourceTranscript`; every recipe's `license` and `attribution`

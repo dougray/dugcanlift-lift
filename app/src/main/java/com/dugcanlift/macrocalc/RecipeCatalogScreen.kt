@@ -42,7 +42,6 @@ import com.dugcanlift.macrocalc.data.CatalogRecipe
 import com.dugcanlift.macrocalc.data.RecipeCatalog
 import com.dugcanlift.macrocalc.data.RecipeCatalogStore
 import com.dugcanlift.macrocalc.data.RecipeRepository
-import com.dugcanlift.macrocalc.data.roundToIntSafe
 import com.dugcanlift.macrocalc.ui.adaptive.AdaptiveLayout
 import com.dugcanlift.macrocalc.ui.adaptive.MeasuredPane
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
@@ -250,7 +249,7 @@ private fun CatalogRow(recipe: CatalogRecipe, onClick: () -> Unit) {
             Detail(
                 when {
                     recipe.caloriesPerServing != null ->
-                        "${recipe.caloriesPerServing.roundToIntSafe()} kcal per serving"
+                        "${RecipeCatalog.wholeNumber(recipe.caloriesPerServing)} kcal per serving"
                     // Said here rather than only in the detail, so a browsing eye
                     // never reads a whole-dish number as a portion.
                     recipe.needsServings -> "Macros for the whole dish"
@@ -271,11 +270,17 @@ private fun RecipeDetail(recipe: CatalogRecipe, servings: Double, onServings: (D
             Text(recipe.name, style = MaterialTheme.typography.titleMedium, color = dclAccentText())
             recipe.summary?.let { Detail(it) }
 
-            if (recipe.needsServings) {
+            // Every recipe whose source stated no yield, macros or none: the copy
+            // stores a serving count either way, and it must be one the person chose.
+            if (recipe.statesNoYield) {
                 ServingsStepper(value = servings, onChange = onServings)
                 Detail(
-                    "This book states no yield, so the macros below are for the whole dish. " +
-                        "Set how many it serves and they divide."
+                    if (recipe.needsServings) {
+                        "This book states no yield, so the macros below are for the whole dish. " +
+                            "Set how many it serves and they divide."
+                    } else {
+                        "This book states no yield. Set how many it serves."
+                    }
                 )
             } else {
                 recipe.servings?.let { Detail(servingsLabel(it)) }
@@ -329,8 +334,8 @@ private fun RecipeDetail(recipe: CatalogRecipe, servings: Double, onServings: (D
             val facts = recipe.nutrition(servings)
             if (facts != null) {
                 Text(
-                    "${facts.calories.roundToIntSafe()} kcal · P ${facts.proteinG.roundToIntSafe()} · " +
-                        "C ${facts.carbsG.roundToIntSafe()} · F ${facts.fatG.roundToIntSafe()}",
+                    "${RecipeCatalog.wholeNumber(facts.calories)} kcal · P ${RecipeCatalog.wholeNumber(facts.proteinG)} · " +
+                        "C ${RecipeCatalog.wholeNumber(facts.carbsG)} · F ${RecipeCatalog.wholeNumber(facts.fatG)}",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Detail(
