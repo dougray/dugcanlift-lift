@@ -23,7 +23,7 @@ class RecipeTest {
         assertEquals(80.0, total.proteinG, 0.0001)
         assertEquals(120.0, total.carbsG, 0.0001)
         assertEquals(40.0, total.fatG, 0.0001)
-        assertEquals(20.0, total.fiberG, 0.0001)
+        assertEquals(20.0, total.fiberG!!, 0.0001)
     }
 
     @Test
@@ -39,7 +39,7 @@ class RecipeTest {
         assertEquals(80.0 / 1200.0, perGram.proteinG, 0.0001)
         assertEquals(120.0 / 1200.0, perGram.carbsG, 0.0001)
         assertEquals(40.0 / 1200.0, perGram.fatG, 0.0001)
-        assertEquals(20.0 / 1200.0, perGram.fiberG, 0.0001)
+        assertEquals(20.0 / 1200.0, perGram.fiberG!!, 0.0001)
     }
 
     @Test

@@ -482,7 +482,7 @@ internal fun RecipeEditorDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 NumberField(value = fat, onValueChange = { fat = it }, label = "Fat (g)")
                 Spacer(modifier = Modifier.height(8.dp))
-                NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fibre (g)")
+                NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fiber (g)")
                 Spacer(modifier = Modifier.height(8.dp))
                 NumberField(value = saturatedFat, onValueChange = { saturatedFat = it }, label = "Saturated fat (g)")
                 Spacer(modifier = Modifier.height(8.dp))
