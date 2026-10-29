@@ -582,6 +582,35 @@ wording and rules; the data rules are `data/RecipeCatalog.kt`, a port of LiftRef
   shorter name, and a plural query word falls back to its singular.
 - An asset, never a request.
 
+## Send to LIFT: recipes from the browser
+
+The kit's bookmarklet (`dugcanlift-kit/bookmarklet/README.md` -- read it; its "Rules every build
+follows" bind this build) runs on a recipe page the person already has open and opens
+`dugcanliftlift://recipe#r1…`, LIFT iPhone's own scheme, with the page's address and its raw
+`ld+json` blocks in the fragment. Nothing here requests the page.
+
+- **`data/RecipeLink.kt` is a port of the kit's `recipe-link.mjs`**, refusal for refusal
+  (raw deflate through `Inflater(true)`, base64url, the 512 KiB cap checked as bytes come out).
+  `RecipeLinkTest` checks it against `fixtures/recipe-link.txt` / `recipe-link-expected.json`,
+  the kit's pair, copied unchanged: never regenerate them from Kotlin.
+- **The blocks go to the kit's `RecipeJsonLd`**, the first one holding a recipe wins. Never a
+  second JSON-LD reader here.
+- **It opens Cook's own editor, filled**, under the note "From {site}. Check it, then Save.":
+  name, the page's yield (none stated leaves Servings empty and Save waits for it -- never guessed), ingredient lines as
+  raw text for the parser, steps, and the page's nutrition, flagged estimated. Nothing is costed.
+  The address is `Recipe.sourceUrl`, BACKUP-FORMAT's `sourceUrl`. **Nothing is saved until Save.**
+  A link that will not decode, or holds no recipe, shows a plain message and fills nothing.
+- **Its own intent filter** (VIEW, DEFAULT, BROWSABLE, `dugcanliftlift`, host `recipe`), never
+  inside the `autoVerify` https one. `RecipeLinkPrompt` reads it once by `PlanLinkPrompt`'s rule
+  (shared as `LinkPrompt`), and a recipe link never reaches the plan prompt.
+- **Cook offers it**: "Send recipes from your browser" beside "Paste a recipe", the `liftApp`
+  string from `assets/bookmarklets.json`, a Copy button and Chrome's steps. That file and
+  `bookmarklets.sha256` are the kit's bytes, pinned by `RecipeLinkTest` as `recipes.json` is: copy
+  both from `dugcanlift-kit/bookmarklet/` together and never edit either here.
+- **The words are shared by every build**, with {App} = LIFT, and pinned by
+  `BookmarkletCopyTest` and `RecipeLinkIntentTest`: change them in every build or in none. Android
+  has no Safari line and none of the web-only lines.
+
 ## Recording a route needs no background location
 
 The manifest does **not** declare `ACCESS_BACKGROUND_LOCATION`, and nothing asks
