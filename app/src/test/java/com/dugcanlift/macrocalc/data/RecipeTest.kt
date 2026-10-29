@@ -124,4 +124,26 @@ class RecipeTest {
         assertNull(restored.amountGrams)
         assertNull(restored.snapshotNutritionPerGram)
     }
+
+    // LIFT iPhone's CookView row says "estimated" after the macros of a recipe
+    // whose nutritionIsEstimated is set; here the flag is RecipeNutrition.estimated.
+    @Test
+    fun `an estimated recipe's card says estimated`() {
+        assertEquals("estimated", ESTIMATED_MARK)
+        assertEquals("estimated", estimatedMark(perServing.copy(estimated = true)))
+    }
+
+    @Test
+    fun `a recipe without the flag, or without macros, shows nothing new`() {
+        assertNull(estimatedMark(perServing))
+        assertNull(estimatedMark(perServing.copy(estimated = false)))
+        assertNull(estimatedMark(null))
+    }
+
+    @Test
+    fun `the flag read back from a backup shows the mark`() {
+        val stored = Recipe(name = "Pot pie", nutritionPerServing = perServing.copy(estimated = true))
+        val restored = recipeFromJson(stored.toJson())
+        assertEquals("estimated", estimatedMark(restored.nutritionPerServing))
+    }
 }
