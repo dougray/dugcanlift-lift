@@ -210,6 +210,58 @@ class RecipeCatalogTest {
         assertEquals(recipe, recipeFromJson(recipe.toJson()))
     }
 
+    // MARK: - The rules every catalogue follows
+
+    @Test fun `with no search typed, all 622 recipes are listed by name`() {
+        val listed = RecipeCatalog.browse(catalogue)
+        assertEquals(622, listed.size)
+        assertEquals(catalogue.map { it.id }.toSet(), listed.map { it.id }.toSet())
+        assertEquals(listed.map { it.name }.sorted(), listed.map { it.name })
+    }
+
+    @Test fun `whole-number macros round half away from zero, never truncate`() {
+        val pie = catalogue.single { it.id == "gutenberg-26558:beef-pot-pie" }
+        // 898.1 / 4 = 224.525: truncation would print 224.
+        assertEquals(225L, RecipeCatalog.wholeNumber(pie.nutrition(4.0)!!.calories))
+        assertEquals(150L, RecipeCatalog.wholeNumber(pie.nutrition(6.0)!!.calories))
+        assertEquals(3L, RecipeCatalog.wholeNumber(2.5))
+        assertEquals(1L, RecipeCatalog.wholeNumber(0.5))
+        assertEquals(2L, RecipeCatalog.wholeNumber(2.4999))
+        assertEquals(-3L, RecipeCatalog.wholeNumber(-2.5))
+        assertEquals(690L, RecipeCatalog.wholeNumber(690.0))
+    }
+
+    @Test fun `the servings stepper shows for every null-servings recipe, macros or none`() {
+        val yieldless = catalogue.filter { it.servings == null }
+        assertEquals(121, yieldless.size)
+        val withoutMacros = yieldless.filter { it.caloriesTotal == null }
+        assertTrue("the rule is only tested if some yieldless recipes have no macros", withoutMacros.isNotEmpty())
+
+        assertTrue(yieldless.all { it.statesNoYield })
+        assertTrue(withoutMacros.none { it.needsServings })
+        assertTrue("a stated yield never shows the stepper", catalogue.filter { it.servings != null }.none { it.statesNoYield })
+
+        // The count chosen there is the count the copy stores, with no macros invented.
+        val bare = withoutMacros.first().makeRecipe(6.0)
+        assertEquals(6.0, bare.servings, 0.0)
+        assertNull(bare.nutritionPerServing)
+    }
+
+    @Test fun `stored per-serving values are the raw quotient, unrounded`() {
+        val pie = catalogue.single { it.id == "gutenberg-26558:beef-pot-pie" }
+        val stored = pie.makeRecipe(6.0).nutritionPerServing!!
+        // Exact equality with the division itself: no rounding at any precision.
+        assertEquals(898.1 / 6, stored.calories, 0.0)
+        assertEquals(pie.proteinTotal!! / 6, stored.proteinG, 0.0)
+        assertEquals(pie.carbsTotal!! / 6, stored.carbsG, 0.0)
+        assertEquals(pie.fatTotal!! / 6, stored.fatG, 0.0)
+        assertTrue("149.68333... must not be stored as a rounded figure",
+            stored.calories != 150.0 && stored.calories != 149.68)
+        // And it survives the library's own file unrounded.
+        val reread = recipeFromJson(pie.makeRecipe(6.0).toJson()).nutritionPerServing!!
+        assertEquals(898.1 / 6, reread.calories, 0.0)
+    }
+
     // MARK: - The copy is the kit's bytes
 
     /**
