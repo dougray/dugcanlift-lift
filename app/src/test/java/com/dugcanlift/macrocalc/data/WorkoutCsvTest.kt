@@ -117,7 +117,7 @@ class WorkoutCsvTest {
     }
 
     @Test fun `the csv reader handles quotes bom and crlf`() {
-        assertEquals(listOf(listOf("a", "b"), listOf("x, \"y\"", "2")), WorkoutCsv.parse("﻿a,b\r\n\"x, \"\"y\"\"\",2\r\n"))
+        assertEquals(listOf(listOf("a", "b"), listOf("x, \"y\"", "2")), WorkoutCsv.parse("\uFEFFa,b\r\n\"x, \"\"y\"\"\",2\r\n"))
     }
 
     @Test fun `equipment comes out of the name`() {
