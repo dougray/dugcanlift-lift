@@ -134,7 +134,7 @@ fun RecipeCatalogScreen(repo: RecipeRepository, onClose: () -> Unit, modifier: M
                     colors = dclTextButtonColors()
                 ) { Text(if (selected == null) "Done" else "Back") }
                 Text(
-                    text = if (selected == null) "Recipe catalogue" else "Add recipe",
+                    text = if (selected == null) "Recipe catalog" else "Add recipe",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                 )
@@ -198,7 +198,7 @@ private fun CatalogueList(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         when {
-            loadFailed -> item { CatalogCard { Detail("The recipe catalogue could not be opened.") } }
+            loadFailed -> item { CatalogCard { Detail("The recipe catalog could not be opened.") } }
             entries.isEmpty() -> item {
                 CatalogCard { Detail(if (searching && loaded) "Nothing matches that." else "Loading…") }
             }
@@ -211,7 +211,7 @@ private fun CatalogueList(
             item {
                 TextButton(onClick = onToggleCredits, colors = dclTextButtonColors()) {
                     Text(
-                        if (showingCredits) "Hide credits" else "Credits and licences",
+                        if (showingCredits) "Hide credits" else "Credits and licenses",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

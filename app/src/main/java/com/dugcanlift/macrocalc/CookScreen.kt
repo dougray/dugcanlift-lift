@@ -361,7 +361,7 @@ internal fun RecipeEditorDialog(
                         // The one way in that needs no typing: 600+ recipes ship
                         // in the app as an asset, so it needs no connection either.
                         onBrowseCatalogue?.let { browse ->
-                            TextButton(onClick = browse, colors = dclTextButtonColors()) { Text("Browse the catalogue") }
+                            TextButton(onClick = browse, colors = dclTextButtonColors()) { Text("Browse the catalog") }
                         }
                         // The third way in: a bookmark that hands over the recipe on a page the
                         // browser already has open. See RecipeLink.
@@ -398,7 +398,7 @@ internal fun RecipeEditorDialog(
                                             Split.LABELLED ->
                                                 "Split on the headings in the text \u2014 check it read them right."
                                             Split.INFERRED ->
-                                                "The text labelled one section and this worked out the rest, " +
+                                                "The text labeled one section and this worked out the rest, " +
                                                     "so check the division."
                                             Split.UNSORTED ->
                                                 "The text had no headings, so everything landed in Ingredients " +
@@ -482,7 +482,7 @@ internal fun RecipeEditorDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 NumberField(value = fat, onValueChange = { fat = it }, label = "Fat (g)")
                 Spacer(modifier = Modifier.height(8.dp))
-                NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fibre (g)")
+                NumberField(value = fiber, onValueChange = { fiber = it }, label = "Fiber (g)")
                 Spacer(modifier = Modifier.height(8.dp))
                 NumberField(value = saturatedFat, onValueChange = { saturatedFat = it }, label = "Saturated fat (g)")
                 Spacer(modifier = Modifier.height(8.dp))
