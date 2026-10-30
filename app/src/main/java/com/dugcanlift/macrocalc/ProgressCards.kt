@@ -44,7 +44,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.kit.trimZeros
 import com.dugcanlift.macrocalc.data.BodyWeightTrend
@@ -318,8 +320,9 @@ private fun BodyWeightChart(points: List<BodyWeightTrend.Point>, goalLb: Double?
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(oneDecimal(high), style = MaterialTheme.typography.labelSmall, color = muted)
-            if (goalLb != null) Text("Goal", style = MaterialTheme.typography.labelSmall, color = goalColor)
         }
+        val measurer = rememberTextMeasurer()
+        val goalLabel = MaterialTheme.typography.labelSmall.copy(color = goalColor)
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
@@ -330,7 +333,8 @@ private fun BodyWeightChart(points: List<BodyWeightTrend.Point>, goalLb: Double?
             val h = size.height
             fun y(lb: Double) = (h - ((lb - bottom) / (top - bottom) * h)).toFloat()
             fun x(date: LocalDate) = (date.toEpochDay() - first.toEpochDay()) / span * w
-            listOf(0f, h).forEach { gy -> drawLine(guide, Offset(0f, gy), Offset(w, gy), strokeWidth = 1f) }
+            // Guides at the highest and lowest reading, the two numbers printed above and below.
+            listOf(y(high), y(low)).forEach { gy -> drawLine(guide, Offset(0f, gy), Offset(w, gy), strokeWidth = 1f) }
             if (goalLb != null) {
                 drawLine(
                     color = goalColor,
@@ -339,6 +343,9 @@ private fun BodyWeightChart(points: List<BodyWeightTrend.Point>, goalLb: Double?
                     strokeWidth = 1.dp.toPx(),
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
                 )
+                // "Goal" just above the line at its leading end, where the iPhone annotates it.
+                val label = measurer.measure("Goal", goalLabel)
+                drawText(label, topLeft = Offset(0f, (y(goalLb) - label.size.height).coerceAtLeast(0f)))
             }
             var previous: Offset? = null
             points.forEach { p ->
