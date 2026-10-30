@@ -277,7 +277,7 @@ object WorkoutCsv {
      * doubled to escape, CR LF or LF, and a BOM dropped.
      */
     fun parse(text: String): List<List<String>> {
-        val source = text.removePrefix("﻿")
+        val source = text.removePrefix("\uFEFF")
         val firstLine = source.substringBefore('\n')
         val delimiter = if (firstLine.count { it == ';' } > firstLine.count { it == ',' }) ';' else ','
         val rows = mutableListOf<List<String>>()
