@@ -107,6 +107,10 @@ fun BackupCard(onRestored: () -> Unit = {}) {
                 colors = dclOutlinedButtonColors()
             ) { Text("Restore from a backup file") }
 
+            // Training history in from another app, and out as a spreadsheet, beside the backup
+            // buttons as LIFT iPhone has them in Your data.
+            WorkoutCsvButtons()
+
             Spacer(Modifier.height(12.dp))
             Text(
                 "Restoring only adds what is missing, so an older file can never " +
