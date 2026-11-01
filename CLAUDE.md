@@ -261,6 +261,44 @@ nothing in the backup.
   booking names, a lift logged a side at a time, a bodyweight lift, a first session, a session whose
   name matches two routines, or with "Suggest the next weight" off (`SettingsStore.suggestsNextWeight`).
 
+## Progress: the year, muscles, body weight, photos
+
+Ports of LIFT iPhone's `ProgressRules`, `ProgressCards` and `ProgressPhotos` (its CLAUDE.md
+section of the same name; LIFT superproject `docs/superpowers/plans/2026-10-28-build-plan.md`,
+items 9-12), word for word on screen. The rules are `data/ProgressRules.kt`, pinned by
+`ProgressRulesTest`, a port of the iPhone's tests case for case. **Counting, never grading**: an
+empty week is a column of empty squares, and "No sets yet" lists muscles with nothing said about
+them.
+
+- **Your year** (Train, under Outdoor's highlights) is every day of the last 53 weeks as a square,
+  the reader's first weekday at the top. Levels are fixed steps of a day's sets -- 1-9, 10-19, 20 or
+  more -- not quartiles, so a day reads the same next month. Days after today draw as nothing.
+  **Every set counts**: the iPhone leaves warm-ups out, and this build records no warm-up flag.
+- **Muscles this week** (Train) counts sets per primary muscle, the reader's first weekday to today.
+  This build's logged exercise has no muscle field, so the muscle comes from `exercises.json` by
+  name and equipment, then by name alone (`MuscleWeek.lookup`, keyed as `matchKey` is). An exercise
+  it can't place is counted as unplaced and said in words, never guessed. A list with bars, not a
+  body drawing: a drawing needs artwork LIFT can license.
+- **Body weight** (Home, under Training) is the day-keyed weights the calculator already records
+  (`CoachStore.bodyweights`), the same ones the backup's `weights` and Send to Coach carry. Keyed by
+  day, so logging again replaces today's. The chart is the last 90 days on a date axis, drawn on a
+  Canvas, with the goal as a dashed line. **Pounds**, like every weight here. The goal is
+  `SettingsStore.bodyWeightGoalLb`, on this phone only as the iPhone's `bodyWeightGoalKg` is: not in
+  the backup, never sent; no key is no goal.
+- **Progress photos** (Home → Body weight → Photos, `data/ProgressPhotoStore.kt`, pinned by
+  `ProgressPhotoStoreTest`) are files in `filesDir/ProgressPhotos`. **Never records, never in a
+  backup file, never sent.** A photo is megabytes and the backup copies the stores whole.
+  - Picked with the system Photo Picker (`PickVisualMedia`), which needs **no permission**; where a
+    phone has no picker, androidx falls back to the document picker, which needs none either. No
+    camera button: the iPhone has none, and `ACTION_IMAGE_CAPTURE` would need the CAMERA runtime
+    grant because the manifest declares CAMERA for the barcode scanner.
+  - Each is decoded upright (its EXIF orientation applied to the pixels), cut to at most 2048 px on
+    the long side and re-encoded as JPEG, which writes no metadata, so the location is gone.
+  - `filesDir` is app-private and credential-encrypted. Cloud backup excludes it
+    (`data_extraction_rules.xml`); a direct phone-to-phone transfer carries it, as it carries the
+    rest of the log -- the one place that rule already allows.
+  - A before/after slider compares two photos; long-press (or tap) a photo to delete it.
+
 ## What you were asked to do, and what you did
 
 `PlanLog` puts the week a coach booked beside the week this device logged, as a
