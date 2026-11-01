@@ -110,7 +110,7 @@ object CookSampleData {
             )
         ),
         Spec(
-            name = "Beef Chilli",
+            name = "Beef Chili",
             servings = 4.0,
             nutrition = RecipeNutrition(438.0, 36.0, 31.0, 19.0, 9.0),
             ingredients = listOf(

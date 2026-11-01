@@ -261,6 +261,85 @@ nothing in the backup.
   booking names, a lift logged a side at a time, a bodyweight lift, a first session, a session whose
   name matches two routines, or with "Suggest the next weight" off (`SettingsStore.suggestsNextWeight`).
 
+## Training history in and out as CSV
+
+Home → Your data → "Import from Strong, Hevy or FitNotes" and "Export training as a spreadsheet
+(CSV)". A port of LIFT iPhone's `WorkoutCSV` (its CLAUDE.md section of the same name, build plan
+item 13), function for function and word for word. `data/WorkoutCsv.kt`, pinned by
+`WorkoutCsvTest`, a port of the iPhone's tests case for case against **its fixtures, copied
+unchanged** into `fixtures/csv-*.csv` -- never regenerate them from Kotlin. Both files go through
+the Storage Access Framework (`OpenDocument` / `CreateDocument`): no storage permission, nothing
+sent anywhere.
+
+**None of the three apps publishes its export format.** The shapes were read from real exports
+people have published, so the reader is strict: a file it can't place is refused, never half-read.
+
+- **Strong** comes in two layouts. The semicolon one says `Weight (kg)`. The comma one names **no
+  unit**, so the import dialog asks and builds nothing until it is answered. `Set Order` `W` is a
+  warm-up, `D` and `F` working sets; `Note` and `Rest Timer` rows are not sets.
+- **Hevy** says its unit in the header (`weight_kg`/`weight_lbs`, `distance_km`/`distance_miles`)
+  and writes dates in one of two shapes. **FitNotes** says the unit on every row, and one file can
+  mix them; one workout a day.
+- Numbers are digits and a point only; times carry no zone and are read as local time;
+  "Bench Press (Barbell)" splits into a name and equipment.
+- **A day this phone already has training on is left alone and counted**, never merged into, so a
+  second import of the same file adds nothing. A session with no exercises is not training.
+
+Where this build differs from the iPhone, and why:
+
+- **Weights become pounds**, rounded to the hundredth, because every weight here is pounds.
+- **A zero is a blank.** Set fields are optional here; "0.0" on a pull-up is a bodyweight lift, not
+  a 0 lb load, and an all-blank set is dropped.
+- **Warm-ups are left out and counted**, in the dialog before Import and in the result after it.
+  This build has no warm-up flag, and a warm-up stored as a working set would count in volume, the
+  next weight and the muscles.
+- **FitNotes' category is read but not kept**: a logged exercise has no muscle field here.
+- **Two workouts on one day stay two sessions**, because a day here can hold several; the iPhone
+  has one day and folds them into it.
+- **The export is the iPhone's file**: one row per set, `Weight (kg)` converted from pounds, blanks
+  blank (a set with no weight or reps leaves the cell empty, where the iPhone writes `0`), Warmup
+  always empty. Decimals drop a bare trailing point (`1.00` is `1`, the iPhone would write `1.`).
+- Imported sessions are ordinary sessions: they are in the backup file and Send to Coach like any
+  other, as imported days are on the iPhone.
+
+## Progress: the year, muscles, body weight, photos
+
+Ports of LIFT iPhone's `ProgressRules`, `ProgressCards` and `ProgressPhotos` (its CLAUDE.md
+section of the same name; LIFT superproject `docs/superpowers/plans/2026-10-28-build-plan.md`,
+items 9-12), word for word on screen. The rules are `data/ProgressRules.kt`, pinned by
+`ProgressRulesTest`, a port of the iPhone's tests case for case. **Counting, never grading**: an
+empty week is a column of empty squares, and "No sets yet" lists muscles with nothing said about
+them.
+
+- **Your year** (Train, under Outdoor's highlights) is every day of the last 53 weeks as a square,
+  the reader's first weekday at the top. Levels are fixed steps of a day's sets -- 1-9, 10-19, 20 or
+  more -- not quartiles, so a day reads the same next month. Days after today draw as nothing.
+  **Every set counts**: the iPhone leaves warm-ups out, and this build records no warm-up flag.
+- **Muscles this week** (Train) counts sets per primary muscle, the reader's first weekday to today.
+  This build's logged exercise has no muscle field, so the muscle comes from `exercises.json` by
+  name and equipment, then by name alone (`MuscleWeek.lookup`, keyed as `matchKey` is). An exercise
+  it can't place is counted as unplaced and said in words, never guessed. A list with bars, not a
+  body drawing: a drawing needs artwork LIFT can license.
+- **Body weight** (Home, under Training) is the day-keyed weights the calculator already records
+  (`CoachStore.bodyweights`), the same ones the backup's `weights` and Send to Coach carry. Keyed by
+  day, so logging again replaces today's. The chart is the last 90 days on a date axis, drawn on a
+  Canvas, with the goal as a dashed line. **Pounds**, like every weight here. The goal is
+  `SettingsStore.bodyWeightGoalLb`, on this phone only as the iPhone's `bodyWeightGoalKg` is: not in
+  the backup, never sent; no key is no goal.
+- **Progress photos** (Home → Body weight → Photos, `data/ProgressPhotoStore.kt`, pinned by
+  `ProgressPhotoStoreTest`) are files in `filesDir/ProgressPhotos`. **Never records, never in a
+  backup file, never sent.** A photo is megabytes and the backup copies the stores whole.
+  - Picked with the system Photo Picker (`PickVisualMedia`), which needs **no permission**; where a
+    phone has no picker, androidx falls back to the document picker, which needs none either. No
+    camera button: the iPhone has none, and `ACTION_IMAGE_CAPTURE` would need the CAMERA runtime
+    grant because the manifest declares CAMERA for the barcode scanner.
+  - Each is decoded upright (its EXIF orientation applied to the pixels), cut to at most 2048 px on
+    the long side and re-encoded as JPEG, which writes no metadata, so the location is gone.
+  - `filesDir` is app-private and credential-encrypted. Cloud backup excludes it
+    (`data_extraction_rules.xml`); a direct phone-to-phone transfer carries it, as it carries the
+    rest of the log -- the one place that rule already allows.
+  - A before/after slider compares two photos; long-press (or tap) a photo to delete it.
+
 ## What you were asked to do, and what you did
 
 `PlanLog` puts the week a coach booked beside the week this device logged, as a

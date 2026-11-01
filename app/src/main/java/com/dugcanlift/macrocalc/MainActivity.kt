@@ -334,6 +334,7 @@ private fun RecipeLinkMessage(opened: RecipeLink.Opened, onDismiss: () -> Unit) 
     val body = recipeLinkMessage(opened) ?: return
     AlertDialog(
         onDismissRequest = onDismiss,
+        title = { Text("Couldn't read that recipe") },
         text = { Text(body) },
         confirmButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("OK") } }
     )
