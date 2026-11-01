@@ -114,6 +114,20 @@ class SettingsStore private constructor(context: Context) {
         get() = prefs.getBoolean(ProgressionRule.ENABLED_KEY, true)
         set(value) { prefs.edit().putBoolean(ProgressionRule.ENABLED_KEY, value).apply() }
 
+    /**
+     * The body weight goal, drawn as a dashed line on Home's Body weight card ([BodyWeightTrend]).
+     * Pounds, like every weight here; null -- and no key at all -- is no goal. On this phone only,
+     * as LIFT iPhone keeps `bodyWeightGoalKg`: not in the backup file, and never sent to a coach.
+     */
+    var bodyWeightGoalLb: Double?
+        get() = prefs.getString(KEY_BODY_WEIGHT_GOAL, null)?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
+        set(value) {
+            prefs.edit().apply {
+                if (value == null || !value.isFinite() || value <= 0) remove(KEY_BODY_WEIGHT_GOAL)
+                else putString(KEY_BODY_WEIGHT_GOAL, value.toString())
+            }.apply()
+        }
+
     companion object {
         private const val KEY_ROAD_RECENT = "road_food_recent"
         private const val KEY_ROAD_PICKS = "road_food_picks"
@@ -121,6 +135,7 @@ class SettingsStore private constructor(context: Context) {
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
         private const val KEY_SERVING_UNIT = "serving_unit"
+        private const val KEY_BODY_WEIGHT_GOAL = "body_weight_goal_lb"
 
         @Volatile
         private var instance: SettingsStore? = null

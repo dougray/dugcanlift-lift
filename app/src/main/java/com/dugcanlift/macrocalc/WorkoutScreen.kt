@@ -435,6 +435,24 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         )
     }
 
+    // Under Outdoor's highlights, where LIFT iPhone puts them: this week's muscles, then the year.
+    // Side by side once two panes fit, as Last route and Personal bests are.
+    val progressBlock: @Composable (sideBySide: Boolean) -> Unit = { sideBySide ->
+        if (sideBySide) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(AdaptiveLayout.PANE_GAP_DP.dp)
+            ) {
+                MusclesThisWeekCard(sessions, Modifier.weight(1f).fillMaxHeight())
+                TrainingYearCard(sessions, Modifier.weight(1f).fillMaxHeight())
+            }
+        } else {
+            MusclesThisWeekCard(sessions)
+            Spacer(modifier = Modifier.height(16.dp))
+            TrainingYearCard(sessions)
+        }
+    }
+
     val routinesBlock: @Composable (cardColumns: Int) -> Unit = { cardColumns ->
         if (routines.isNotEmpty()) {
             Text(text = "Routines", style = MaterialTheme.typography.labelLarge)
@@ -629,6 +647,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 outdoorBlock()
                 Spacer(modifier = Modifier.height(16.dp))
                 highlightsBlock(false)
+                Spacer(modifier = Modifier.height(16.dp))
+                progressBlock(false)
                 Spacer(modifier = Modifier.height(24.dp))
                 routinesBlock(1)
                 sessionsBlock()
@@ -648,6 +668,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 highlightsBlock(true)
+                Spacer(modifier = Modifier.height(16.dp))
+                progressBlock(true)
                 Spacer(modifier = Modifier.height(24.dp))
                 routinesBlock(AdaptiveLayout.cardColumns(contentWidth))
             }
