@@ -142,7 +142,7 @@ dependencies {
             because("Guava before 32.0.0: CVE-2020-8908, CVE-2023-2976")
         }
     }
-    implementation("com.github.dougray:dugcanlift-kit-android:d2a4271071")
+    implementation("com.github.dougray:dugcanlift-kit-android:1.10.0")
     // LIFT Link's protocol layer, shared byte-for-byte with the Wear OS app. Pure JVM, no
     // dependencies of its own. See CLAUDE.md "LIFT Link".
     implementation(project(":link"))
