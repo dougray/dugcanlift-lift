@@ -159,5 +159,12 @@
             android:name=".LocationRecordingService"
             android:foregroundServiceType="location"
             android:exported="false" />
+
+        <!-- The end of a rest between sets, for a phone asleep or a process Android ended: posts
+             "Rest over" (RestNotifications). Set with AlarmManager.setAndAllowWhileIdle, which needs
+             no permission; never exported, so only LIFT's own alarm reaches it. -->
+        <receiver
+            android:name=".RestOverReceiver"
+            android:exported="false" />
     </application>
 </manifest>
