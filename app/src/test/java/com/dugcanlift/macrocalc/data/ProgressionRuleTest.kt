@@ -294,4 +294,19 @@ class ProgressionRuleTest {
         val coachGot = suggest(coachDay, history, routines = listOf(coach))!!
         assertEquals(listOf(190.0, 190.0, 135.0), ProgressionRule.use(coachDay.exercises.single(), coachGot).sets.map { it.weightLb })
     }
+
+    /** LIFT iPhone's "the done set ... left as it is": a set ticked done in a live session is not filled. */
+    @Test fun `use leaves a set ticked done in a live session alone`() {
+        val todays = kindedPush.toSession(today)
+        val history = listOf(WorkoutSession(
+            date = monday, name = "Push",
+            exercises = listOf(LoggedExercise(name = bench.name, equipment = bench.equipment,
+                sets = listOf(WorkoutSet(weightLb = 185.0, reps = 8), WorkoutSet(weightLb = 185.0, reps = 9))))
+        ))
+        val got = suggest(todays, history, routines = listOf(kindedPush))!!
+        val exercise = todays.exercises.single()
+        val done = setOf(exercise.sets[0].id)
+        assertEquals(listOf(exercise.sets[1].id), ProgressionRule.open(exercise.sets, got.laidOut, got.next.weight, done).map { it.id })
+        assertEquals(listOf(185.0, 190.0, 185.0, 185.0), ProgressionRule.use(exercise, got, done).sets.map { it.weightLb })
+    }
 }
