@@ -84,18 +84,20 @@ class LinkPlanSidesTest {
     }
 
     @Test fun `the bits above the new ones are still reserved and still refused`() {
-        // Prescribed set: 0x10 is now the side, so 0x20 must still be refused.
+        // Prescribed set: 0x10 is the side and, since version 3, 0x20 the kind -- so 0x40 must
+        // still be refused. (LinkPlanSetTypesTest pins the version-3 bits themselves.)
         val prescribed = LinkPayloads.encodePlan(plain)
         val setMaskAt = prescribed.size - 3
         assertEquals(0x02, prescribed[setMaskAt].toInt())
-        prescribed[setMaskAt] = (prescribed[setMaskAt].toInt() or 0x20).toByte()
+        prescribed[setMaskAt] = (prescribed[setMaskAt].toInt() or 0x40).toByte()
         assertThrows(LinkDecodeException::class.java) { LinkPayloads.decodePlan(prescribed) }
 
-        // Exercise: 0x08 is now each-side, so 0x10 must still be refused.
+        // Exercise: 0x08 is each-side and, since version 3, 0x10 the group -- so 0x20 must still
+        // be refused.
         val exercise = LinkPayloads.encodePlan(plain)
         val exerciseMaskAt = exercise.size - 6
         assertEquals(0x00, exercise[exerciseMaskAt].toInt())
-        exercise[exerciseMaskAt] = 0x10
+        exercise[exerciseMaskAt] = 0x20
         assertThrows(LinkDecodeException::class.java) { LinkPayloads.decodePlan(exercise) }
     }
 

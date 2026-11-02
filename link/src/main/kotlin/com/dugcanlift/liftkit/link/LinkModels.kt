@@ -40,7 +40,61 @@ enum class LogSide(val code: Int) {
     }
 }
 
-/** A prescription. All five fields optional; a set that prescribes nothing at all is legal. */
+/**
+ * How a prescribed set follows the one before it (PLAN-FORMAT.md "Set types": flags bits 3-4).
+ * **Absent is straight**, which is what every set written before set types means — so, as with
+ * [LogSide], there is deliberately no `STRAIGHT` constant to write by accident. The codes are
+ * PLAN-FORMAT's own value in bits 3-4 (`(flags >> 3) & 3`), so nothing needs a translation table.
+ *
+ * A **drop** set is done straight after the set before it, with no rest, normally lighter. A
+ * **rest-pause** set follows a short pause, about 15 seconds, normally at the same weight. An
+ * exercise's first set has no set before it, so it is never either: the codec never writes a kind
+ * on it and reads one there as straight ([PlanExercise.kindOf]).
+ */
+enum class SetKind(val code: Int) {
+    DROP(1), REST_PAUSE(2);
+
+    companion object {
+        private val byCode = entries.associateBy { it.code }
+
+        /** null — straight — for a code this build does not know, as PLAN-FORMAT reads a `3`. */
+        fun from(code: Int): SetKind? = byCode[code]
+    }
+}
+
+/**
+ * Supersets and circuits (PLAN-FORMAT.md "Set types", `g`): **adjacency makes the group, not the
+ * number.** A run of two or more adjacent exercises sharing a positive number is one group, done
+ * round by round; a number its neighbours do not share is a group of one, which is no group at all.
+ *
+ * Coach web's `prescriptions.js` and LIFT Android's `SetTypes.runs`, rule for rule, so the watch
+ * reads the same groups every other build reads.
+ */
+object ExerciseGroups {
+    /**
+     * The group each position belongs to: runs of two or more adjacent equal positive numbers become
+     * 1, 2, 3... in order of appearance, and everything else is null. `[7, 7, 3, 3, 3]` is
+     * `[1, 1, 2, 2, 2]`; `[1, null, 1]` is three ungrouped exercises.
+     */
+    fun runs(numbers: List<Int?>): List<Int?> {
+        val out = MutableList<Int?>(numbers.size) { null }
+        var next = 1
+        var i = 0
+        while (i < numbers.size) {
+            val g = numbers[i]?.takeIf { it > 0 }
+            var j = i + 1
+            if (g != null) while (j < numbers.size && numbers[j] == g) j += 1
+            if (g != null && j - i >= 2) {
+                for (k in i until j) out[k] = next
+                next += 1
+            }
+            i = j
+        }
+        return out
+    }
+}
+
+/** A prescription. All six fields optional; a set that prescribes nothing at all is legal. */
 data class PrescribedSet(
     val weightKg: Double? = null,
     val reps: Int? = null,
@@ -61,6 +115,13 @@ data class PrescribedSet(
      * set is single-limb.
      */
     val side: LogSide? = null,
+    /**
+     * Drop or rest-pause (PLAN-FORMAT.md "Set types", flags bits 3-4). **Absent is straight**, and a
+     * straight set writes no presence bit, so a plan that says nothing about set types is byte for
+     * byte what version 2 wrote. Never meaningful on an exercise's first set: read it through
+     * [PlanExercise.kindOf], which says so.
+     */
+    val kind: SetKind? = null,
 )
 
 /** What the lifter actually did last time, for the "last: 185x5 @8" line beside a prescription. */
@@ -88,7 +149,20 @@ data class PlanExercise(
      * exactly the bytes version 1 wrote and `fixtures/link-wire.txt` does not move.
      */
     val eachSide: Boolean = false,
-)
+    /**
+     * The superset or circuit this exercise is in (PLAN-FORMAT.md "Set types", `g`). Null is not
+     * grouped. Only a run of adjacent exercises sharing it is a group ([ExerciseGroups.runs]); the
+     * codec writes the runs renumbered 1, 2, 3... and writes **nothing** for a group of one, so a plan
+     * with no groups is byte for byte what version 2 wrote.
+     */
+    val group: Int? = null,
+) {
+    /**
+     * The kind of prescribed set [index], or null for straight. **The first set is always straight**
+     * — there is no set before it to drop from or pause after — whatever an in-memory plan says.
+     */
+    fun kindOf(index: Int): SetKind? = if (index > 0) sets.getOrNull(index)?.kind else null
+}
 
 /**
  * The workout the watch should run. [planId] and [revision] are the envelope's own `workoutId` and
@@ -119,6 +193,24 @@ data class Plan(
         if (!prescribesSides) this
         else copy(exercises = exercises.map { exercise ->
             exercise.copy(eachSide = false, sets = exercise.sets.map { it.copy(side = null) })
+        })
+
+    /** Whether anything in this plan is a superset, a circuit, a drop set or a rest-pause set. */
+    val prescribesSetTypes: Boolean
+        get() = ExerciseGroups.runs(exercises.map { it.group }).any { it != null } ||
+            exercises.any { exercise -> exercise.sets.indices.any { exercise.kindOf(it) != null } }
+
+    /**
+     * This plan with every group and set kind stripped, for a peer that negotiated version 2 or
+     * below, which would refuse the presence bits outright. [LinkSession.pushPlan] applies it, as it
+     * applies [withoutSides]. A stripped superset is its exercises in the order the coach wrote them,
+     * and a stripped drop set is an ordinary set with the right numbers — PLAN-FORMAT's own reading
+     * for an old decoder.
+     */
+    fun withoutSetTypes(): Plan =
+        if (exercises.none { it.group != null || it.sets.any { set -> set.kind != null } }) this
+        else copy(exercises = exercises.map { exercise ->
+            exercise.copy(group = null, sets = exercise.sets.map { it.copy(kind = null) })
         })
 }
 

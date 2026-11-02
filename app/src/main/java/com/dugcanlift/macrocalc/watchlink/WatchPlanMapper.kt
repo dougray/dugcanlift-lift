@@ -9,10 +9,12 @@ import com.dugcanlift.liftkit.link.Plan
 import com.dugcanlift.liftkit.link.PlanExercise
 import com.dugcanlift.liftkit.link.PlanSource
 import com.dugcanlift.liftkit.link.PrescribedSet
+import com.dugcanlift.liftkit.link.SetKind
 import com.dugcanlift.macrocalc.data.LoggedExercise
 import com.dugcanlift.macrocalc.data.PrescribedSet as AppPrescribedSet
 import com.dugcanlift.macrocalc.data.Routine
 import com.dugcanlift.macrocalc.data.RoutineExercise
+import com.dugcanlift.macrocalc.data.SetKind as AppSetKind
 import com.dugcanlift.macrocalc.data.SetSide
 import com.dugcanlift.macrocalc.data.WorkoutSession
 import com.dugcanlift.macrocalc.data.WorkoutSet
@@ -69,6 +71,13 @@ object WatchPlanMapper {
         exercises = routine.exercises.map { exercise(it, history) },
     )
 
+    /** One of this app's set kinds as LIFT Link carries it: the same PLAN-FORMAT codes, 1 and 2. */
+    internal fun linkKind(kind: AppSetKind?): SetKind? = when (kind) {
+        AppSetKind.DROP -> SetKind.DROP
+        AppSetKind.REST_PAUSE -> SetKind.REST_PAUSE
+        null -> null
+    }
+
     private fun exercise(template: RoutineExercise, history: List<WorkoutSession>): PlanExercise {
         // A routine that prescribes set by set sends its rows as they are -- a ramp, a named side, an
         // extra set on one limb. `template.prescribed` is non-null exactly when the flattened targets
@@ -81,14 +90,19 @@ object WatchPlanMapper {
         //
         // No rest time either way: this app does not store one, and the wire's absent restSeconds
         // means "the watch's own default", which is the honest thing to send.
+        //
+        // Set types (LIFT Link version 3): a coach's kinds ride on their own rows; a routine of your
+        // own keeps its kinds by position beside the set count, `setKind(i)`. Either way the link's
+        // encoder never writes a kind on set 1 and LinkSession strips them for an older watch.
         val sets = template.prescribed
             ?.map(::prescribedSet)
             ?.takeIf { it.isNotEmpty() }
-            ?: List(template.targetSets.coerceAtLeast(1)) {
+            ?: List(template.targetSets.coerceAtLeast(1)) { index ->
                 PrescribedSet(
                     weightKg = template.targetWeightLb?.takeIf { w -> w.isFinite() && w >= 0.0 }?.let(::lbToKg),
                     reps = template.targetReps?.takeIf { r -> r >= 1 },
                     rpe = template.targetRpe?.takeIf { r -> r.isFinite() && r in 1.0..10.0 },
+                    kind = linkKind(template.setKind(index)),
                 )
             }
         return PlanExercise(
@@ -100,6 +114,10 @@ object WatchPlanMapper {
             // PLAN-FORMAT's `b: 1`. False writes no presence bit at all, so a routine with no sides
             // encodes to exactly the bytes version 1 wrote.
             eachSide = template.eachSide,
+            // PLAN-FORMAT's `g`, stored already renumbered (SetTypes.runs). The link's encoder applies
+            // the same adjacency rule, so a group of one writes nothing and an ungrouped routine
+            // encodes to exactly the bytes version 2 wrote.
+            group = template.group,
         )
     }
 
@@ -120,6 +138,7 @@ object WatchPlanMapper {
             SetSide.RIGHT -> LogSide.RIGHT
             null -> null
         },
+        kind = linkKind(set.kind),
     )
 
     /**
