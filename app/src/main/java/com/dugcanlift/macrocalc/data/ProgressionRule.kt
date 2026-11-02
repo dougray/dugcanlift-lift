@@ -242,13 +242,14 @@ object ProgressionRule {
 
     /**
      * The sets "Use" fills: two-sided straight rows still exactly as the routine laid them out, whose
-     * weight is not already the one. A drop or rest-pause row is never filled: it keeps its own weight. A row the lifter added is a set they logged; this build has no tick
-     * to tell a laid-out row done from one not done, so a laid-out row is taken as not done.
+     * weight is not already the one. A drop or rest-pause row is never filled: it keeps its own weight. A row the lifter added is a set they logged.
+     * A row ticked done in a live session ([done], LIFT iPhone's `completedAt == nil`) is left as it
+     * is; outside one there is no tick, so a laid-out row is taken as not done.
      */
-    fun open(sets: List<WorkoutSet>, laidOut: List<PrescribedSet>, weight: Double): List<WorkoutSet> =
+    fun open(sets: List<WorkoutSet>, laidOut: List<PrescribedSet>, weight: Double, done: Set<String> = emptySet()): List<WorkoutSet> =
         sets.filter { set ->
             // A drop set keeps its own, lighter weight, and a rest-pause set's is the lifter's call.
-            set.side == null && set.kind == null &&
+            set.id !in done && set.side == null && set.kind == null &&
                 laidOut.any { it.laysOut(set) } &&
                 (set.weightLb?.let { abs(it - weight) > 0.001 } ?: true)
         }
@@ -258,8 +259,8 @@ object ProgressionRule {
             set.durationSec == durationSec && set.distanceMeters == distanceMeters && set.kind == kind
 
     /** The exercise with the suggestion's weight in its [open] sets, and nothing else changed. */
-    fun use(exercise: LoggedExercise, suggestion: Suggestion): LoggedExercise {
-        val ids = open(exercise.sets, suggestion.laidOut, suggestion.next.weight).map { it.id }.toSet()
+    fun use(exercise: LoggedExercise, suggestion: Suggestion, done: Set<String> = emptySet()): LoggedExercise {
+        val ids = open(exercise.sets, suggestion.laidOut, suggestion.next.weight, done).map { it.id }.toSet()
         if (ids.isEmpty()) return exercise
         return exercise.copy(sets = exercise.sets.map { if (it.id in ids) it.copy(weightLb = suggestion.next.weight) else it })
     }

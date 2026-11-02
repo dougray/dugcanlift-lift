@@ -128,7 +128,37 @@ class SettingsStore private constructor(context: Context) {
             }.apply()
         }
 
+    /**
+     * "Rest between sets" as stored, or null when nobody has moved the stepper. Read the rest to
+     * start through [restSeconds], never this: never set is the default, not zero.
+     */
+    var restBetweenSetsStored: Int?
+        get() = if (prefs.contains(RestBetweenSets.KEY)) prefs.getInt(RestBetweenSets.KEY, 0) else null
+        set(value) {
+            prefs.edit().apply {
+                if (value == null) remove(RestBetweenSets.KEY) else putInt(RestBetweenSets.KEY, value)
+            }.apply()
+        }
+
+    /** The rest a tick starts, in seconds, or null for none ([RestBetweenSets.resolved]). */
+    val restSeconds: Int? get() = RestBetweenSets.resolved(restBetweenSetsStored)
+
+    /** Whether a live session keeps the screen on ([LiveSessionScreen]). On unless turned off. */
+    var keepsScreenOn: Boolean
+        get() = prefs.getBoolean(LiveSessionScreen.ENABLED_KEY, LiveSessionScreen.DEFAULT_ENABLED)
+        set(value) { prefs.edit().putBoolean(LiveSessionScreen.ENABLED_KEY, value).apply() }
+
+    /**
+     * The plates on the rack and what each bar weighs, for the plate line under a set's weight
+     * ([PlateMath]). Pounds. Unset or unreadable is the standard gym, never an empty rack. On this
+     * phone only: not in the backup file, as the iPhone's is not.
+     */
+    var plateSetup: PlateSetup
+        get() = PlateSetup.fromJson(prefs.getString(KEY_PLATE_SETUP, null))
+        set(value) { prefs.edit().putString(KEY_PLATE_SETUP, value.toJson()).apply() }
+
     companion object {
+        private const val KEY_PLATE_SETUP = "plate_setup_pounds"
         private const val KEY_ROAD_RECENT = "road_food_recent"
         private const val KEY_ROAD_PICKS = "road_food_picks"
         private const val KEY_ROAD_AVOID = "road_food_avoid"
