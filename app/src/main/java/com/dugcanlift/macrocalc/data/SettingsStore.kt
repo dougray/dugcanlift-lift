@@ -114,13 +114,58 @@ class SettingsStore private constructor(context: Context) {
         get() = prefs.getBoolean(ProgressionRule.ENABLED_KEY, true)
         set(value) { prefs.edit().putBoolean(ProgressionRule.ENABLED_KEY, value).apply() }
 
+    /**
+     * The body weight goal, drawn as a dashed line on Home's Body weight card ([BodyWeightTrend]).
+     * Pounds, like every weight here; null -- and no key at all -- is no goal. On this phone only,
+     * as LIFT iPhone keeps `bodyWeightGoalKg`: not in the backup file, and never sent to a coach.
+     */
+    var bodyWeightGoalLb: Double?
+        get() = prefs.getString(KEY_BODY_WEIGHT_GOAL, null)?.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
+        set(value) {
+            prefs.edit().apply {
+                if (value == null || !value.isFinite() || value <= 0) remove(KEY_BODY_WEIGHT_GOAL)
+                else putString(KEY_BODY_WEIGHT_GOAL, value.toString())
+            }.apply()
+        }
+
+    /**
+     * "Rest between sets" as stored, or null when nobody has moved the stepper. Read the rest to
+     * start through [restSeconds], never this: never set is the default, not zero.
+     */
+    var restBetweenSetsStored: Int?
+        get() = if (prefs.contains(RestBetweenSets.KEY)) prefs.getInt(RestBetweenSets.KEY, 0) else null
+        set(value) {
+            prefs.edit().apply {
+                if (value == null) remove(RestBetweenSets.KEY) else putInt(RestBetweenSets.KEY, value)
+            }.apply()
+        }
+
+    /** The rest a tick starts, in seconds, or null for none ([RestBetweenSets.resolved]). */
+    val restSeconds: Int? get() = RestBetweenSets.resolved(restBetweenSetsStored)
+
+    /** Whether a live session keeps the screen on ([LiveSessionScreen]). On unless turned off. */
+    var keepsScreenOn: Boolean
+        get() = prefs.getBoolean(LiveSessionScreen.ENABLED_KEY, LiveSessionScreen.DEFAULT_ENABLED)
+        set(value) { prefs.edit().putBoolean(LiveSessionScreen.ENABLED_KEY, value).apply() }
+
+    /**
+     * The plates on the rack and what each bar weighs, for the plate line under a set's weight
+     * ([PlateMath]). Pounds. Unset or unreadable is the standard gym, never an empty rack. On this
+     * phone only: not in the backup file, as the iPhone's is not.
+     */
+    var plateSetup: PlateSetup
+        get() = PlateSetup.fromJson(prefs.getString(KEY_PLATE_SETUP, null))
+        set(value) { prefs.edit().putString(KEY_PLATE_SETUP, value.toJson()).apply() }
+
     companion object {
+        private const val KEY_PLATE_SETUP = "plate_setup_pounds"
         private const val KEY_ROAD_RECENT = "road_food_recent"
         private const val KEY_ROAD_PICKS = "road_food_picks"
         private const val KEY_ROAD_AVOID = "road_food_avoid"
         private const val KEY_FOCUS = "training_focus"
         private const val KEY_STEP_GOAL = "step_goal"
         private const val KEY_SERVING_UNIT = "serving_unit"
+        private const val KEY_BODY_WEIGHT_GOAL = "body_weight_goal_lb"
 
         @Volatile
         private var instance: SettingsStore? = null

@@ -117,6 +117,8 @@ class MainActivity : ComponentActivity() {
                     contentWindowInsets = AppPageInsets
                 ) { innerPadding ->
                     CompositionLocalProvider(LocalAppFeedback provides feedback) {
+                        // The screen stays on during a live session, on every tab.
+                        LiveSessionEffects()
                         ProvideWindowLayout(modifier = Modifier.fillMaxSize()) {
                             AppTabs(
                                 // Consumed once applied, so nothing below pads by the same insets again.
@@ -143,7 +145,19 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStart() {
         super.onStart()
+        // A rest over for a while is done with, rather than greeting someone the next morning.
+        LiveSessionStore.get(this).timer.restore()
         WatchLinkTransport.get(this).reconnectIfPaired()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        AppVisibility.visible = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        AppVisibility.visible = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -334,6 +348,7 @@ private fun RecipeLinkMessage(opened: RecipeLink.Opened, onDismiss: () -> Unit) 
     val body = recipeLinkMessage(opened) ?: return
     AlertDialog(
         onDismissRequest = onDismiss,
+        title = { Text("Couldn't read that recipe") },
         text = { Text(body) },
         confirmButton = { TextButton(onClick = onDismiss, colors = dclTextButtonColors()) { Text("OK") } }
     )

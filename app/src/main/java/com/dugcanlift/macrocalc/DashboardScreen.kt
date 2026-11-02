@@ -249,6 +249,9 @@ fun DashboardScreen(
         }
     }
 
+    // Where LIFT iPhone has it: under Training, above Fuel so far today.
+    val bodyWeightCard: @Composable () -> Unit = rememberMovablePart { BodyWeightCard() }
+
     val fuelCard: @Composable () -> Unit = rememberMovablePart {
         Card(modifier = Modifier.fillMaxWidth(), border = dclCardBorder()) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -692,6 +695,8 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 trainingCard()
                 Spacer(modifier = Modifier.height(16.dp))
+                bodyWeightCard()
+                Spacer(modifier = Modifier.height(16.dp))
                 fuelCard()
                 Spacer(modifier = Modifier.height(24.dp))
                 workoutsSection()
@@ -716,6 +721,7 @@ fun DashboardScreen(
                     goalCard()
                     stepsCard()
                     trainingCard()
+                    bodyWeightCard()
                     fuelCard()
                 }
                 Spacer(modifier = Modifier.height(24.dp))

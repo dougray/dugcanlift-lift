@@ -1,3 +1,4 @@
+import com.android.build.api.artifact.SingleArtifact
 import java.util.Properties
 
 plugins {
@@ -95,6 +96,23 @@ tasks.withType<Test>().configureEach {
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
+// PermissionsPinTest pins the release APK's permissions to the privacy page. It reads the release
+// variant's MERGED manifest -- this app's own plus every library's, which is what an installed APK
+// declares -- rather than src/main's, so a dependency that adds a permission is caught too. The
+// file is an input of every unit test task, which makes testDebugUnitTest run
+// processReleaseManifest first and rerun when a dependency bump changes the merged result.
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        val merged = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
+        tasks.withType<Test>().configureEach {
+            inputs.file(merged).withPropertyName("releaseMergedManifest").withPathSensitivity(PathSensitivity.NONE)
+            jvmArgumentProviders.add(CommandLineArgumentProvider {
+                listOf("-DreleaseMergedManifest=${merged.get().asFile.absolutePath}")
+            })
+        }
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation("androidx.core:core-splashscreen:1.2.0")
@@ -124,7 +142,7 @@ dependencies {
             because("Guava before 32.0.0: CVE-2020-8908, CVE-2023-2976")
         }
     }
-    implementation("com.github.dougray:dugcanlift-kit-android:1.9.1")
+    implementation("com.github.dougray:dugcanlift-kit-android:1.10.0")
     // LIFT Link's protocol layer, shared byte-for-byte with the Wear OS app. Pure JVM, no
     // dependencies of its own. See CLAUDE.md "LIFT Link".
     implementation(project(":link"))

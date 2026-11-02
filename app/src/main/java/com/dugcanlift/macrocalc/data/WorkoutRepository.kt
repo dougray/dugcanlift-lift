@@ -64,6 +64,23 @@ class WorkoutRepository private constructor(context: Context) {
     }
 
     /**
+     * Imports [workouts] in one write, deciding which days to leave alone against the log as
+     * it is on disk inside the lock, so a session saved meanwhile is never imported over.
+     */
+    suspend fun importCsv(workouts: List<WorkoutCsv.ImportedWorkout>): WorkoutCsv.Outcome = withContext(Dispatchers.IO) {
+        writeLock.withLock {
+            val existing = read()
+            val plan = WorkoutCsv.plan(workouts, existing)
+            if (plan.sessions.isNotEmpty()) {
+                val updated = existing + plan.sessions
+                write(updated)
+                _sessions.value = updated
+            }
+            plan.outcome
+        }
+    }
+
+    /**
      * Adds only sessions this device has never seen, matched on id, and returns
      * how many landed. Never overwrites a session already here — see the note
      * on FoodRepository.restoreMissing.
