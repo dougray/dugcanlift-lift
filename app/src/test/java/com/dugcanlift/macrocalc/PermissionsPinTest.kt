@@ -33,7 +33,9 @@ class PermissionsPinTest {
         "android.permission.CAMERA",
         // "Location: recording runs, walks and hikes" > "Android": precise location while in use,
         // never background; a foreground service keeps a recording going, and its ongoing
-        // "Recording your route" notification "is what the notifications permission is for".
+        // "Recording your route" notification is one of the notifications permission's two uses;
+        // "Notifications" > "Android" is the other: the live session's rest countdown, which
+        // never asks for it (dugcanlift-site #68 is that wording).
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
