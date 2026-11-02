@@ -98,6 +98,19 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.dugcanlift.macrocalc.data.BarKind
+import com.dugcanlift.macrocalc.data.PlateSetup
 
 /** How many recent outdoor activities show before "See all" is needed. */
 private const val OUTDOOR_HISTORY_PREVIEW_COUNT = 3
@@ -117,8 +130,17 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val feedback = LocalAppFeedback.current
 
+    // The live session and its rest ([LiveSessionStore]): on this phone only, never in the log.
+    val liveStore = remember { LiveSessionStore.get(context) }
+    val live by liveStore.live.collectAsState()
+    val restRunning by liveStore.timer.current.collectAsState()
+    val restCue by liveStore.timer.cue.collectAsState()
+    val plateSetup = rememberPlateSetup()
+
     LaunchedEffect(Unit) {
         workouts.load()
+        // A live workout deleted, or restored over by a backup, is not live any more.
+        liveStore.reconcile(workouts.sessions.value)
         routineRepo.load()
         scheduledSessionRepo.load()
         outdoorRepo.load()
@@ -558,9 +580,19 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
 
     val sessionsBlock: @Composable () -> Unit = rememberMovablePart {
         daysSessions.forEach { session ->
+            val liveHere = live?.takeIf { it.sessionId == session.id }
             SessionCard(
                 session = session,
                 focus = focus,
+                live = liveHere != null,
+                done = liveHere?.done ?: emptySet(),
+                // Today only, as on the iPhone: a live session is training now.
+                canStartLive = session.date == todayKey(),
+                plateSetup = plateSetup,
+                onStartLive = { liveStore.start(session) },
+                onEndLive = { liveStore.end() },
+                onTick = { setId, isDone -> liveStore.setTicked(session, setId, isDone) },
+                onSetsRemoved = { ids -> liveStore.setsRemoved(ids) },
                 known = known,
                 equipmentOptions = equipmentOptions,
                 lastFor = { name, equipment -> sessions.lastPerformed(name, equipment) },
@@ -583,7 +615,10 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 onSaveNow = { pending ->
                     if (workouts.sessions.value.any { it.id == pending.id }) workouts.save(pending)
                 },
-                onDelete = { scope.launch { workouts.delete(session.id) } },
+                onDelete = {
+                    if (liveHere != null) liveStore.end()
+                    scope.launch { workouts.delete(session.id) }
+                },
                 // Removed at once and offered back. Undo puts it back where it was in
                 // whatever the session is by then, and only if it is not already there.
                 onExerciseRemoved = { exercise, index ->
@@ -611,7 +646,8 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    MeasuredPane(modifier = modifier.fillMaxSize()) { paneWidth ->
+    Box(modifier = modifier.fillMaxSize()) {
+    MeasuredPane(modifier = Modifier.fillMaxSize()) { paneWidth ->
         val contentWidth = AdaptiveLayout.contentWidth(paneWidth)
         val twoPane = AdaptiveLayout.trainIsTwoPane(contentWidth)
         Column(
@@ -674,8 +710,11 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
                 routinesBlock(AdaptiveLayout.cardColumns(contentWidth))
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            // Room for the rest banner, so it never sits over the last set.
+            Spacer(modifier = Modifier.height(if (restRunning != null || restCue != null) 112.dp else 32.dp))
         }
+    }
+    RestBanner(modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -993,6 +1032,17 @@ private fun outdoorActivityDateLabel(startedAtEpochMs: Long): String =
 private fun SessionCard(
     session: WorkoutSession,
     focus: TrainingFocus,
+    /** This workout is the live session: each set gets a done tick. */
+    live: Boolean,
+    /** The sets ticked done in it, on this phone only. */
+    done: Set<String>,
+    /** "Start live session" is offered: the workout is today's. */
+    canStartLive: Boolean,
+    plateSetup: PlateSetup,
+    onStartLive: () -> Unit,
+    onEndLive: () -> Unit,
+    onTick: (setId: String, done: Boolean) -> Unit,
+    onSetsRemoved: (Collection<String>) -> Unit,
     known: List<LoggedExercise>,
     equipmentOptions: List<String>,
     lastFor: (String, String) -> LoggedExercise?,
@@ -1076,12 +1126,19 @@ private fun SessionCard(
                     exercise = exercise,
                     groupLabel = groupLabels[exerciseIndex],
                     focus = focus,
+                    live = live,
+                    done = done,
+                    plateSetup = plateSetup,
+                    onTick = onTick,
                     previous = lastFor(exercise.name, exercise.equipment)
                         .takeIf { it?.id != exercise.id },
                     logsPerSide = logsPerSide,
                     onLogsPerSideChange = onLogsPerSideChange,
                     nextWeight = nextWeight,
                     onChange = { updated ->
+                        // A set deleted takes its tick, and a rest it started, with it.
+                        val gone = exercise.sets.map { it.id } - updated.sets.map { it.id }.toSet()
+                        if (gone.isNotEmpty()) onSetsRemoved(gone)
                         commit(
                             session.copy(
                                 exercises = session.exercises.map {
@@ -1091,6 +1148,7 @@ private fun SessionCard(
                         )
                     },
                     onRemove = {
+                        onSetsRemoved(exercise.sets.map { it.id })
                         val index = session.exercises.indexOfFirst { it.id == exercise.id }
                         commit(
                             session.copy(
@@ -1102,6 +1160,8 @@ private fun SessionCard(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
+
+            LiveSessionControl(live = live, canStart = canStartLive, onStart = onStartLive, onEnd = onEndLive)
 
             if (addingExercise) {
                 ExercisePickerPanel(
@@ -1202,6 +1262,10 @@ private fun ExerciseBlock(
     /** Its place in a superset or circuit, or null. */
     groupLabel: SetTypes.GroupLabel?,
     focus: TrainingFocus,
+    live: Boolean,
+    done: Set<String>,
+    plateSetup: PlateSetup,
+    onTick: (setId: String, done: Boolean) -> Unit,
     previous: LoggedExercise?,
     logsPerSide: (String) -> Boolean,
     onLogsPerSideChange: (String, Boolean) -> Unit,
@@ -1287,9 +1351,9 @@ private fun ExerciseBlock(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (ProgressionRule.open(exercise.sets, suggestion.laidOut, suggestion.next.weight).isNotEmpty()) {
+            if (ProgressionRule.open(exercise.sets, suggestion.laidOut, suggestion.next.weight, done).isNotEmpty()) {
                 TextButton(
-                    onClick = { onChange(ProgressionRule.use(exercise, suggestion)) },
+                    onClick = { onChange(ProgressionRule.use(exercise, suggestion, done)) },
                     colors = dclTextButtonColors()
                 ) { Text(ProgressionRule.useLabel(suggestion.next)) }
             }
@@ -1323,18 +1387,28 @@ private fun ExerciseBlock(
 
         Spacer(modifier = Modifier.height(4.dp))
 
+        // The bar this lift is loaded on, if it is, for the plate line.
+        val bar = BarKind.of(exercise.name, exercise.equipment)
         exercise.sets.forEachIndexed { index, set ->
+            val ticked = set.id in done
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    // "drop" or "rest-pause" when the plan asked for one: "3.  50 x 10 drop".
-                    text = "${index + 1}.  ${formatSet(set)}" +
-                        SetTypes.suffix(SetTypes.kindAt(exercise.sets, index) { it.kind }),
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        // "drop" or "rest-pause" when the plan asked for one: "3.  50 x 10 drop".
+                        text = "${index + 1}.  ${formatSet(set)}" +
+                            SetTypes.suffix(SetTypes.kindAt(exercise.sets, index) { it.kind }),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    // What to load, on a set still to do: this build's rows have no editor to show it in.
+                    if (live && !ticked && focus.showWeight) {
+                        PlateLine(weightLb = set.weightLb, bar = bar, setup = plateSetup)
+                    }
+                }
+                if (live) DoneTick(number = index + 1, ticked = ticked) { onTick(set.id, !ticked) }
                 TextButton(onClick = {
                     onChange(exercise.copy(sets = exercise.sets.filterNot { it.id == set.id }))
                 }, colors = dclTextButtonColors()) {
@@ -1353,6 +1427,8 @@ private fun ExerciseBlock(
             val startingSide = if (perSide || pending) PerSideLogging.startingSide(exercise) else null
             SetForm(
                 focus = focus,
+                bar = BarKind.of(exercise.name, exercise.equipment),
+                plateSetup = plateSetup,
                 // "Same as last": this side's own last set if it has one,
                 // otherwise the set just logged — which on the second side of a
                 // pair is the first side's, the numbers most people are about
@@ -1383,6 +1459,9 @@ private fun ExerciseBlock(
 @Composable
 private fun SetForm(
     focus: TrainingFocus,
+    /** The bar the lift is loaded on, for the plate line under the weight; null for none. */
+    bar: BarKind?,
+    plateSetup: PlateSetup,
     previousSet: WorkoutSet?,
     /** The coach's next prescribed set on a side, to prefill from before [previousSet]; null for none. */
     prescribedFor: (SetSide?) -> PrescribedSet?,
@@ -1457,6 +1536,7 @@ private fun SetForm(
         }
         if (focus.showWeight) {
             NumberField(value = weight, onValueChange = { weight = it; typed = true }, label = "Weight (lb)")
+            PlateLine(weightLb = weight.toDoubleOrNull(), bar = bar, setup = plateSetup, modifier = Modifier.padding(top = 4.dp))
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (focus.showReps) {
@@ -1494,6 +1574,61 @@ private fun SetForm(
                 Text("Add set")
             }
             OutlinedButton(onClick = onCancel, colors = dclOutlinedButtonColors()) { Text("Cancel") }
+        }
+    }
+}
+
+/**
+ * "Start live session" on today's workout, or "Live session" and End once it is: the iPhone's
+ * optional overlay -- a workout is complete without ever starting one.
+ */
+@Composable
+private fun LiveSessionControl(live: Boolean, canStart: Boolean, onStart: () -> Unit, onEnd: () -> Unit) {
+    if (live) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Live session",
+                style = MaterialTheme.typography.titleSmall,
+                color = dclAccentText(),
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onEnd, colors = dclTextButtonColors()) { Text("End") }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+    } else if (canStart) {
+        TextButton(onClick = onStart, colors = dclTextButtonColors()) { Text("Start live session") }
+        Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+/** Done, during a live session. Ticking starts the rest; unticking takes back the rest this set started, and only that one. */
+@Composable
+private fun DoneTick(number: Int, ticked: Boolean, onToggle: () -> Unit) {
+    val color = if (ticked) dclAccentText() else MaterialTheme.colorScheme.onSurfaceVariant
+    val check = MaterialTheme.colorScheme.surface
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .toggleable(value = ticked, role = Role.Checkbox, onValueChange = { onToggle() })
+            .semantics {
+                contentDescription = "Set $number done"
+                stateDescription = if (ticked) "Done" else "Not done"
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(22.dp)) {
+            val stroke = 2.dp.toPx()
+            if (ticked) {
+                drawCircle(color = color)
+                val path = Path().apply {
+                    moveTo(size.width * 0.28f, size.height * 0.52f)
+                    lineTo(size.width * 0.44f, size.height * 0.68f)
+                    lineTo(size.width * 0.73f, size.height * 0.36f)
+                }
+                drawPath(path, color = check, style = Stroke(width = stroke, cap = StrokeCap.Round))
+            } else {
+                drawCircle(color = color, radius = size.minDimension / 2 - stroke / 2, style = Stroke(width = stroke))
+            }
         }
     }
 }
