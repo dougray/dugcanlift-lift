@@ -875,6 +875,16 @@ before changing anything here.
   `LinkSession.pushPlan` strips the sides when the link settled on version 1.
   Losing a label costs a lifter a letter beside a number; losing the frame costs
   them the workout.
+- **Version 3 carries the coach's set types, and still speaks 1 and 2.** A
+  superset or circuit `group` on a plan exercise (`WatchPlanMapper` sends
+  `RoutineExercise.group`) and a drop or rest-pause `kind` on a prescribed set
+  (a coach's row's own `kind`, or a routine of your own's `setKind(i)`), as two
+  more presence bits in reserved masks — so a plan with no set types is exactly
+  version 2's bytes. `LinkSession.pushPlan` strips them below version 3, as it
+  strips sides below 2. The link's encoder writes groups as adjacency runs
+  (a group of one writes nothing) and never writes a kind on an exercise's
+  first set. Heart rate per set, drafted as "version 3" in the LIFT
+  superproject's build plan before this existed, becomes version 4.
 - **`WatchPlanMapper` sends a routine's `prescribed` rows when it has them**,
   and only falls back to the flattened `target*` fields when it does not.
   Before version 2 it always flattened, so a coach's "3 x 8 each side" reached

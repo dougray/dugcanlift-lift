@@ -137,15 +137,17 @@ class LinkSession(
     /**
      * The plan to push, at the version this link settled on.
      *
-     * A version-1 peer refuses a sided plan's presence bits outright, so the sides come off here
-     * rather than at a call site that would have to remember to ask. Losing a label costs a lifter a
-     * letter beside a number; losing the frame costs them the whole workout.
+     * A version-1 peer refuses a sided plan's presence bits outright, and a version-2 peer refuses a
+     * superset's or a drop set's, so each comes off here rather than at a call site that would have
+     * to remember to ask. Losing a label costs a lifter a letter beside a number; losing the frame
+     * costs them the whole workout.
      */
     fun pushPlan(plan: Plan): LinkMessage {
         requireReady(LinkRole.CENTRAL, "push a plan")
-        val forPeer = if ((negotiatedVersion ?: LinkProtocol.MIN_SUPPORTED_VERSION)
-            >= LinkProtocol.VERSION_WITH_PLAN_SIDES
-        ) plan else plan.withoutSides()
+        val version = negotiatedVersion ?: LinkProtocol.MIN_SUPPORTED_VERSION
+        var forPeer = plan
+        if (version < LinkProtocol.VERSION_WITH_SET_TYPES) forPeer = forPeer.withoutSetTypes()
+        if (version < LinkProtocol.VERSION_WITH_PLAN_SIDES) forPeer = forPeer.withoutSides()
         return LinkMessage(MessageType.PLAN_PUSHED, LinkPayloads.encodePlan(forPeer))
     }
 

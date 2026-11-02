@@ -44,6 +44,7 @@ class LinkWireFixtureTest {
         )
         assertBytes("frame.planRequest", planRequest(LinkProtocol.MIN_SUPPORTED_VERSION))
         assertBytes("frame.planRequestV2", planRequest(LinkProtocol.VERSION_WITH_PLAN_SIDES))
+        assertBytes("frame.planRequestV3", planRequest(LinkProtocol.VERSION_WITH_SET_TYPES))
     }
 
     @Test fun `hello encodes to the fixture's bytes`() = assertBytes("hello", LinkPayloads.encodeHello(LinkFixtures.hello))
@@ -55,6 +56,24 @@ class LinkWireFixtureTest {
 
     @Test fun `a plan carrying the coach's sides encodes to the fixture's bytes`() =
         assertBytes("plan.sides", LinkPayloads.encodePlan(LinkFixtures.sidedPlan))
+
+    @Test fun `a plan carrying the coach's set types encodes to the fixture's bytes`() =
+        assertBytes("plan.setTypes", LinkPayloads.encodePlan(LinkFixtures.setTypesPlan))
+
+    /**
+     * The reason version 3 is a bump and not a break: the `plan` and `plan.sides` lines predate set
+     * types, and both still come out of the encoder unchanged -- and stripping set types from the
+     * version-3 plan leaves no version-3 bit set anywhere in it.
+     */
+    @Test fun `a plan with no set types is byte for byte what version 2 wrote`() {
+        assertEquals(false, LinkFixtures.plan.prescribesSetTypes)
+        assertEquals(false, LinkFixtures.sidedPlan.prescribesSetTypes)
+        assertBytes("plan", LinkPayloads.encodePlan(LinkFixtures.plan.withoutSetTypes()))
+        assertBytes("plan.sides", LinkPayloads.encodePlan(LinkFixtures.sidedPlan.withoutSetTypes()))
+        assertEquals(true, LinkFixtures.setTypesPlan.prescribesSetTypes)
+        val stripped = LinkPayloads.decodePlan(LinkPayloads.encodePlan(LinkFixtures.setTypesPlan.withoutSetTypes()))
+        assertEquals(false, stripped.prescribesSetTypes)
+    }
 
     /**
      * The reason version 2 is a bump and not a break: a plan that says nothing about sides is the
@@ -86,6 +105,7 @@ class LinkWireFixtureTest {
         assertEquals(LinkFixtures.helloAck, LinkPayloads.decodeHello(fixture.getValue("helloAck")))
         assertEquals(LinkFixtures.plan, LinkPayloads.decodePlan(fixture.getValue("plan")))
         assertEquals(LinkFixtures.sidedPlan, LinkPayloads.decodePlan(fixture.getValue("plan.sides")))
+        assertEquals(LinkFixtures.setTypesPlan, LinkPayloads.decodePlan(fixture.getValue("plan.setTypes")))
         assertEquals(LinkFixtures.session, LinkPayloads.decodeSession(fixture.getValue("session")))
         assertEquals(LinkFixtures.report, LinkPayloads.decodeLoggedSet(fixture.getValue("setLogged")))
         assertEquals(LinkFixtures.ack, LinkPayloads.decodeAck(fixture.getValue("ack")))
