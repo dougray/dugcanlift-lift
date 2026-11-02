@@ -220,7 +220,7 @@ Coach web's `coach/prescriptions.js` is the rule and LIFT web's `lift/set-types.
   member, "A1 · …" on each; a set reads side then kind, "30 x 12 L drop". SHARE-FORMAT has no set
   type, so a drop set reaches a coach as an ordinary set. `PlanLog`, the week card, is unchanged,
   as Coach web and LIFT web left theirs.
-- **No rest rules**: this app has no rest timer. **No watch**: LIFT Link carries neither field, so
+- **The rest follows the round** in a live session (`SessionRest`, see "Live session" below). **No watch**: LIFT Link carries neither field, so
   the watch shows the sets without types (a protocol bump in both repos if that changes).
 - `fixtures/web-plan-set-types.txt` is Coach web's own encoder's output -- never regenerate it.
   `PlanSetTypesTest` pins the import, an old decoder's view (main's mapping, frozen), plans without
@@ -256,10 +256,67 @@ nothing in the backup.
   do), as many sets as it asks for, is up 5 lb; short is the same again; short at the same weight two
   sessions running backs off about 10%, down to a step. **Pounds and 5 lb, always**: no unit and no
   plate data here, so the iPhone's bar step (two of the smallest plate) has nothing to read. A line
-  with its reason and "Use", which fills only rows still exactly as the routine laid them out --
-  this build has no done tick, so that is the only "not done" it can tell. None for a routine any
+  with its reason and "Use", which fills only rows still exactly as the routine laid them out and
+  not ticked done in a live session (the iPhone's `completedAt == nil`); outside one there is no
+  tick, so a laid-out row is taken as not done. None for a routine any
   booking names, a lift logged a side at a time, a bodyweight lift, a first session, a session whose
   name matches two routines, or with "Suggest the next weight" off (`SettingsStore.suggestsNextWeight`).
+
+## Live session
+
+A port of LIFT iPhone's live session tools (lift-ios #58, its CLAUDE.md "Live sessions" and the
+`SessionRest` paragraph of its set types section; LIFT superproject
+`docs/superpowers/plans/2026-10-28-build-plan.md`, "Done"). Word for word on screen. The rules are
+pure Kotlin with the iPhone's tests ported case for case: `SessionRest` (`SessionRestTest`),
+`RestTimer`/`RestCountdown`/`RestBetweenSets` (`RestTimerTest`), `PlateMath`/`PlateSetup`/`BarKind`
+(`PlateMathTest`) and `LiveSessionScreen` (`LiveSessionScreenTest`). Composables only draw.
+
+- **A mode of the workout card, not a screen of its own.** Today's workout offers "Start live
+  session"; once started it reads "Live session" with End, and every set row gets a done tick.
+  One at a time: starting another workout moves it. A workout is complete without ever starting one.
+- **A tick is not a log entry.** The rows are the same `WorkoutSet`s the log already has (laid out
+  by `Routine.toSession`, or added with Add set); ticking writes nothing to `workout_log.json`. The
+  live session and its ticks are `LiveSession`, in `SharedPreferences` (`LiveSessionStore`), on this
+  phone only -- so the backup file, the CSV export, Send to Coach and the watch link read exactly what
+  a hand-written log gives them. The iPhone keeps its tick as `completedAt`, but only in its own
+  `ios` section of the backup, which no other build reads. End forgets the ticks; deleting a set,
+  removing an exercise or deleting the workout takes its ticks and any rest they started.
+- **The rest.** Ticking starts "Rest between sets" (Home → Training settings, 30 s to 5 min in 15 s
+  steps, 90 s until someone moves it; `RestBetweenSets.resolved`, the iPhone's
+  `WatchPlanSettings.resolvedRestSeconds`). There is no prescribed rest to prefer: a routine and
+  PLAN-FORMAT's set tuple carry none. The next tick restarts it, unticking the set that started it
+  takes it back, End ends it. The banner at the foot of Train counts down with −15 / +15 / Skip,
+  says "Rest over" / "Back to Bench Press (Barbell)", and goes by itself two minutes later. Kept in
+  `SharedPreferences`, so Android ending LIFT mid-rest loses nothing.
+- **Set types** (`SessionRest`): a superset or circuit goes round by round, a tick inside a round
+  starts no rest and says "Next: Seated Cable Rows", the round's last tick starts the full rest; no
+  rest before a drop set ("Drop set next"); 15 seconds before a rest-pause set. The order and
+  kinds are the session's own `LoggedExercise.group` / `WorkoutSet.kind`.
+- **The lock screen: an ongoing notification, not a new permission** (`RestNotifications`, the
+  counterpart of the iPhone's Live Activity). A silent, ongoing "Resting · Next: …" whose system
+  chronometer counts down to the end and times itself out there, then "Rest over" / "Back to … ."
+  with LIFT off screen. Both use `POST_NOTIFICATIONS`, which route recording already declares; the
+  session asks for nothing, and without the grant nothing is posted and the timer runs on screen.
+  "Rest over" is posted by a timer in the running app or, for a phone asleep or a process Android
+  ended, by `RestOverReceiver` (not exported) from `AlarmManager.setAndAllowWhileIdle`, which needs
+  no permission. **That alarm is inexact** -- an exact one needs `SCHEDULE_EXACT_ALARM`, which would
+  change `PermissionsPinTest` -- so with the phone asleep the alert can be late; the countdown never
+  is. With LIFT on screen nothing is posted and the phone taps instead, as the iPhone shows its
+  alert in the foreground as a sound only. Never add the exact-alarm permission to fix lateness.
+- **The screen stays on** during a live session (`LiveSessionEffects` at the root, so on every
+  tab), through the view's keep-screen-on flag, which needs no permission. "Keep the screen on" in
+  Training settings, on by default. Past eight hours a session no longer holds it, and the root waits
+  for that moment.
+- **Plate math**: "Per side: 45 · 25" for a lift on a bar (`BarKind.of`, name and equipment), under
+  the Weight field of Add set and, in a live session, under each set not yet ticked -- this build's
+  rows have no editor to show it in, which is where the iPhone puts it. Not greedy: fewest plates,
+  then heavier first; when the rack can't make it, "Your plates make 185 lb, 40 short." **One rack,
+  in pounds** (`SettingsStore.plateSetup`): every weight here is pounds, where the iPhone keeps one
+  rack per unit. Training settings → Plates and bars holds the four bars and the pairs of each plate.
+- **Shown, never graded.** No count of sets done, no streak, nothing sent: ticks never leave the
+  phone. Nothing here is in the backup file, and the settings are on this phone only.
+- **The watch is not told the rest**: `WatchPlanMapper` sends none, and the Wear app rests for its
+  own default. Sending it is a LIFT Link change in both repos.
 
 ## Training history in and out as CSV
 
