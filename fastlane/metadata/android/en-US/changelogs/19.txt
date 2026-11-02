@@ -1,5 +1,7 @@
-Live sessions: tick a set done and rest counts down, on the lock screen too. Plate math. The screen stays on. Supersets, circuits, drop sets and rest-pause sets. Routine folders rotate, routines suggest the next weight, and search skips equipment you don't own.
+Live sessions: tick a set done and rest counts down, on the lock screen too. Plate math. Supersets, circuits, drop sets and rest-pause sets. Routines rotate and suggest the next weight.
+
+LIFT for Wear OS: pair your watch over Bluetooth and run today's workout on your wrist.
 
 Progress: your year, muscles, body weight and photos. Import from Strong, Hevy or FitNotes; export CSV.
 
-Cook adds 622 recipes and reads "½ cup". Send recipes from your browser. Road Food: six more chains, allergens, meal building.
+Cook adds 622 recipes and reads "½ cup". Send recipes from your browser. Road Food adds six chains.

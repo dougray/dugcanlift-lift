@@ -1,7 +1,7 @@
 LIFT is a nutrition and training tracker that keeps your data on your phone. No accounts, no ads, no analytics, no cloud sync. Everything except food search and barcode lookup works offline.
 
 DASHBOARD
-Opens on today: calories and macros against your goal, steps, body weight, and what you've trained and eaten. Below that, a week of stats and charts, and progression for any lift over its last ten sessions. System, Light or Dark appearance.
+Opens on today: calories and macros against your goal, steps, body weight, and what you've trained and eaten. Below that, a week of stats and charts and each lift's progression. System, Light or Dark appearance. On a tablet or foldable it uses the width.
 
 MACRO CALCULATOR
 Mifflin-St Jeor from your sex, age, weight, height and activity level. Pick lose, maintain or gain, set protein and fat, and save it as your goal.
@@ -10,13 +10,13 @@ FOOD LOG
 Log food by weight in grams or ounces, with meal subtotals, and fiber beside protein, fat and carbs. Search Open Food Facts or scan a barcode, enter anything by hand, re-log a recent food in one tap, and edit any entry.
 
 ROAD FOOD
-On the road, pick the chain you're at or a gas station and see what fits what you have left today, most protein per calorie first. Hide items whose chart lists an allergen you avoid, put a meal together before you order, and log it in one tap. Numbers come from each chain's published nutrition. Works offline and never asks where you are.
+Pick the chain you're at or a gas station and see what fits what you have left today, most protein per calorie first. Hide items whose chart lists an allergen you avoid, put a meal together before you order, and log it in one tap. Numbers come from each chain's published nutrition. Works offline and never asks where you are.
 
 COOK
 Write recipes, copy one of 622 bundled recipes, or paste a recipe's text from a blog or a video caption and edit it into shape. Send a recipe page from any browser with a bookmark; LIFT never visits the page. Macros per serving, and a dish's weight for logging a portion by weight. Plan the week's meals, log one in a tap, and get one shopping list.
 
 WORKOUT LOG
-Each set records weight, reps, RPE, time and distance, all optional. A training focus - bodybuilding, powerlifting, CrossFit, Hyrox, endurance or everything - decides which fields you see. 873 bundled exercises, what you lifted last time, and sets that prefill from the one before. Search can leave out equipment you don't own. Save routines in folders that run as a rotation, or add ten starter routines. Your own routines suggest the next weight, with the reason. Supersets, circuits, drop sets and rest-pause sets. Log one-sided work a side at a time, charted per side.
+Each set records weight, reps, RPE, time and distance, all optional. A training focus decides which fields you see. 873 bundled exercises, what you lifted last time, and sets that prefill from the one before. Search can leave out equipment you don't own. Save routines in folders that run as a rotation, or add ten starter routines. Your own routines suggest the next weight, with the reason. Supersets, circuits, drop sets and rest-pause sets. Log one side at a time, charted per side.
 
 LIVE SESSION
 Tick each set done and your rest counts down, on the lock screen too. Plate math for each set, and the screen stays on while you train.
@@ -24,20 +24,20 @@ Tick each set done and your rest counts down, on the lock screen too. Plate math
 PROGRESS
 Your training year at a glance, sets per muscle this week, a body weight chart, and progress photos that stay on your phone.
 
+WEAR OS WATCH
+Pair LIFT for Wear OS over Bluetooth, straight from phone to watch, with no account or server. Send today's workout or a routine to your wrist, and the sessions you finish there come back into your log.
+
 OUTDOOR
 Record a run, walk or hike with GPS: time, distance, pace, elevation gain and the route, drawn as you go, with the screen off too. Export an activity to Health Connect with its route. See your last route and your personal bests.
 
-TABLETS AND FOLDABLES
-On a tablet, a foldable or in split screen, LIFT uses the width: a navigation rail, and more columns where there is room.
-
 COACH
-Send to Coach writes an email in your own email app with your log in a link: 4 weeks to 6 months, daily food totals or every item, and your runs, walks and hikes. Your daily steps and last route go only if you turn them on, the route with its first and last 200 m cut off. A coach's plan link opens in the app to accept or decline.
+Send to Coach emails your log as a link from your own email app: 4 weeks to 6 months, daily food totals or every item, and your runs, walks and hikes. Your daily steps and last route go only if you turn them on, the route with its first and last 200 m cut off. A coach's plan link opens in the app to accept or decline.
 
 YOUR DATA
 Save a backup file of your log, GPS routes included, and restore it on this phone or another; restoring only adds what the phone doesn't already have. Progress photos are never in a backup. Import training from Strong, Hevy or FitNotes, and export yours as CSV.
 
 PRIVACY
-Nothing leaves your phone unless you use a feature that sends it: a food search term or barcode goes to Open Food Facts when you search, Send to Coach hands your log to your own email app, and Export to Health Connect saves an activity to Health Connect on this phone. Privacy policy: dugcanlift.com/app/privacy.
+Nothing leaves your phone unless you use a feature that sends it: a food search term or barcode goes to Open Food Facts when you search, Send to Coach hands your log to your own email app, Export to Health Connect saves an activity to Health Connect on this phone, and LIFT Link talks only to the watch you paired. Privacy policy: dugcanlift.com/app/privacy.
 
 LIFT is not a medical device and does not diagnose, treat, cure or prevent any medical condition. Talk to a doctor or dietitian before making big changes to how you eat or train.
 
