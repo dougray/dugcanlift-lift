@@ -76,6 +76,48 @@ object LinkFixtures {
         ),
     )
 
+    /**
+     * The version-3 addition, awkward in the same way: a superset of two (PLAN-FORMAT "Set types"'s
+     * own example), a drop set with no weight, a drop set that also names a side -- the kind and the
+     * side sharing a set, which is exactly where a reader comparing rather than masking would go
+     * wrong -- and a rest-pause set. Every first set is straight, as it must be. Every version-3
+     * byte is in here and nothing else new is.
+     */
+    val setTypesPlan = Plan(
+        planId = PLAN_ID,
+        revision = 5,
+        name = "Upper B",
+        source = PlanSource.COACH_PLAN,
+        scheduledFor = null,
+        exercises = listOf(
+            PlanExercise(
+                name = "Dumbbell Bench Press",
+                equipment = "Dumbbell",
+                sets = listOf(PrescribedSet(reps = 10), PrescribedSet(reps = 10)),
+                group = 1,
+            ),
+            PlanExercise(
+                name = "Seated Cable Row",
+                equipment = "Cable",
+                sets = listOf(PrescribedSet(reps = 12)),
+                group = 1,
+            ),
+            PlanExercise(
+                name = "Triceps Pushdown",
+                equipment = "Cable",
+                sets = listOf(
+                    PrescribedSet(weightKg = 30.0, reps = 12),
+                    PrescribedSet(reps = 10, kind = SetKind.DROP),                       // blank weight
+                    PrescribedSet(reps = 10, side = LogSide.LEFT, kind = SetKind.DROP),  // side and kind
+                ),
+            ),
+            PlanExercise(
+                name = "Barbell Curl",
+                sets = listOf(PrescribedSet(reps = 8), PrescribedSet(reps = 4, kind = SetKind.REST_PAUSE)),
+            ),
+        ),
+    )
+
     val session = FinishedSession(
         sessionId = SESSION_ID,
         revision = 1,

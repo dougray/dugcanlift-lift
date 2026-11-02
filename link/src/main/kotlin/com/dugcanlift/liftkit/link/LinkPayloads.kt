@@ -94,7 +94,9 @@ object LinkPayloads {
     private const val PRESCRIBED_REST = 0x08
     /** A named side, one byte of [LogSide.code]. Absent is both; see [PrescribedSet.side]. */
     private const val PRESCRIBED_SIDE = 0x10
-    private const val PRESCRIBED_RESERVED = 0xE0
+    /** Drop or rest-pause, one byte of [SetKind.code] (version 3). Absent is straight; see [PrescribedSet.kind]. */
+    private const val PRESCRIBED_KIND = 0x20
+    private const val PRESCRIBED_RESERVED = 0xC0
 
     private const val LOGGED_SIDE = 0x08
     private const val LOGGED_DURATION = 0x10
@@ -109,7 +111,9 @@ object LinkPayloads {
     private const val EX_LAST = 0x04
     /** A flag with no bytes behind it: the bit *is* the value. See [PlanExercise.eachSide]. */
     private const val EX_EACH_SIDE = 0x08
-    private const val EX_RESERVED = 0xF0
+    /** A superset or circuit, a u16 group number (version 3). Absent is not grouped; see [PlanExercise.group]. */
+    private const val EX_GROUP = 0x10
+    private const val EX_RESERVED = 0xE0
 
     private const val FINISHED_EX_RESERVED = 0xFC
 
@@ -209,20 +213,27 @@ object LinkPayloads {
         w.u8(if (plan.scheduledFor != null) PLAN_SCHEDULED else 0)
         plan.scheduledFor?.let { w.str(it) }
         w.u16(plan.exercises.size)
-        plan.exercises.forEach { exercise ->
+        // Groups go out as runs, renumbered, with a group of one written as nothing at all -- so a
+        // plan whose only "group" is a lone number is the bytes of a plan with none.
+        val groups = ExerciseGroups.runs(plan.exercises.map { it.group })
+        plan.exercises.forEachIndexed { exerciseIndex, exercise ->
             val equipment = normalised(exercise.equipment)
             val note = normalised(exercise.note)
+            val group = groups[exerciseIndex]
             w.str(exercise.name)
             var mask = 0
             if (equipment != null) mask = mask or EX_EQUIPMENT
             if (note != null) mask = mask or EX_NOTE
             if (exercise.lastPerformed != null) mask = mask or EX_LAST
             if (exercise.eachSide) mask = mask or EX_EACH_SIDE
+            if (group != null) mask = mask or EX_GROUP
             w.u8(mask)
             equipment?.let { w.str(it) }
             note?.let { w.str(it) }
+            group?.let { w.u16(it) }
             w.u16(exercise.sets.size)
-            exercise.sets.forEach { writePrescribed(w, it) }
+            // The first set's kind is never written: there is no set before it (PlanExercise.kindOf).
+            exercise.sets.forEachIndexed { setIndex, set -> writePrescribed(w, set, exercise.kindOf(setIndex)) }
             exercise.lastPerformed?.let { writeLastPerformed(w, it) }
         }
         return w.toByteArray()
@@ -237,36 +248,49 @@ object LinkPayloads {
         val planMask = r.u8()
         reserved(planMask, PLAN_RESERVED, "plan")
         val scheduledFor = if (planMask and PLAN_SCHEDULED != 0) r.str() else null
-        val exercises = List(r.u16()) {
+        val read = List(r.u16()) {
             val exName = r.str()
             val mask = r.u8()
             reserved(mask, EX_RESERVED, "exercise")
             val equipment = if (mask and EX_EQUIPMENT != 0) r.str() else null
             val note = if (mask and EX_NOTE != 0) r.str() else null
-            val sets = List(r.u16()) { readPrescribed(r) }
+            // A zero is not a group, as PLAN-FORMAT reads `g: 0`; [ExerciseGroups.runs] below drops it.
+            val group = if (mask and EX_GROUP != 0) r.u16().takeIf { it > 0 } else null
+            val sets = List(r.u16()) { setIndex ->
+                readPrescribed(r).let { if (setIndex == 0 && it.kind != null) it.copy(kind = null) else it }
+            }
             val last = if (mask and EX_LAST != 0) readLastPerformed(r) else null
             PlanExercise(
                 exName, normalised(equipment), normalised(note), sets, last,
                 eachSide = mask and EX_EACH_SIDE != 0,
+                group = group,
             )
         }
         r.end()
+        // Adjacency makes the group, on the way in as on the way out: a lone number is no group.
+        val groups = ExerciseGroups.runs(read.map { it.group })
+        val exercises = read.mapIndexed { i, exercise ->
+            if (exercise.group == groups[i]) exercise else exercise.copy(group = groups[i])
+        }
         return Plan(planId, revision, name, source, scheduledFor, exercises)
     }
 
-    private fun writePrescribed(w: ByteWriter, set: PrescribedSet) {
+    /** [kind] is passed rather than read off [set] so the first-set rule is the caller's one call. */
+    private fun writePrescribed(w: ByteWriter, set: PrescribedSet, kind: SetKind?) {
         var mask = 0
         if (set.weightKg != null) mask = mask or P_WEIGHT
         if (set.reps != null) mask = mask or P_REPS
         if (set.rpe != null) mask = mask or P_RPE
         if (set.restSeconds != null) mask = mask or PRESCRIBED_REST
         if (set.side != null) mask = mask or PRESCRIBED_SIDE
+        if (kind != null) mask = mask or PRESCRIBED_KIND
         w.u8(mask)
         set.weightKg?.let { w.u32(gramsOf(it)) }
         set.reps?.let { require(it >= 1) { "reps $it below 1" }; w.u16(it) }
         set.rpe?.let { w.u8(rpeTenths(it)) }
         set.restSeconds?.let { require(it >= 1) { "restSeconds $it below 1" }; w.u16(it) }
         set.side?.let { w.u8(it.code) }
+        kind?.let { w.u8(it.code) }
     }
 
     private fun readPrescribed(r: ByteReader): PrescribedSet {
@@ -283,6 +307,10 @@ object LinkPayloads {
                 val code = r.u8()
                 LogSide.from(code) ?: throw LinkDecodeException("side $code is neither left nor right")
             } else null,
+            // Unlike a side, a kind this build does not know reads as straight rather than refusing
+            // the plan: PLAN-FORMAT reads a `3` in bits 3-4 that way, and a straight set is the
+            // coach's numbers without a word beside them. The presence bit itself is still strict.
+            kind = if (mask and PRESCRIBED_KIND != 0) SetKind.from(r.u8()) else null,
         )
     }
 

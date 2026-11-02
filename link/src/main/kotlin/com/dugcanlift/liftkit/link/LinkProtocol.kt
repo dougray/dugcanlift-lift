@@ -31,7 +31,7 @@ object LinkProtocol {
      * politely instead of parsing a later layout as if it were this one. A version bump that
      * changes the header is therefore legal, because no old reader will ever get past byte 0.
      */
-    const val VERSION = 2
+    const val VERSION = 3
     const val MIN_SUPPORTED_VERSION = 1
 
     /**
@@ -47,6 +47,20 @@ object LinkProtocol {
      * label, instead of two devices refusing to speak.
      */
     const val VERSION_WITH_PLAN_SIDES = 2
+
+    /**
+     * What version 3 added, and nothing else: a coach's set types on a plan — a superset or circuit
+     * `group` on an exercise and a drop or rest-pause `kind` on a prescribed set (PLAN-FORMAT.md
+     * "Set types"). Both are presence bits in masks version 2 still reserved (`0x10` on the exercise,
+     * `0x20` on the prescribed set), so **a plan with no set types encodes to exactly version 2's
+     * bytes**, and [LinkSession.pushPlan] strips them on a link that settled below 3, as it strips
+     * sides below 2.
+     *
+     * Heart rate per set (the LIFT superproject's build plan, item 16) was drafted as "version 3"
+     * before this existed and has no code yet; it becomes version 4, on the logged-set mask this
+     * version does not touch.
+     */
+    const val VERSION_WITH_SET_TYPES = 3
 
     /**
      * An [MessageType.ERROR] is always sent at version 1, whatever version the link settled on,
