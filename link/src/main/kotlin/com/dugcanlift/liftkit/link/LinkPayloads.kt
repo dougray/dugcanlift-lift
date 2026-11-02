@@ -101,7 +101,9 @@ object LinkPayloads {
     private const val LOGGED_SIDE = 0x08
     private const val LOGGED_DURATION = 0x10
     private const val LOGGED_DISTANCE = 0x20
-    private const val LOGGED_RESERVED = 0xC0
+    /** The highest heart rate around the set, one byte of whole bpm (version 4). Absent is not measured; see [LoggedSet.maxBpm]. */
+    private const val LOGGED_MAX_BPM = 0x40
+    private const val LOGGED_RESERVED = 0x80
 
     private const val LAST_ON = 0x08
     private const val LAST_RESERVED = 0xF0
@@ -116,6 +118,12 @@ object LinkPayloads {
     private const val EX_RESERVED = 0xE0
 
     private const val FINISHED_EX_RESERVED = 0xFC
+
+    // The heart-rate trailer a version-4 SESSION_FINISHED may end with. Written only when the
+    // session has a heart rate at all, so a session with none is version 3's bytes exactly.
+    private const val SESSION_AVERAGE_BPM = 0x01
+    private const val SESSION_MAX_BPM = 0x02
+    private const val SESSION_HEART_RESERVED = 0xFC
 
     private const val PLAN_SCHEDULED = 0x01
     private const val PLAN_RESERVED = 0xFE
@@ -148,6 +156,20 @@ object LinkPayloads {
     private fun revisionOf(value: Long): Int {
         if (value < 1 || value > Int.MAX_VALUE) throw LinkDecodeException("revision $value out of range")
         return value.toInt()
+    }
+
+    /**
+     * A heart rate the byte can carry: 1..255 whole bpm. Anything else is **left off rather than
+     * refused**, unlike every other field here, because a heart rate is the one thing on this wire
+     * whose loss costs nothing — and a sensor's odd number must never be what stops a session
+     * reaching the phone.
+     */
+    private fun bpmOrNull(bpm: Int?): Int? = bpm?.takeIf { it in 1..0xFF }
+
+    /** A zero is not a heart rate: nothing writes one, so a peer that did is refused. */
+    private fun bpmOf(value: Int): Int {
+        if (value < 1) throw LinkDecodeException("heart rate $value bpm below 1")
+        return value
     }
 
     private fun repsOf(value: Int): Int {
@@ -392,6 +414,19 @@ object LinkPayloads {
             w.u16(exercise.sets.size)
             exercise.sets.forEach { writeLogged(w, it) }
         }
+        // Version 4: one mask byte, then the average and the maximum, one byte each, in that order.
+        // Nothing at all when neither was measured -- not a zero mask -- so a session with no heart
+        // rate is byte for byte what version 3 wrote.
+        val average = bpmOrNull(session.averageBpm)
+        val highest = bpmOrNull(session.maxBpm)
+        if (average != null || highest != null) {
+            var mask = 0
+            if (average != null) mask = mask or SESSION_AVERAGE_BPM
+            if (highest != null) mask = mask or SESSION_MAX_BPM
+            w.u8(mask)
+            average?.let { w.u8(it) }
+            highest?.let { w.u8(it) }
+        }
         return w.toByteArray()
     }
 
@@ -411,8 +446,20 @@ object LinkPayloads {
             val sets = List(r.u16()) { readLogged(r) }
             FinishedExercise(exName, normalised(equipment), normalised(note), sets)
         }
+        // The version-4 heart-rate trailer, or nothing: a session that ends here is a session with
+        // no heart rate, which is every session version 3 ever wrote. A trailer that says nothing (a
+        // zero mask) is never written, so it is refused like any other byte nobody should have sent.
+        var averageBpm: Int? = null
+        var maxBpm: Int? = null
+        if (r.remaining > 0) {
+            val mask = r.u8()
+            reserved(mask, SESSION_HEART_RESERVED, "session heart rate")
+            if (mask == 0) throw LinkDecodeException("a heart-rate trailer with nothing in it")
+            if (mask and SESSION_AVERAGE_BPM != 0) averageBpm = bpmOf(r.u8())
+            if (mask and SESSION_MAX_BPM != 0) maxBpm = bpmOf(r.u8())
+        }
         r.end()
-        return FinishedSession(sessionId, revision, day, name, startedAt, exercises)
+        return FinishedSession(sessionId, revision, day, name, startedAt, exercises, averageBpm, maxBpm)
     }
 
     /** One encoding for a performed set, used by both SET_LOGGED and SESSION_FINISHED, so the
@@ -425,6 +472,8 @@ object LinkPayloads {
         if (set.side != null) mask = mask or LOGGED_SIDE
         if (set.durationSeconds != null) mask = mask or LOGGED_DURATION
         if (set.distanceMetres != null) mask = mask or LOGGED_DISTANCE
+        val maxBpm = bpmOrNull(set.maxBpm)
+        if (maxBpm != null) mask = mask or LOGGED_MAX_BPM
         w.u8(mask)
         set.weightKg?.let { w.u32(gramsOf(it)) }
         set.reps?.let { require(it >= 1) { "reps $it below 1" }; w.u16(it) }
@@ -435,6 +484,7 @@ object LinkPayloads {
             require(it.isFinite() && it >= 0.0) { "distance $it m is not a distance" }
             w.u32(Math.round(it * 100.0))
         }
+        maxBpm?.let { w.u8(it) }
     }
 
     private fun readLogged(r: ByteReader): LoggedSet {
@@ -454,6 +504,7 @@ object LinkPayloads {
                 s.toInt()
             } else null,
             distanceMetres = if (mask and LOGGED_DISTANCE != 0) r.u32() / 100.0 else null,
+            maxBpm = if (mask and LOGGED_MAX_BPM != 0) bpmOf(r.u8()) else null,
         )
     }
 

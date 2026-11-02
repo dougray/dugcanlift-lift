@@ -123,7 +123,7 @@ class LinkCodecTest {
         val bytes = LinkFrames.encode(
             LinkFrame(LinkProtocol.VERSION, MessageType.HELLO.code, 0x03, 0, byteArrayOf(1))
         )
-        bytes[0] = 4
+        bytes[0] = (LinkProtocol.VERSION + 1).toByte()   // the version after this one, whichever that is
         assertEquals(LinkError.UNSUPPORTED_VERSION, (codec().accept(bytes) as CodecEvent.Refused).error)
     }
 
