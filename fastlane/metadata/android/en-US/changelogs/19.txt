@@ -1,5 +1,5 @@
-Supersets, circuits, drop sets and rest-pause sets. Routine folders run in rotation, your routines suggest the next weight, and search skips equipment you don't own.
+Live sessions: tick a set done and rest counts down, on the lock screen too. Plate math. The screen stays on. Supersets, circuits, drop sets and rest-pause sets. Routine folders rotate, routines suggest the next weight, and search skips equipment you don't own.
 
-Send recipes from your browser: save a bookmark once, tap it on a recipe page, and the recipe opens in LIFT for you to check. LIFT never visits the page. Cook adds 622 recipes and reads units written out, like "2 tablespoons".
+Progress: your year, muscles, body weight and photos. Import from Strong, Hevy or FitNotes; export CSV.
 
-Road Food: six more chains, allergens to avoid, and meal building. Undo a removed food or exercise.
+Cook adds 622 recipes and reads "½ cup". Send recipes from your browser. Road Food: six more chains, allergens, meal building.
