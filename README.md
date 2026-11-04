@@ -195,7 +195,4 @@ or maps dependency.
 
 ## License
 
-Licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
-
-Anyone who modifies this code and distributes it — or runs it as a network
-service — must make their source available under the same terms.
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

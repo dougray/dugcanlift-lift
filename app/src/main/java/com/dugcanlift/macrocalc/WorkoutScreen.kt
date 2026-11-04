@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.focusSummary
+import com.dugcanlift.macrocalc.data.HeartRateLines
 import com.dugcanlift.macrocalc.data.LoggedExercise
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
@@ -1115,6 +1116,15 @@ private fun SessionCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            // Only a session the watch ran and measured has one.
+            HeartRateLines.session(session)?.let { line ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -1403,6 +1413,15 @@ private fun ExerciseBlock(
                             SetTypes.suffix(SetTypes.kindAt(exercise.sets, index) { it.kind }),
                         style = MaterialTheme.typography.bodyLarge
                     )
+                    // The highest heart rate the watch measured around the set, when it measured
+                    // one. Muted and nothing more: shown, never graded.
+                    HeartRateLines.set(set.maxBpm)?.let { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     // What to load, on a set still to do: this build's rows have no editor to show it in.
                     if (live && !ticked && focus.showWeight) {
                         PlateLine(weightLb = set.weightLb, bar = bar, setup = plateSetup)
