@@ -1,6 +1,6 @@
-Live sessions: tick a set and rest counts down, on the lock screen too. Plate math. Supersets, circuits, drop sets and rest-pause sets. Routines rotate and suggest the next weight.
+Live sessions: tick a set and rest counts down, even on the lock screen. Plate math. Supersets, circuits, drop sets and rest-pause sets. Routines rotate and suggest the next weight.
 
-LIFT for Wear OS: pair over Bluetooth and run today's workout on your wrist, keeping each set's highest heart rate.
+LIFT for Wear OS: pair over Bluetooth, run today's workout on your wrist and keep each set's highest heart rate.
 
 Progress: your year, muscles, body weight and photos. Import from Strong, Hevy or FitNotes; export CSV.
 
