@@ -90,6 +90,9 @@ enum class SetSide(val wire: String, val short: String, val label: String) {
  * [side] is the same shape: null means both, which is what every set written
  * before per-limb tracking means and what every set of a two-sided lift means
  * now. Nothing ever fills it in by guessing.
+ *
+ * [maxBpm] is the same shape again: null is "not measured", which is every set
+ * logged here and every set from a watch that measured nothing.
  */
 data class WorkoutSet(
     val id: String = UUID.randomUUID().toString(),
@@ -105,7 +108,14 @@ data class WorkoutSet(
      * asked, not a claim about what was done, and it never reaches a coach: SHARE-FORMAT has no set
      * type. An exercise's first set is straight whatever this says ([SetTypes.kindAt]).
      */
-    val kind: SetKind? = null
+    val kind: SetKind? = null,
+    /**
+     * The highest heart rate the Wear OS watch measured around this set, in whole bpm, as it arrived
+     * over LIFT Link version 4 ([HeartRateLines]). Null is not measured -- never zero. Read-only: no
+     * phone reads heart rate, nothing here writes one, an edit to the set's numbers keeps it, and
+     * deleting the set deletes it. It never reaches a coach, LIFT web or a CSV file.
+     */
+    val maxBpm: Int? = null
 ) {
     /** Weight moved, for the sets where that means something. */
     val volumeLb: Double
@@ -248,7 +258,14 @@ data class WorkoutSession(
     val name: String = "",
     val note: String = "",
     val exercises: List<LoggedExercise> = emptyList(),
-    val startedAt: Long = System.currentTimeMillis()
+    val startedAt: Long = System.currentTimeMillis(),
+    /**
+     * The session's average and highest heart rate, in whole bpm, for a session the Wear OS watch
+     * ran and measured (LIFT Link version 4). Null is not measured, never zero -- every session
+     * logged on this phone. Shown on the session's card and never graded.
+     */
+    val averageBpm: Int? = null,
+    val maxBpm: Int? = null
 ) {
     val volumeLb: Double get() = exercises.sumOf { it.volumeLb }
     val setCount: Int get() = exercises.sumOf { it.sets.size }
@@ -271,6 +288,14 @@ internal fun WorkoutSet.toJson(): JSONObject = JSONObject().apply {
     distanceMeters?.let { put("distanceMeters", it) }
     side?.let { put("side", it.wire) }
     kind?.let { put("kind", it.wire) }
+    // Omitted when not measured, so a set with no heart rate writes the object it always did.
+    maxBpm?.let { put("maxBpm", it) }
+}
+
+/** A heart rate as a file holds it: a whole bpm above zero, or nothing. Junk is not measured. */
+internal fun JSONObject.bpmOrNull(key: String): Int? {
+    val value = finiteDoubleOrNull(key) ?: return null
+    return if (value >= 1.0 && value % 1.0 == 0.0 && value <= Int.MAX_VALUE) value.toInt() else null
 }
 
 internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
@@ -284,7 +309,10 @@ internal fun workoutSetFromJson(o: JSONObject): WorkoutSet = WorkoutSet(
     // written before per-limb tracking restores exactly as it always did.
     side = SetSide.fromWire(if (o.isNull("side")) null else o.optString("side", "")),
     // BACKUP-FORMAT's `kind`, read leniently: anything but "drop" or "restPause" is straight.
-    kind = SetKind.fromWire(o.opt("kind"))
+    kind = SetKind.fromWire(o.opt("kind")),
+    // No `maxBpm`, or anything but a whole bpm above zero, is not measured: an older file restores
+    // exactly as it did.
+    maxBpm = o.bpmOrNull("maxBpm")
 )
 
 internal fun LoggedExercise.toJson(): JSONObject = JSONObject().apply {
@@ -378,6 +406,8 @@ internal fun WorkoutSession.toJson(): JSONObject = JSONObject().apply {
     put("name", name)
     put("note", note)
     put("startedAt", startedAt)
+    averageBpm?.let { put("averageBpm", it) }
+    maxBpm?.let { put("maxBpm", it) }
     // Groups as the wire would number them: a superset left with one member, after the other was
     // removed from the day, is written as no group at all.
     val groups = SetTypes.runs(exercises.map { it.group })
@@ -398,7 +428,9 @@ internal fun workoutSessionFromJson(o: JSONObject): WorkoutSession {
         name = o.optString("name", ""),
         note = o.optString("note", ""),
         exercises = exercises,
-        startedAt = o.finiteLong("startedAt", 0L)
+        startedAt = o.finiteLong("startedAt", 0L),
+        averageBpm = o.bpmOrNull("averageBpm"),
+        maxBpm = o.bpmOrNull("maxBpm")
     )
 }
 

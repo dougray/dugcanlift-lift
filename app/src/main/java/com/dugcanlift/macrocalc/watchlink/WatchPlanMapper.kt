@@ -191,10 +191,15 @@ object WatchPlanMapper {
                             LogSide.RIGHT -> SetSide.RIGHT
                             null -> null   // both, as it always means
                         },
+                        // Version 4: the highest bpm around the set, as the watch measured it.
+                        // Absent from a version-3 watch, and from any set nothing was measured for.
+                        maxBpm = set.maxBpm,
                     )
                 },
             )
         },
+        averageBpm = finished.averageBpm,
+        maxBpm = finished.maxBpm,
     )
 
     private fun stableId(vararg parts: Any): String =
@@ -237,6 +242,11 @@ object WatchPlanMapper {
     fun fingerprint(session: WorkoutSession): Int = buildString {
         append(session.id).append('\u0000').append(session.date).append('\u0000')
         append(session.name).append('\u0000').append(session.note).append('\u0000').append(session.startedAt)
+        // Heart rate only when there is one, so every session stored before it hashes as it did --
+        // otherwise each would look edited here and the watch's next revision of it would be refused.
+        if (session.averageBpm != null || session.maxBpm != null) {
+            append('\u0003').append(session.averageBpm).append('\u0000').append(session.maxBpm)
+        }
         session.exercises.forEach { e ->
             append('\u0001').append(e.id).append('\u0000').append(e.name).append('\u0000')
             append(e.equipment).append('\u0000').append(e.note)
@@ -244,6 +254,7 @@ object WatchPlanMapper {
                 append('\u0002').append(s.id).append('\u0000').append(s.weightLb).append('\u0000')
                 append(s.reps).append('\u0000').append(s.rpe).append('\u0000').append(s.durationSec)
                 append('\u0000').append(s.distanceMeters).append('\u0000').append(s.side?.wire)
+                s.maxBpm?.let { append('\u0000').append(it) }
             }
         }
     }.hashCode()

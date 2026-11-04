@@ -223,6 +223,13 @@ data class LoggedSet(
     val side: LogSide? = null,
     val durationSeconds: Int? = null,
     val distanceMetres: Double? = null,
+    /**
+     * The highest heart rate the watch measured around this set, in whole bpm (version 4; the
+     * window rule is the watch's `HeartRatePerSet`). **Absent is "not measured"** — a watch off the
+     * wrist, a refused permission, a set logged on a phone — and never zero: a zero is refused on
+     * the way in and never written on the way out.
+     */
+    val maxBpm: Int? = null,
 )
 
 /**
@@ -257,7 +264,35 @@ data class FinishedSession(
     val name: String,
     val startedAtEpochSeconds: Long,
     val exercises: List<FinishedExercise> = emptyList(),
-)
+    /**
+     * The session's average and highest heart rate, in whole bpm (version 4), each absent when
+     * nothing was measured — never zero. Worked out by the watch over the whole session, which is
+     * not the same thing as the highest of its sets' figures: a reading between two windows counts
+     * here and in no set.
+     */
+    val averageBpm: Int? = null,
+    val maxBpm: Int? = null,
+) {
+    /** Whether anything in this session is a heart rate at all. */
+    val recordsHeartRate: Boolean
+        get() = averageBpm != null || maxBpm != null ||
+            exercises.any { exercise -> exercise.sets.any { it.maxBpm != null } }
+
+    /**
+     * This session with every heart rate stripped, for a peer that negotiated version 3 or below and
+     * would refuse the logged-set bit and the trailing byte outright. [LinkSession.finishSession]
+     * applies it, as [LinkSession.pushPlan] strips sides and set types. **Losing a heart rate must
+     * never cost the session**: the stripped session is every set with its numbers, and its bytes
+     * are exactly what version 3 wrote.
+     */
+    fun withoutHeartRate(): FinishedSession =
+        if (!recordsHeartRate) this
+        else copy(
+            averageBpm = null,
+            maxBpm = null,
+            exercises = exercises.map { exercise -> exercise.copy(sets = exercise.sets.map { it.copy(maxBpm = null) }) },
+        )
+}
 
 /**
  * The handshake. [chosenVersion] is null in a HELLO — the central proposes a range — and set in a

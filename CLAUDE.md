@@ -941,7 +941,24 @@ before changing anything here.
   strips sides below 2. The link's encoder writes groups as adjacency runs
   (a group of one writes nothing) and never writes a kind on an exercise's
   first set. Heart rate per set, drafted as "version 3" in the LIFT
-  superproject's build plan before this existed, becomes version 4.
+  superproject's build plan before this existed, became version 4.
+- **Version 4 carries heart rate from the watch, and still speaks 1 to 3.** The
+  highest bpm the watch measured around a logged set (logged-set mask bit
+  `0x40`, one byte) and the session's average and maximum (a trailer a session
+  with no heart rate never writes), so a session with none is exactly version
+  3's bytes. `LinkSession.finishSession` strips both below version 4, so a
+  version-3 phone still gets the whole session. The window rule is the watch's
+  (`HeartRatePerSet` in its `liftkit`); this phone stores what arrives as
+  `WorkoutSet.maxBpm` and `WorkoutSession.averageBpm` / `maxBpm`, each omitted
+  when not measured, under the same names in the backup (JSON files, no
+  schema; an older file reads with none). **No phone reads heart rate**, and it
+  is **shown, never graded**: "max 142 bpm" muted on the set row and "Heart
+  rate: average 118 · max 156 bpm" on the session card (`HeartRateLines`, the
+  words every build uses), with no zone, color, threshold, chart, trend or
+  percentage of a maximum. It never reaches a coach (SHARE-FORMAT carries
+  none), LIFT web or a CSV export; `HeartRatePerSetTest` pins all of it.
+  `WatchPlanMapper.fingerprint` hashes heart rate only when present, so a
+  session stored before this still matches its stored hash.
 - **`WatchPlanMapper` sends a routine's `prescribed` rows when it has them**,
   and only falls back to the flattened `target*` fields when it does not.
   Before version 2 it always flattened, so a coach's "3 x 8 each side" reached
