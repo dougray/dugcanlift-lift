@@ -25,7 +25,7 @@ PROGRESS
 Your training year at a glance, sets per muscle this week, a body weight chart, and progress photos that stay on your phone.
 
 WEAR OS WATCH
-Pair LIFT for Wear OS over Bluetooth, straight from phone to watch, with no account or server. Send today's workout or a routine to your wrist, and the sessions you finish there come back into your log.
+Pair LIFT for Wear OS over Bluetooth, straight from phone to watch, with no account or server. Send today's workout or a routine to your wrist, and the sessions you finish there come back into your log, with the highest heart rate the watch measured around each set and the session's average and highest.
 
 OUTDOOR
 Record a run, walk or hike with GPS: time, distance, pace, elevation gain and the route, drawn as you go, with the screen off too. Export an activity to Health Connect with its route. See your last route and your personal bests.
