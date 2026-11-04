@@ -45,6 +45,7 @@ class LinkWireFixtureTest {
         assertBytes("frame.planRequest", planRequest(LinkProtocol.MIN_SUPPORTED_VERSION))
         assertBytes("frame.planRequestV2", planRequest(LinkProtocol.VERSION_WITH_PLAN_SIDES))
         assertBytes("frame.planRequestV3", planRequest(LinkProtocol.VERSION_WITH_SET_TYPES))
+        assertBytes("frame.planRequestV4", planRequest(LinkProtocol.VERSION_WITH_HEART_RATE))
     }
 
     @Test fun `hello encodes to the fixture's bytes`() = assertBytes("hello", LinkPayloads.encodeHello(LinkFixtures.hello))
@@ -92,6 +93,25 @@ class LinkWireFixtureTest {
     @Test fun `the session encodes to the fixture's bytes`() =
         assertBytes("session", LinkPayloads.encodeSession(LinkFixtures.session))
 
+    @Test fun `a session carrying heart rate encodes to the fixture's bytes`() =
+        assertBytes("session.heartRate", LinkPayloads.encodeSession(LinkFixtures.heartRateSession))
+
+    /**
+     * The reason version 4 is a bump and not a break: the `session` line predates heart rate and
+     * still comes out of the encoder unchanged, and stripping heart rate from the version-4 session
+     * gives exactly the bytes of the same session with none -- which is what a version-3 phone gets.
+     */
+    @Test fun `a session with no heart rate is byte for byte what version 3 wrote`() {
+        assertEquals(false, LinkFixtures.session.recordsHeartRate)
+        assertBytes("session", LinkPayloads.encodeSession(LinkFixtures.session))
+        assertBytes("session", LinkPayloads.encodeSession(LinkFixtures.session.withoutHeartRate()))
+        assertEquals(true, LinkFixtures.heartRateSession.recordsHeartRate)
+        assertEquals(
+            LinkFixtures.hex(LinkPayloads.encodeSession(LinkFixtures.session.copy(revision = 2))),
+            LinkFixtures.hex(LinkPayloads.encodeSession(LinkFixtures.heartRateSession.withoutHeartRate())),
+        )
+    }
+
     @Test fun `the set report encodes to the fixture's bytes`() =
         assertBytes("setLogged", LinkPayloads.encodeLoggedSet(LinkFixtures.report))
 
@@ -107,6 +127,7 @@ class LinkWireFixtureTest {
         assertEquals(LinkFixtures.sidedPlan, LinkPayloads.decodePlan(fixture.getValue("plan.sides")))
         assertEquals(LinkFixtures.setTypesPlan, LinkPayloads.decodePlan(fixture.getValue("plan.setTypes")))
         assertEquals(LinkFixtures.session, LinkPayloads.decodeSession(fixture.getValue("session")))
+        assertEquals(LinkFixtures.heartRateSession, LinkPayloads.decodeSession(fixture.getValue("session.heartRate")))
         assertEquals(LinkFixtures.report, LinkPayloads.decodeLoggedSet(fixture.getValue("setLogged")))
         assertEquals(LinkFixtures.ack, LinkPayloads.decodeAck(fixture.getValue("ack")))
         assertEquals(LinkFixtures.error, LinkPayloads.decodeError(fixture.getValue("error")))

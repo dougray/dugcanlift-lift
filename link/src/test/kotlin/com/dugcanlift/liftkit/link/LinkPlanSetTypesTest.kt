@@ -232,7 +232,7 @@ class LinkPlanSetTypesTest {
     }
 
     @Test fun `this build speaks version 3 and frames at it once settled`() {
-        assertEquals(3, LinkProtocol.VERSION)
+        assertTrue(LinkProtocol.VERSION >= 3)
         assertEquals(3, LinkProtocol.VERSION_WITH_SET_TYPES)
         val codec = LinkCodec().apply { version = 3 }
         assertEquals(3, codec.frames(LinkMessage(MessageType.PLAN_REQUEST))[0][0].toInt())

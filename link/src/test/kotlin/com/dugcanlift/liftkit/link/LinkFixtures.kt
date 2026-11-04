@@ -143,6 +143,35 @@ object LinkFixtures {
         ),
     )
 
+    /**
+     * The version-4 addition, awkward in the same way: [session] again with a heart rate on three of
+     * its four sets -- one bench set measured and one not, and both sides of the split squat, so the
+     * bpm byte rides beside the side byte under one mask -- and the session's average and maximum.
+     * Every version-4 byte is in here and nothing else new is.
+     */
+    val heartRateSession = session.copy(
+        revision = 2,
+        exercises = listOf(
+            FinishedExercise(
+                name = "Bench Press",
+                equipment = "Barbell",
+                sets = listOf(
+                    LoggedSet(weightKg = BENCH_KG, reps = 5, rpe = 8.0, maxBpm = 142),
+                    LoggedSet(reps = 5),                                   // nothing measured
+                ),
+            ),
+            FinishedExercise(
+                name = "Split Squat",
+                sets = listOf(
+                    LoggedSet(weightKg = 40.0, reps = 8, side = LogSide.LEFT, maxBpm = 131),
+                    LoggedSet(weightKg = 40.0, reps = 8, side = LogSide.RIGHT, maxBpm = 129),
+                ),
+            ),
+        ),
+        averageBpm = 118,
+        maxBpm = 156,
+    )
+
     val report = LoggedSetReport(
         sessionId = SESSION_ID,
         revision = 1,

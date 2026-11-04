@@ -31,7 +31,7 @@ object LinkProtocol {
      * politely instead of parsing a later layout as if it were this one. A version bump that
      * changes the header is therefore legal, because no old reader will ever get past byte 0.
      */
-    const val VERSION = 3
+    const val VERSION = 4
     const val MIN_SUPPORTED_VERSION = 1
 
     /**
@@ -57,10 +57,23 @@ object LinkProtocol {
      * sides below 2.
      *
      * Heart rate per set (the LIFT superproject's build plan, item 16) was drafted as "version 3"
-     * before this existed and has no code yet; it becomes version 4, on the logged-set mask this
-     * version does not touch.
+     * before this existed; it became version 4, on the logged-set mask this version does not touch.
      */
     const val VERSION_WITH_SET_TYPES = 3
+
+    /**
+     * What version 4 added, and nothing else: heart rate, on what the watch sends home. A logged set
+     * carries the highest bpm the watch measured around it in the logged-set mask's spare bit `0x40`,
+     * one byte; a `SESSION_FINISHED` may end with one more mask byte for the session's average and
+     * maximum, one byte each. Both are absent rather than zero when nothing was measured, so **a
+     * session with no heart rate encodes to exactly version 3's bytes**.
+     *
+     * A version-3 phone would refuse the bit, and the trailing byte, outright, so
+     * [LinkSession.finishSession] and [LinkSession.reportSet] strip heart rate on a link that settled
+     * below 4 — a v3 phone still gets the whole session, with no heart rate. Losing a heart rate must
+     * never cost the session.
+     */
+    const val VERSION_WITH_HEART_RATE = 4
 
     /**
      * An [MessageType.ERROR] is always sent at version 1, whatever version the link settled on,

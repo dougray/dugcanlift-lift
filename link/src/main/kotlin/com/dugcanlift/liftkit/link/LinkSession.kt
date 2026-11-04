@@ -156,15 +156,28 @@ class LinkSession(
         return LinkMessage(MessageType.PLAN_REQUEST)
     }
 
+    /** A set as it was logged, with its heart rate stripped below version 4, as [finishSession] does. */
     fun reportSet(report: LoggedSetReport): LinkMessage {
         requireReady(LinkRole.PERIPHERAL, "report a set")
-        return LinkMessage(MessageType.SET_LOGGED, LinkPayloads.encodeLoggedSet(report))
+        val forPeer = if (settledBelow(LinkProtocol.VERSION_WITH_HEART_RATE) && report.set.maxBpm != null) {
+            report.copy(set = report.set.copy(maxBpm = null))
+        } else report
+        return LinkMessage(MessageType.SET_LOGGED, LinkPayloads.encodeLoggedSet(forPeer))
     }
 
+    /**
+     * The session to send, at the version this link settled on. A version-3 phone refuses heart
+     * rate's presence bit and trailing byte outright, so they come off here: it still gets every set
+     * with its numbers. Losing a heart rate must never cost the session.
+     */
     fun finishSession(session: FinishedSession): LinkMessage {
         requireReady(LinkRole.PERIPHERAL, "finish a session")
-        return LinkMessage(MessageType.SESSION_FINISHED, LinkPayloads.encodeSession(session))
+        val forPeer = if (settledBelow(LinkProtocol.VERSION_WITH_HEART_RATE)) session.withoutHeartRate() else session
+        return LinkMessage(MessageType.SESSION_FINISHED, LinkPayloads.encodeSession(forPeer))
     }
+
+    private fun settledBelow(version: Int): Boolean =
+        (negotiatedVersion ?: LinkProtocol.MIN_SUPPORTED_VERSION) < version
 
     fun acknowledge(ack: LinkAck): LinkMessage {
         check(state == LinkState.READY) { "cannot acknowledge in state $state" }
