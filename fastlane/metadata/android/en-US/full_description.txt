@@ -41,4 +41,4 @@ Nothing leaves your phone unless you use a feature that sends it: a food search 
 
 LIFT is not a medical device and does not diagnose, treat, cure or prevent any medical condition. Talk to a doctor or dietitian before making big changes to how you eat or train.
 
-Licensed under the GNU Affero General Public License v3.0.
+Licensed under the Apache License 2.0.
