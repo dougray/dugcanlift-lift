@@ -1,7 +1,7 @@
 LIFT is a nutrition and training tracker that keeps your data on your phone. No accounts, no ads, no analytics, no cloud sync. Everything except food search and barcode lookup works offline.
 
 DASHBOARD
-Opens on today: calories and macros against your goal, steps, body weight, and what you've trained and eaten. Below that, a week of stats and charts and each lift's progression. System, Light or Dark appearance. On a tablet or foldable it uses the width.
+Opens on today: calories and macros against your goal, steps, body weight, and what you've trained and eaten. Below that, a week of stats and charts and each lift's progression. System, Light or Dark appearance.
 
 MACRO CALCULATOR
 Mifflin-St Jeor from your sex, age, weight, height and activity level. Pick lose, maintain or gain, set protein and fat, and save it as your goal.
@@ -37,7 +37,7 @@ YOUR DATA
 Save a backup file of your log, GPS routes included, and restore it on this phone or another; restoring only adds what the phone doesn't already have. Progress photos are never in a backup. Import training from Strong, Hevy or FitNotes, and export yours as CSV.
 
 PRIVACY
-Nothing leaves your phone unless you use a feature that sends it: a food search term or barcode goes to Open Food Facts when you search, Send to Coach hands your log to your own email app, Export to Health Connect saves an activity to Health Connect on this phone, and LIFT Link talks only to the watch you paired. Privacy policy: dugcanlift.com/app/privacy.
+Nothing leaves your phone unless you use a feature that sends it: a food search term or barcode goes to Open Food Facts when you search, Send to Coach hands your log to your own email app, Export to Health Connect saves an activity to Health Connect on this phone, and LIFT Link talks only to the watch you paired.
 
 LIFT is not a medical device and does not diagnose, treat, cure or prevent any medical condition. Talk to a doctor or dietitian before making big changes to how you eat or train.
 
