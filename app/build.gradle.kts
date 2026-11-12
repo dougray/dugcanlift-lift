@@ -145,8 +145,8 @@ dependencies {
     // Two published modules, each by its own JitPack coordinate (the repo-level one is an
     // aggregate that pulls both). :liftmap brings MapLibre and draws the run map from streets the
     // person downloaded; see CLAUDE.md "Street maps".
-    implementation("com.github.dougray.dugcanlift-kit-android:liftcore:1.11.0")
-    implementation("com.github.dougray.dugcanlift-kit-android:liftmap:1.11.0")
+    implementation("com.github.dougray.dugcanlift-kit-android:liftcore:1.11.1")
+    implementation("com.github.dougray.dugcanlift-kit-android:liftmap:1.11.1")
     // LIFT Link's protocol layer, shared byte-for-byte with the Wear OS app. Pure JVM, no
     // dependencies of its own. See CLAUDE.md "LIFT Link".
     implementation(project(":link"))
