@@ -30,9 +30,11 @@ covered by the kit's own tests.
 - `DclPalette` — the ARGB constants `ui/theme/Color.kt`'s `DclBg`/`DclAccent`/…
   wrap.
 
-The app depends on it as `com.github.dougray:dugcanlift-kit-android`, pinned to an **exact
-release tag** (never a branch or `SNAPSHOT`) in `app/build.gradle.kts`, resolved
-through JitPack.
+The app depends on it as two modules, `com.github.dougray.dugcanlift-kit-android:liftcore`
+and `...:liftmap` (from 1.11.0 JitPack serves them per module; the repo-level
+`com.github.dougray:dugcanlift-kit-android` is now an aggregate that would pull MapLibre
+into everything), each pinned to an **exact release tag** (never a branch or `SNAPSHOT`)
+in `app/build.gradle.kts`, resolved through JitPack.
 
 For local development against a kit checkout instead of the published tag, put
 
@@ -42,8 +44,9 @@ kitPath=../../dugcanlift-kit-android
 
 in `android/local.properties` (gitignored, not committed) — path is relative to
 this `android/` Gradle root. `settings.gradle.kts` turns that into an
-`includeBuild` with a dependency substitution, so the local `:liftcore` project
-wins over the JitPack artifact with no network resolution. Remove the line (or
+`includeBuild` with a dependency substitution for each module, so the local
+`:liftcore` and `:liftmap` projects win over the JitPack artifacts with no network
+resolution. Remove the line (or
 delete the file) to go back to building against the pinned tag.
 
 LIFT's own App Links (tap-to-open for shared plan/share links) are verified
@@ -993,3 +996,27 @@ before changing anything here.
 - **Proven by tests, not by radios.** Nothing here has run between two real
   devices yet. The watch repo's `DEVICE-TESTING.md` lists what a real phone and
   watch still have to show.
+
+## Street maps
+
+A run's route is drawn over streets the person downloaded, by `:liftmap`'s `RouteMap`
+(MapLibre, from a single MBTiles file in `filesDir/liftmap/`), and falls back to the app's own
+`RoutePolylineCanvas` where no downloaded area covers the route. Three screens use it:
+the recording screen, the review screen (`interactive = true`) and Train's Last route card.
+**`RoutePolylineCanvas` is only ever a `RouteMap` fallback** -- `MapNoNetworkTest` fails a call
+outside one.
+
+- **Viewing a map sends nothing.** The only request is the download the person starts from the
+  Maps card on Home (`MapsSettingsCard`, the kit's `MapsCard`), and it lives inside the kit.
+  `LiftApplication` installs `MapNetworkGuard` at launch. `MapNoNetworkTest` fails on
+  `openfreemap`, `fromUri(` or `org.maplibre.android.offline` anywhere under `app/src/main`,
+  and on a second `HttpURLConnection` user besides `FoodSearch.kt`.
+- **No new permission.** `:liftmap` declares none; MapLibre merges in `ACCESS_NETWORK_STATE` and
+  `ACCESS_WIFI_STATE`, which the manifest removes (`tools:node="remove"`).
+  `PermissionsPinTest`'s expected list did not change and must not.
+- **Downloaded streets are not backed up** (`liftmap/` is excluded in both XML rule files); they
+  are a download, not a log.
+- **"Around here" never prompts.** It reads the last known fix only when location is already
+  granted; otherwise the row is absent.
+- **Licences**: MapLibre Native (BSD-2), Noto Sans (OFL 1.1) and the OpenStreetMap / OpenFreeMap
+  credit are in `NOTICE`. Every map also shows the credit in its corner (the kit's).

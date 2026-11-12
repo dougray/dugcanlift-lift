@@ -11,6 +11,7 @@
 <full-backup-content>
     <exclude domain="root" path="." />
     <exclude domain="file" path="." />
+    <exclude domain="file" path="liftmap" />
     <exclude domain="database" path="." />
     <exclude domain="sharedpref" path="." />
 </full-backup-content>

@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.liftmap.RouteMap
 import android.Manifest
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import com.dugcanlift.macrocalc.ui.theme.dclOutlinedButtonColors
@@ -307,7 +308,15 @@ fun OutdoorRecordingScreen(
     RouteScreenLayout(
         modifier = modifier,
         title = "Record a route",
-        route = { canvasModifier -> RoutePolylineCanvas(routePoints = routePoints, modifier = canvasModifier) },
+        route = { canvasModifier ->
+            val mapPoints = remember(routePoints) { routePoints.map { it.latitude to it.longitude } }
+            RouteMap(
+                points = mapPoints,
+                modifier = canvasModifier,
+                aspectRatio = 1f,
+                fallback = { m -> RoutePolylineCanvas(routePoints = routePoints, modifier = m) }
+            )
+        },
         top = activityChips,
         details = details,
         actions = actions

@@ -656,6 +656,10 @@ fun DashboardScreen(
         TrainingSettingsCard()
     }
 
+    val mapsCard: @Composable () -> Unit = rememberMovablePart {
+        MapsSettingsCard(outdoor = outdoorActivities)
+    }
+
     if (showingStepGoalEditor) {
         StepGoalDialog(
             initial = stepGoal,
@@ -711,6 +715,8 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 trainingSettingsCard()
                 Spacer(modifier = Modifier.height(16.dp))
+                mapsCard()
+                Spacer(modifier = Modifier.height(16.dp))
                 servingCard()
                 Spacer(modifier = Modifier.height(16.dp))
                 appearanceCard()
@@ -732,6 +738,7 @@ fun DashboardScreen(
                     coachCard()
                     watchCard()
                     trainingSettingsCard()
+                    mapsCard()
                     servingCard()
                     appearanceCard()
                     backupCard()
