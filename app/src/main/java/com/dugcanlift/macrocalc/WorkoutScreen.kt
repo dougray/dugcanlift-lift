@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.liftmap.RouteMap
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import androidx.activity.compose.BackHandler
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
@@ -938,10 +939,13 @@ private fun OutdoorHighlights(
                 Text("Last route", style = MaterialTheme.typography.titleMedium,
                     color = dclAccentText())
                 Spacer(modifier = Modifier.height(12.dp))
-                RoutePolylineCanvas(
-                    routePoints = last.routePoints,
+                val lastAspect = if (sideBySide) 1.6f else 2f
+                val lastPoints = remember(last.id, last.routePoints) { last.routePoints.map { it.latitude to it.longitude } }
+                RouteMap(
+                    points = lastPoints,
                     modifier = Modifier.fillMaxWidth(),
-                    aspectRatio = if (sideBySide) 1.6f else 2f
+                    aspectRatio = lastAspect,
+                    fallback = { m -> RoutePolylineCanvas(routePoints = last.routePoints, modifier = m, aspectRatio = lastAspect) }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

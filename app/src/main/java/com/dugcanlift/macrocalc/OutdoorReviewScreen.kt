@@ -1,5 +1,6 @@
 package com.dugcanlift.macrocalc
 
+import com.dugcanlift.liftmap.RouteMap
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
 import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -91,7 +92,16 @@ fun OutdoorReviewScreen(
     RouteScreenLayout(
         modifier = modifier,
         title = currentActivity.activityType.displayName,
-        route = { canvasModifier -> RoutePolylineCanvas(routePoints = currentActivity.routePoints, modifier = canvasModifier) },
+        route = { canvasModifier ->
+            val mapPoints = remember(currentActivity.routePoints) { currentActivity.routePoints.map { it.latitude to it.longitude } }
+            RouteMap(
+                points = mapPoints,
+                modifier = canvasModifier,
+                aspectRatio = 1f,
+                interactive = true,
+                fallback = { m -> RoutePolylineCanvas(routePoints = currentActivity.routePoints, modifier = m) }
+            )
+        },
         details = {
             OutdoorStatRow(label = "Time", value = currentActivity.formattedDuration())
             OutdoorStatRow(label = "Distance", value = currentActivity.formattedDistanceMiles())
