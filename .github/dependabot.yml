@@ -5,8 +5,13 @@ updates:
     schedule:
       interval: weekly
     # The kit is pinned to an exact release tag on purpose; bumps to it are a
-    # deliberate decision, not a bot PR.
+    # deliberate decision, not a bot PR. From 1.11.0 JitPack serves it per
+    # module (group com.github.dougray.dugcanlift-kit-android, one artifact per
+    # module), so each module is named; the repo-level coordinate stays listed
+    # so a stray use of the old form is still not bumped.
     ignore:
+      - dependency-name: "com.github.dougray.dugcanlift-kit-android:liftcore"
+      - dependency-name: "com.github.dougray.dugcanlift-kit-android:liftmap"
       - dependency-name: "com.github.dougray:dugcanlift-kit-android"
   - package-ecosystem: github-actions
     directory: /

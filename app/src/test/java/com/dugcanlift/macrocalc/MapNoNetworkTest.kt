@@ -15,6 +15,8 @@ import org.junit.Test
  */
 class MapNoNetworkTest {
 
+    private val FOOD_SEARCH = "java/com/dugcanlift/macrocalc/data/FoodSearch.kt"
+
     private val main = File("src/main")
 
     private fun sources(): List<File> {
@@ -22,6 +24,13 @@ class MapNoNetworkTest {
         return main.walkTopDown()
             .filter { it.isFile && it.extension in setOf("kt", "xml", "kts") }
             .toList()
+    }
+
+    /** The network entry points other than [HttpURLConnection], which [offenders] counts. */
+    private fun networkCalls(text: String): List<String> = buildList {
+        if ("okhttp3" in text) add("okhttp3")
+        if (".openConnection(" in text) add(".openConnection(")
+        if (Regex("""(?<![A-Za-z0-9_])URL\(""").containsMatchIn(text)) add("URL(")
     }
 
     private fun offenders(needle: String) =
@@ -44,7 +53,35 @@ class MapNoNetworkTest {
 
     @Test
     fun `food search is still the only HttpURLConnection in the app`() {
-        assertEquals(listOf("java/com/dugcanlift/macrocalc/data/FoodSearch.kt"), offenders("HttpURLConnection"))
+        assertEquals(listOf(FOOD_SEARCH), offenders("HttpURLConnection"))
+    }
+
+    @Test
+    fun `no other HTTP client or URL connection is in the app`() {
+        // FoodSearch.kt is the one place that opens a connection (to Open Food Facts); everything
+        // else, including the map download, lives in :liftmap.
+        val found = sources()
+            .filter { it.extension == "kt" }
+            .filter { networkCalls(it.readText()).isNotEmpty() }
+            .map { it.relativeTo(main).path }
+        assertEquals(listOf(FOOD_SEARCH), found)
+        assertEquals(
+            listOf(".openConnection(", "URL("),
+            networkCalls(File(main, FOOD_SEARCH).readText()),
+        )
+    }
+
+    @Test
+    fun `the scanner finds what it is meant to`() {
+        assertEquals(listOf("okhttp3"), networkCalls("import okhttp3.OkHttpClient"))
+        assertEquals(listOf("okhttp3"), networkCalls("val c = okhttp3.OkHttpClient()"))
+        assertEquals(listOf(".openConnection("), networkCalls("someUrl.openConnection()"))
+        assertEquals(listOf("URL("), networkCalls("val u = java.net.URL(\"x\")"))
+        assertEquals(listOf("URL("), networkCalls("val u = URL(s)"))
+        assertEquals(listOf("URL("), networkCalls("(URL(urlString).x)"))
+        assertEquals(emptyList<String>(), networkCalls("val u = ImageURL(s)"))
+        assertEquals(emptyList<String>(), networkCalls("val x = fooUrl(s); // no calls"))
+        assertEquals(emptyList<String>(), networkCalls("import java.net.URLEncoder"))
     }
 
     @Test

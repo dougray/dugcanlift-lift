@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.dugcanlift.liftmap.MapsCard
 import com.dugcanlift.liftmap.StreetStore
 import com.dugcanlift.macrocalc.data.OutdoorActivity
@@ -29,9 +31,11 @@ internal fun MapsSettingsCard(outdoor: List<OutdoorActivity>, modifier: Modifier
     val context = LocalContext.current
     val store = remember(context) { runCatching { StreetStore.standard(context) }.getOrNull() } ?: return
     val lastRunStart = remember(outdoor) { lastRunStart(outdoor) }
+    // Stable across recompositions: the kit re-reads the fix whenever this lambda changes.
+    val aroundHere = remember(context) { suspend { currentFix(context) } }
     MapsCard(
         store = store,
-        aroundHere = { currentFix(context) },
+        aroundHere = aroundHere,
         lastRunStart = lastRunStart,
         modifier = modifier,
     )
@@ -46,8 +50,12 @@ internal fun lastRunStart(outdoor: List<OutdoorActivity>): Pair<Double, Double>?
         ?.let { it.latitude to it.longitude }
 
 /** The system's last known fix, or null when location is not already allowed or none exists. */
+private suspend fun currentFix(context: Context): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+    fixNow(context)
+}
+
 @SuppressLint("MissingPermission")
-private fun currentFix(context: Context): Pair<Double, Double>? {
+private fun fixNow(context: Context): Pair<Double, Double>? {
     val allowed = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         .any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
     if (!allowed) return null
