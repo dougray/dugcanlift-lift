@@ -191,6 +191,28 @@ class LocationTracker private constructor(context: Context) {
         appContext.stopService(Intent(appContext, LocationRecordingService::class.java))
     }
 
+    /** A recording handed over by [takeRecording]. */
+    class TakenRecording(
+        val activityType: OutdoorActivityType,
+        val startedAtEpochMs: Long,
+        val routePoints: List<RoutePoint>
+    )
+
+    /**
+     * Stops the recording and returns what it held, in one step; null if nothing was recording.
+     * Synchronized so two callers (a double tap on Finish) cannot both receive the run.
+     */
+    @Synchronized
+    fun takeRecording(): TakenRecording? {
+        if (!_isRecording.value) return null
+        val type = _activityType.value
+        val started = _startedAtEpochMs.value
+        val points = _routePoints.value
+        stop()
+        if (type == null || started == null) return null
+        return TakenRecording(type, started, points)
+    }
+
     private fun onLocation(location: Location) {
         if (location.accuracy < 0f || location.accuracy > MAX_ACCURACY_METERS) return
         val ageMs = System.currentTimeMillis() - location.time
