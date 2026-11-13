@@ -54,7 +54,9 @@ import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.focusSummary
 import com.dugcanlift.macrocalc.data.HeartRateLines
 import com.dugcanlift.macrocalc.data.LoggedExercise
+import com.dugcanlift.macrocalc.data.LiveRunStats
 import com.dugcanlift.macrocalc.data.OutdoorActivity
+import com.dugcanlift.macrocalc.data.RoutePoint
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.OutdoorRecords
@@ -172,77 +174,55 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     var planWeekAnchor by rememberSaveable { mutableStateOf<String?>(null) }
     var planWeekOpen by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Full-screen takeovers for recording/reviewing a Run or Hike, following the
-    // same state-based screen-swap pattern MainActivity uses for showCalculator
-    // (no NavController anywhere in this app). rememberSaveable (not plain
-    // remember) so this state survives a configuration change or process
-    // restart. It does NOT survive a bottom-tab switch on its own — there's
-    // no SaveableStateHolder around MainActivity's `when(selectedTab)`, so
-    // WorkoutScreen (one branch of that `when`) is fully disposed by the
-    // others and this state is lost along with it. The tracker fallback
-    // just below (`effectiveRecordingType`) is what actually keeps the
-    // recording screen visible across a tab switch, using the tracker's own
-    // isRecording/activityType as the ultimate source of truth instead of
-    // relying on this Compose state surviving — see C-2 in the final-review
-    // fix wave.
+    // Full-screen takeovers for recording/reviewing a Run or Hike, following the same state-based
+    // screen-swap pattern MainActivity uses for showCalculator (no NavController anywhere in this
+    // app). rememberSaveable survives a configuration change or process restart, but not a
+    // bottom-tab switch: WorkoutScreen is disposed, and a returning run shows as the live card.
+    // The type chosen on Train before Start is tapped. Once the run records, the tracker holds it.
     var recordingActivityType by rememberSaveable { mutableStateOf<OutdoorActivityType?>(null) }
+    // Whether the person wants the full recording screen. A run does not need it: it ends only on
+    // Cancel or Finish, and while the screen is closed Train's live card shows it. True when a
+    // type is chosen or Open is tapped; false on Back to Train and the system Back gesture. A tab
+    // switch loses it (WorkoutScreen is disposed), which lands on the card, never on a lost run.
+    var screenWanted by rememberSaveable { mutableStateOf(false) }
     var reviewingActivityId by rememberSaveable { mutableStateOf<String?>(null) }
     var showAllOutdoorHistory by rememberSaveable { mutableStateOf(false) }
-    var showDiscardRecordingConfirmation by remember { mutableStateOf(false) }
 
     val reviewingActivity = outdoorActivities.find { it.id == reviewingActivityId }
 
-    // Belt-and-braces on top of the rememberSaveable fix above: the tracker's
-    // own isRecording/activityType are the ultimate source of truth for "is
-    // there a live recording", so even if recordingActivityType were ever
-    // lost some other way, GPS-active still implies the recording screen
-    // stays visible instead of orphaning the foreground service.
+    // The tracker is the one source of truth for "is there a live recording".
     val isTrackerRecording by tracker.isRecording.collectAsState()
     val trackerActivityType by tracker.activityType.collectAsState()
-    val effectiveRecordingType = recordingActivityType
-        ?: trackerActivityType.takeIf { isTrackerRecording }
+    val trackerStartedAt by tracker.startedAtEpochMs.collectAsState()
+    val trackerPoints by tracker.routePoints.collectAsState()
+    val recordingScreenShown =
+        RecordingScreenState.showScreen(isTrackerRecording, screenWanted) ||
+            RecordingScreenState.showStartScreen(isTrackerRecording, recordingActivityType != null)
+    val effectiveRecordingType = trackerActivityType.takeIf { isTrackerRecording } ?: recordingActivityType
 
-    BackHandler(enabled = effectiveRecordingType != null || reviewingActivity != null) {
+    // Leaves the recording screen without touching the run.
+    fun leaveRecordingScreen() {
+        screenWanted = false
+        recordingActivityType = null
+    }
+
+    BackHandler(enabled = recordingScreenShown || reviewingActivity != null) {
         when {
             reviewingActivity != null -> reviewingActivityId = null
-            isTrackerRecording -> showDiscardRecordingConfirmation = true
-            else -> recordingActivityType = null
+            else -> leaveRecordingScreen()
         }
     }
 
-    if (showDiscardRecordingConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showDiscardRecordingConfirmation = false },
-            title = { Text("Discard this run?") },
-            text = {
-                Text("Recording is still in progress. Going back will stop it and discard the route.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    tracker.stop()
-                    recordingActivityType = null
-                    showDiscardRecordingConfirmation = false
-                }, colors = dclTextButtonColors()) {
-                    Text("Discard")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDiscardRecordingConfirmation = false }, colors = dclTextButtonColors()) {
-                    Text("Keep recording")
-                }
-            }
-        )
-    }
-
-    if (effectiveRecordingType != null) {
+    if (recordingScreenShown && effectiveRecordingType != null) {
         OutdoorRecordingScreen(
             activityType = effectiveRecordingType,
             modifier = modifier,
-            onDiscard = { recordingActivityType = null },
+            onDiscard = { leaveRecordingScreen() },
             onFinished = { finished ->
-                recordingActivityType = null
+                leaveRecordingScreen()
                 reviewingActivityId = finished.id
-            }
+            },
+            onBackToTrain = { leaveRecordingScreen() }
         )
         return
     }
@@ -415,7 +395,12 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             OutdoorActivityType.entries.forEach { type ->
                 Button(
-                    onClick = { recordingActivityType = type },
+                    onClick = {
+                        recordingActivityType = type
+                        screenWanted = true
+                    },
+                    // One run at a time: the card above says which one is recording.
+                    enabled = RecordingScreenState.runButtonsEnabled(isTrackerRecording),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(type.displayName)
@@ -451,10 +436,24 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    val liveRun = if (RecordingScreenState.showLiveCard(isTrackerRecording)) {
+        val type = trackerActivityType
+        val startedAt = trackerStartedAt
+        if (type != null && startedAt != null) LiveRunState(type, trackerPoints, startedAt) else null
+    } else null
+
     val highlightsBlock: @Composable (sideBySide: Boolean) -> Unit = { sideBySide ->
         OutdoorHighlights(
             activities = outdoorActivities,
             onOpen = { reviewingActivityId = it.id },
+            live = liveRun,
+            onOpenLive = { screenWanted = true },
+            onFinishLive = {
+                scope.launch {
+                    // Null means a second tap: the first already saved the run.
+                    RecordingFinisher.finish(tracker, outdoorRepo)?.let { reviewingActivityId = it.id }
+                }
+            },
             sideBySide = sideBySide
         )
     }
@@ -891,6 +890,10 @@ private fun GroupHeading(label: SetTypes.GroupLabel?) {
 private fun OutdoorHighlights(
     activities: List<OutdoorActivity>,
     onOpen: (OutdoorActivity) -> Unit,
+    /** The run recording now, if any: its live card takes the place of Last route. */
+    live: LiveRunState? = null,
+    onOpenLive: () -> Unit = {},
+    onFinishLive: () -> Unit = {},
     /**
      * Last route beside Personal bests, across the width under Train's two panes, with the map
      * drawn larger than a phone's. False is the phone's stack.
@@ -967,22 +970,98 @@ private fun OutdoorHighlights(
         }
     }
 
-    if (last != null && sideBySide) {
+    // While a run records its live card is the first card, in Last route's place.
+    val firstCard: (@Composable (Modifier) -> Unit)? = when {
+        live != null -> { m -> LiveRunCard(live, sideBySide, onOpenLive, onFinishLive, m) }
+        last != null -> { m -> lastCard(last, m) }
+        else -> null
+    }
+
+    if (firstCard != null && sideBySide) {
         Row(
             modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(AdaptiveLayout.PANE_GAP_DP.dp)
         ) {
-            lastCard(last, Modifier.weight(1f).fillMaxHeight())
+            firstCard(Modifier.weight(1f).fillMaxHeight())
             bestsCard(Modifier.weight(1f).fillMaxHeight())
         }
     } else {
-        if (last != null) {
-            lastCard(last, Modifier.fillMaxWidth())
+        if (firstCard != null) {
+            firstCard(Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(16.dp))
         }
         bestsCard(Modifier.fillMaxWidth())
     }
 }
+
+/** What Train's live card reads from the tracker. */
+internal class LiveRunState(
+    val type: OutdoorActivityType,
+    val points: List<RoutePoint>,
+    val startedAtEpochMs: Long
+)
+
+/**
+ * Train's card for the run recording now: the route so far, Time, Distance and Pace, and the two
+ * things a person does with it. It is shown whenever the tracker records, so a run is never
+ * stranded with its screen closed. The numbers are [LiveRunStats], the same function the
+ * recording screen reads; a once-a-second ticker keeps the time moving between fixes.
+ */
+@Composable
+private fun LiveRunCard(
+    live: LiveRunState,
+    sideBySide: Boolean,
+    onOpen: () -> Unit,
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(live.startedAtEpochMs) {
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            delay(1_000L)
+        }
+    }
+    val stats = LiveRunStats.compute(live.points, live.startedAtEpochMs, nowMs)
+
+    Card(modifier = modifier, border = dclCardBorder()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Recording · ${live.type.displayName}", style = MaterialTheme.typography.titleMedium,
+                color = dclAccentText())
+            Spacer(modifier = Modifier.height(12.dp))
+            val aspect = if (sideBySide) 1.6f else 2f
+            // With no line yet the route view falls back to the canvas, which says "Waiting for GPS…".
+            val mapPoints = remember(live.points) { live.points.map { it.latitude to it.longitude } }
+            RouteMap(
+                points = mapPoints,
+                modifier = Modifier.fillMaxWidth(),
+                aspectRatio = aspect,
+                fallback = { m -> RoutePolylineCanvas(routePoints = live.points, modifier = m, aspectRatio = aspect) }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutdoorStat("Time", stats.elapsedText())
+                OutdoorStat("Distance", stats.distanceText())
+                OutdoorStat("Pace", stats.paceText())
+            }
+            // Heart rate and VO2 max lines go here (plan 3); nothing draws in this slot yet.
+            liveExtras()
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onOpen, modifier = Modifier.weight(1f), colors = dclOutlinedButtonColors()) {
+                    Text("Open")
+                }
+                Button(onClick = onFinish, modifier = Modifier.weight(1f)) {
+                    Text("Finish")
+                }
+            }
+        }
+    }
+}
+
+/** The live card's slot for plan 3's heart rate and VO2 max lines. Empty on purpose. */
+@Composable
+private fun liveExtras() {}
 
 @Composable
 private fun RowScope.OutdoorStat(label: String, value: String) {

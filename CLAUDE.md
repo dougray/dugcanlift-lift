@@ -750,6 +750,19 @@ follows" bind this build) runs on a recipe page the person already has open and 
   `BookmarkletCopyTest` and `RecipeLinkIntentTest`: change them in every build or in none. Android
   has no Safari line and none of the web-only lines.
 
+## The run outlives its screen
+
+A run ends only on Cancel (confirmed) or Finish. Leaving the recording screen (app-bar **Back to Train**,
+the system Back gesture), switching tabs, rotating and backgrounding never stop it. Train's
+`Recording · Run|Walk|Hike` card (`LiveRunCard`, in Last route's place) shows whenever the tracker records, with
+**Open** and **Finish**; `RecordingScreenState` decides which face shows and disables Run/Walk/Hike while one
+records. The card and the screen read one function, `LiveRunStats` (no fix: `0:00`, `0.00 mi`, `—`; pace only from
+10 m). `RecordingFinisher.finish` is the only Finish: the tracker hands the run over once
+(`LocationTracker.takeRecording`), so a second call returns null and is ignored. `liveExtras` is plan 3's empty slot.
+Switching tabs while the full recording screen is up returns to Train showing the live card
+(Open / Finish) and the run keeps recording; Cancel now always asks "Discard this run?" (the
+confirmation moved there from the system Back gesture, which now just leaves the screen).
+
 ## Recording a route needs no background location
 
 The manifest does **not** declare `ACCESS_BACKGROUND_LOCATION`, and nothing asks
@@ -1001,8 +1014,9 @@ before changing anything here.
 
 A run's route is drawn over streets the person downloaded, by `:liftmap`'s `RouteMap`
 (MapLibre, from a single MBTiles file in `filesDir/liftmap/`), and falls back to the app's own
-`RoutePolylineCanvas` where no downloaded area covers the route. Three screens use it:
-the recording screen, the review screen (`interactive = true`) and Train's Last route card.
+`RoutePolylineCanvas` where no downloaded area covers the route. Four screens use it:
+the recording screen, the review screen (`interactive = true`), Train's Last route card and Train's live
+recording card.
 **`RoutePolylineCanvas` is only ever a `RouteMap` fallback** -- `MapNoNetworkTest` fails a call
 outside one.
 
