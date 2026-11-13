@@ -3,6 +3,8 @@ package com.dugcanlift.macrocalc
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityMath
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /**
  * Ends the recording and saves it, from anywhere: the recording screen's Finish and Train's live
@@ -28,7 +30,8 @@ object RecordingFinisher {
             elevationGainMeters = OutdoorActivityMath.elevationGainMeters(recording.routePoints),
             routePoints = recording.routePoints
         )
-        repository.save(finished)
+        // The run is already stopped, so a screen leaving mid-save must not drop it.
+        withContext(NonCancellable) { repository.save(finished) }
         return finished
     }
 }

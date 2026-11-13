@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -62,14 +63,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.dugcanlift.macrocalc.data.OutdoorActivity
+import com.dugcanlift.macrocalc.data.LiveRunStats
 import com.dugcanlift.macrocalc.data.OutdoorActivityMath
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.RoutePoint
-import com.dugcanlift.macrocalc.data.formattedDistanceMiles
-import com.dugcanlift.macrocalc.data.formattedDuration
 import com.dugcanlift.macrocalc.data.formattedElevationGainFeet
-import com.dugcanlift.macrocalc.data.formattedPace
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -113,7 +112,12 @@ fun OutdoorRecordingScreen(
     activityType: OutdoorActivityType,
     modifier: Modifier = Modifier,
     onDiscard: () -> Unit,
-    onFinished: (OutdoorActivity) -> Unit
+    onFinished: (OutdoorActivity) -> Unit,
+    /**
+     * Leaves this screen and leaves the run alone: it keeps recording and Train's card shows it.
+     * The app bar's Back to Train and the system Back gesture (handled by the caller) both end here.
+     */
+    onBackToTrain: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val tracker = remember { LocationTracker.get(context) }
@@ -130,6 +134,7 @@ fun OutdoorRecordingScreen(
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusNeedsSettings by remember { mutableStateOf(false) }
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
 
     var hasFineLocation by remember { mutableStateOf(hasFineLocationPermission(context)) }
 
@@ -200,16 +205,14 @@ fun OutdoorRecordingScreen(
         }
     }
 
-    val liveActivity = if (isRecordingActive) {
-        OutdoorActivity(
-            activityType = activeActivityType,
-            startedAtEpochMs = startedAtEpochMs!!,
-            endedAtEpochMs = nowMs,
-            distanceMeters = OutdoorActivityMath.totalDistanceMeters(routePoints),
-            elevationGainMeters = OutdoorActivityMath.elevationGainMeters(routePoints),
-            routePoints = routePoints
-        )
-    } else null
+    // The numbers come from the same pure function Train's live card reads.
+    val liveStats = LiveRunStats.compute(routePoints, startedAtEpochMs, nowMs)
+    val elevationText = OutdoorActivity(
+        activityType = activeActivityType,
+        startedAtEpochMs = startedAtEpochMs ?: nowMs,
+        endedAtEpochMs = nowMs,
+        elevationGainMeters = OutdoorActivityMath.elevationGainMeters(routePoints)
+    ).formattedElevationGainFeet()
 
     val activityChips: @Composable () -> Unit = {
         if (!isRecordingActive) {
@@ -227,11 +230,11 @@ fun OutdoorRecordingScreen(
     }
 
     val details: @Composable () -> Unit = {
-        if (isRecordingActive && liveActivity != null) {
-            OutdoorStatRow(label = "Time", value = liveActivity.formattedDuration())
-            OutdoorStatRow(label = "Distance", value = liveActivity.formattedDistanceMiles())
-            OutdoorStatRow(label = "Pace", value = liveActivity.formattedPace())
-            OutdoorStatRow(label = "Elevation", value = liveActivity.formattedElevationGainFeet())
+        if (isRecordingActive) {
+            OutdoorStatRow(label = "Time", value = liveStats.elapsedText())
+            OutdoorStatRow(label = "Distance", value = liveStats.distanceText())
+            OutdoorStatRow(label = "Pace", value = liveStats.paceText())
+            OutdoorStatRow(label = "Elevation", value = elevationText)
             if (providerDisabled) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -262,10 +265,7 @@ fun OutdoorRecordingScreen(
         if (isRecordingActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
-                    onClick = {
-                        tracker.stop()
-                        onDiscard()
-                    },
+                    onClick = { showDiscardConfirmation = true },
                     modifier = Modifier.weight(1f),
                     colors = dclOutlinedButtonColors()
                 ) {
@@ -273,24 +273,10 @@ fun OutdoorRecordingScreen(
                 }
                 Button(
                     onClick = {
-                        // Capture the tracker's own start time/type before
-                        // stop() clears them.
-                        val start = startedAtEpochMs
-                        val finishedActivityType = activeActivityType
-                        tracker.stop()
-                        if (start != null) {
-                            val finished = OutdoorActivity(
-                                activityType = finishedActivityType,
-                                startedAtEpochMs = start,
-                                endedAtEpochMs = System.currentTimeMillis(),
-                                distanceMeters = OutdoorActivityMath.totalDistanceMeters(routePoints),
-                                elevationGainMeters = OutdoorActivityMath.elevationGainMeters(routePoints),
-                                routePoints = routePoints
-                            )
-                            scope.launch {
-                                repository.save(finished)
-                                onFinished(finished)
-                            }
+                        // The same finish Train's card runs. A second tap finds nothing
+                        // recording and is ignored without a word: the first one saved.
+                        scope.launch {
+                            RecordingFinisher.finish(tracker, repository)?.let(onFinished)
                         }
                     },
                     modifier = Modifier.weight(1f)
@@ -305,9 +291,33 @@ fun OutdoorRecordingScreen(
         }
     }
 
+    if (showDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirmation = false },
+            title = { Text("Discard this run?") },
+            text = { Text("Recording is still in progress. Cancelling will stop it and discard the route.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    tracker.stop()
+                    showDiscardConfirmation = false
+                    onDiscard()
+                }, colors = dclTextButtonColors()) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirmation = false }, colors = dclTextButtonColors()) {
+                    Text("Keep recording")
+                }
+            }
+        )
+    }
+
     RouteScreenLayout(
         modifier = modifier,
         title = "Record a route",
+        backLabel = "Back to Train",
+        onBack = onBackToTrain,
         route = { canvasModifier ->
             val mapPoints = remember(routePoints) { routePoints.map { it.latitude to it.longitude } }
             RouteMap(
@@ -347,6 +357,9 @@ internal fun OutdoorStatRow(label: String, value: String) {
 internal fun RouteScreenLayout(
     modifier: Modifier,
     title: String,
+    /** An app-bar button above the title that leaves the screen, when the screen has somewhere to go. */
+    backLabel: String? = null,
+    onBack: (() -> Unit)? = null,
     route: @Composable (Modifier) -> Unit,
     top: @Composable () -> Unit = {},
     details: @Composable () -> Unit,
@@ -358,6 +371,9 @@ internal fun RouteScreenLayout(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
+            if (backLabel != null && onBack != null) {
+                TextButton(onClick = onBack, colors = dclTextButtonColors()) { Text(backLabel) }
+            }
             Text(text = title, style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(16.dp))
 
