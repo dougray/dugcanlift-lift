@@ -174,19 +174,10 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
     var planWeekAnchor by rememberSaveable { mutableStateOf<String?>(null) }
     var planWeekOpen by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Full-screen takeovers for recording/reviewing a Run or Hike, following the
-    // same state-based screen-swap pattern MainActivity uses for showCalculator
-    // (no NavController anywhere in this app). rememberSaveable (not plain
-    // remember) so this state survives a configuration change or process
-    // restart. It does NOT survive a bottom-tab switch on its own — there's
-    // no SaveableStateHolder around MainActivity's `when(selectedTab)`, so
-    // WorkoutScreen (one branch of that `when`) is fully disposed by the
-    // others and this state is lost along with it. The tracker fallback
-    // just below (`effectiveRecordingType`) is what actually keeps the
-    // recording screen visible across a tab switch, using the tracker's own
-    // isRecording/activityType as the ultimate source of truth instead of
-    // relying on this Compose state surviving — see C-2 in the final-review
-    // fix wave.
+    // Full-screen takeovers for recording/reviewing a Run or Hike, following the same state-based
+    // screen-swap pattern MainActivity uses for showCalculator (no NavController anywhere in this
+    // app). rememberSaveable survives a configuration change or process restart, but not a
+    // bottom-tab switch: WorkoutScreen is disposed, and a returning run shows as the live card.
     // The type chosen on Train before Start is tapped. Once the run records, the tracker holds it.
     var recordingActivityType by rememberSaveable { mutableStateOf<OutdoorActivityType?>(null) }
     // Whether the person wants the full recording screen. A run does not need it: it ends only on
