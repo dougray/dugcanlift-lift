@@ -21,7 +21,14 @@ data class OutdoorActivity(
     val activeCalories: Double? = null,
     val routePoints: List<RoutePoint> = emptyList(),
     /** Set only after a successful Health Connect export — never export twice. */
-    val healthConnectRecordId: String? = null
+    val healthConnectRecordId: String? = null,
+    /**
+     * What the run kept of its heart rate: whole bpm, or null for "no figure" -- never zero.
+     * [heartRateSource] is the name of the strap or watch it came from.
+     */
+    val averageBpm: Int? = null,
+    val maxBpm: Int? = null,
+    val heartRateSource: String? = null
 ) {
     val durationMs: Long? get() = endedAtEpochMs?.minus(startedAtEpochMs)
 
@@ -43,6 +50,9 @@ internal fun OutdoorActivity.toJson(): JSONObject = JSONObject().apply {
     put("elevationGainMeters", elevationGainMeters)
     activeCalories?.let { put("activeCalories", it) }
     healthConnectRecordId?.let { put("healthConnectRecordId", it) }
+    averageBpm?.let { put("averageBpm", it) }
+    maxBpm?.let { put("maxBpm", it) }
+    heartRateSource?.let { put("heartRateSource", it) }
     put("routePoints", JSONArray().also { array ->
         routePoints.forEach { p ->
             array.put(JSONObject()
@@ -81,7 +91,11 @@ internal fun outdoorActivityFromJson(o: JSONObject): OutdoorActivity {
         activeCalories = o.finiteDoubleOrNull("activeCalories"),
         routePoints = points,
         healthConnectRecordId = if (o.has("healthConnectRecordId") && !o.isNull("healthConnectRecordId"))
-            o.optString("healthConnectRecordId") else null
+            o.optString("healthConnectRecordId") else null,
+        // Optional and additive: a file written before heart rate has none of the three.
+        averageBpm = wholeBpmOrNull(o.opt("averageBpm")),
+        maxBpm = wholeBpmOrNull(o.opt("maxBpm")),
+        heartRateSource = sourceNameOrNull(o.opt("heartRateSource"))
     )
 }
 
