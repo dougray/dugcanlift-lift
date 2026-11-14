@@ -205,6 +205,19 @@ class HeartRateBluetoothTest {
     }
 
     @Test
+    fun `a scan that could not start is said in words and is not looking`() {
+        val failed = HeartRateRadioState.ScanFailed
+        assertEquals("Couldn't look for heart rate devices right now. Try again in a minute.", failed.emptyListMessage)
+        assertFalse(failed.isLooking)
+        val usable = HeartRateRadioState.of(supported = true, permitted = true, enabled = true, locationOk = true, scanFailed = true)
+        assertEquals(HeartRateRadioState.ScanFailed, usable)
+        // What the person can fix comes first: a failed scan never hides "Bluetooth is turned off".
+        assertEquals(HeartRateRadioState.Off, HeartRateRadioState.of(true, true, enabled = false, locationOk = true, scanFailed = true))
+        assertEquals(HeartRateRadioState.Denied, HeartRateRadioState.of(true, permitted = false, enabled = true, locationOk = true, scanFailed = true))
+        assertEquals(HeartRateRadioState.On, HeartRateRadioState.of(true, true, true, true, scanFailed = false))
+    }
+
+    @Test
     fun `an unsettled or working radio is still looking`() {
         for (state in listOf(HeartRateRadioState.On, HeartRateRadioState.Unknown)) {
             assertEquals("Looking for heart rate devices…", state.emptyListMessage)
@@ -243,6 +256,15 @@ class HeartRateBluetoothTest {
         assertFalse(demand.acquire(HeartRateScanDemand.Reason.Sheet))
         assertFalse(demand.release(HeartRateScanDemand.Reason.Sheet))
         assertTrue(demand.release(HeartRateScanDemand.Reason.Probe))
+    }
+
+    @Test
+    fun `it says which holders it has`() {
+        val demand = HeartRateScanDemand()
+        assertFalse(demand.holds(HeartRateScanDemand.Reason.Sheet))
+        demand.acquire(HeartRateScanDemand.Reason.Probe)
+        assertFalse(demand.holds(HeartRateScanDemand.Reason.Sheet))
+        assertTrue(demand.holds(HeartRateScanDemand.Reason.Probe))
     }
 
     @Test

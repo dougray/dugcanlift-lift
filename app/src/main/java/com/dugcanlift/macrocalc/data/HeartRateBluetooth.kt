@@ -77,7 +77,10 @@ enum class HeartRateRadioState {
     Unsupported,
 
     /** Android 11 and older tie a BLE scan to Location being switched on. */
-    LocationOff;
+    LocationOff,
+
+    /** The system refused to start a scan (too many starts, or it threw): not a thing to wait on. */
+    ScanFailed;
 
     /**
      * What the add sheet says while it has nothing to list. Only what the person can fix gets its
@@ -89,6 +92,7 @@ enum class HeartRateRadioState {
             Off -> "Bluetooth is turned off. Turn it on to look for heart rate devices."
             Unsupported -> "This device can't look for Bluetooth heart rate devices."
             LocationOff -> "Android 11 and older need Location turned on to look for heart rate devices."
+            ScanFailed -> "Couldn't look for heart rate devices right now. Try again in a minute."
             Unknown, On -> LOOKING
         }
 
@@ -96,18 +100,28 @@ enum class HeartRateRadioState {
     val isLooking: Boolean
         get() = when (this) {
             Unknown, On -> true
-            Off, Denied, Unsupported, LocationOff -> false
+            Off, Denied, Unsupported, LocationOff, ScanFailed -> false
         }
 
     companion object {
         const val LOOKING = "Looking for heart rate devices…"
 
-        /** Unsupported, then not allowed, then switched off, then Location: the first that fails. */
-        fun of(supported: Boolean, permitted: Boolean, enabled: Boolean, locationOk: Boolean): HeartRateRadioState = when {
+        /**
+         * Unsupported, then not allowed, then switched off, then Location, then a scan the system
+         * refused: the first that applies. What the person can fix is said before a refusal.
+         */
+        fun of(
+            supported: Boolean,
+            permitted: Boolean,
+            enabled: Boolean,
+            locationOk: Boolean,
+            scanFailed: Boolean = false,
+        ): HeartRateRadioState = when {
             !supported -> Unsupported
             !permitted -> Denied
             !enabled -> Off
             !locationOk -> LocationOff
+            scanFailed -> ScanFailed
             else -> On
         }
     }
@@ -124,6 +138,8 @@ class HeartRateScanDemand {
     private val holders = HashSet<Reason>()
 
     val wanted: Boolean get() = holders.isNotEmpty()
+
+    fun holds(reason: Reason): Boolean = reason in holders
 
     /** True when nothing was scanning before: start the radio. Asking twice is one hold. */
     fun acquire(reason: Reason): Boolean {

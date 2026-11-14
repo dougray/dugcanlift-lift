@@ -3,6 +3,7 @@ package com.dugcanlift.macrocalc
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
@@ -60,14 +61,27 @@ import kotlinx.coroutines.withContext
  * for an added device. This class never asks for a permission (only an Activity can): it checks
  * them and says so through [radio].
  *
- * All state lives on the main thread. Bluetooth callbacks arrive on binder threads and hop to it
- * before touching anything. The reading callback is dropped by [disconnect], so a run that forgets
- * to end cannot keep its owner alive; it should still capture no Activity.
+ * All state lives on the main thread. Every public mutator ([startScan], [stopScan], [connect],
+ * [disconnect], [refreshRadio], [inRange]) may be called from any thread: off the main thread it
+ * hops there (calls from one thread keep their order), on it, it runs at once. Bluetooth callbacks
+ * arrive on binder threads and hop the same way. The reading callback is dropped by [disconnect],
+ * so a run that forgets to end cannot keep its owner alive; it should still capture no Activity.
  */
-class HeartRateCentral internal constructor(context: Context) {
+class HeartRateCentral internal constructor(
+    context: Context,
+    scanControl: ScanControl? = null,
+) {
+    /** The radio's scan, so a test can count starts and make one fail. Never used to connect. */
+    internal interface ScanControl {
+        /** True when the scan started. */
+        fun start(callback: ScanCallback): Boolean
+        fun stop(callback: ScanCallback)
+    }
+
     private val appContext = context.applicationContext
     private val manager: BluetoothManager? = appContext.getSystemService(BluetoothManager::class.java)
     private val main = Handler(Looper.getMainLooper())
+    private val scan: ScanControl = scanControl ?: AndroidScanControl()
 
     private val _radio = MutableStateFlow(HeartRateRadioState.Unknown)
 
@@ -82,8 +96,12 @@ class HeartRateCentral internal constructor(context: Context) {
     // Scanning: the sheet's list and a run's range probe share one radio scan.
     private val demand = HeartRateScanDemand()
     private var scanning = false
+    private var scanFailed = false
     private var probing = false
     private val seen = HashSet<String>()
+
+    /** The sheet closed a moment ago: opening it again (a rotation) keeps the list instead of clearing it. */
+    private var sheetLingering = false
 
     // A run's connection.
     private val reconnect = HeartRateReconnect()
@@ -98,13 +116,31 @@ class HeartRateCentral internal constructor(context: Context) {
     // For tests, and for the sheet's "is anything going on" checks.
     internal val isScanning: Boolean get() = scanning
     internal val hasConnection: Boolean get() = gatt != null
+    internal val currentGatt: BluetoothGatt? get() = gatt
     internal val hasReadingCallback: Boolean get() = onReading != null
     internal val hasStartedRadio: Boolean get() = receiverRegistered || scanning || gatt != null
+
+    /** Times state was touched off the main thread. Always 0; a test reads it. */
+    @Volatile internal var offMainMutations = 0
+        private set
+
+    // ---- threading --------------------------------------------------------------------------
+
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() === Looper.getMainLooper()) block() else main.post(block)
+    }
+
+    private fun requireMain() {
+        if (Looper.myLooper() !== Looper.getMainLooper()) offMainMutations++
+    }
 
     // ---- the radio's state ------------------------------------------------------------------
 
     /** Re-reads permission, Bluetooth and Location (on Android 11 and older) into [radio]. */
-    fun refreshRadio() {
+    fun refreshRadio() = onMain { refreshRadioNow() }
+
+    private fun refreshRadioNow() {
+        requireMain()
         _radio.value = computeRadio()
     }
 
@@ -115,11 +151,16 @@ class HeartRateCentral internal constructor(context: Context) {
             permitted = hasPermission(scanPermission) && hasPermission(connectPermission),
             enabled = adapter?.isEnabled == true,
             locationOk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || locationOn(),
+            scanFailed = scanFailed,
         )
     }
 
+    /** A scan can be tried: the radio works. A failed earlier try does not stop a new one. */
+    private fun radioUsable(): Boolean = _radio.value.let { it == HeartRateRadioState.On || it == HeartRateRadioState.ScanFailed }
+
     /** Registered on first use, not at creation, so merely opening Settings starts nothing. */
     private fun ensureStarted() {
+        requireMain()
         if (receiverRegistered) return
         receiverRegistered = true
         val filter = IntentFilter().apply {
@@ -127,35 +168,61 @@ class HeartRateCentral internal constructor(context: Context) {
             addAction(LocationManager.MODE_CHANGED_ACTION)
         }
         ContextCompat.registerReceiver(appContext, stateReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        refreshRadio()
+        refreshRadioNow()
     }
 
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            refreshRadio()
-            if (_radio.value != HeartRateRadioState.On) {
-                // Bluetooth went away: the scan handle is dead with it. Starting again waits for On.
-                scanning = false
-                return
-            }
-            if (demand.wanted) startRadioScan()
-            if (reconnect.target != null && gatt == null) attemptConnection(autoConnect = true)
+            onMain { onRadioBroadcast() }
         }
+    }
+
+    internal fun onRadioBroadcast() {
+        requireMain()
+        refreshRadioNow()
+        if (manager?.adapter?.isEnabled != true) {
+            // Bluetooth went away: the scan handle and any GATT are dead with it. Closing the
+            // GATT here means a stale one cannot block the reconnect when Bluetooth returns.
+            scanning = false
+            main.removeCallbacks(lingerStop)
+            closeGatt()
+            return
+        }
+        if (demand.wanted) startRadioScan()
+        if (reconnect.target != null && gatt == null) attemptConnection(autoConnect = true)
     }
 
     // ---- scanning: the add sheet ------------------------------------------------------------
 
-    /** Starts listing heart rate devices into [found]. Safe to call again (after a permission is granted). */
-    fun startScan() {
+    /**
+     * Starts listing heart rate devices into [found], clearing what an earlier look found (unless
+     * the sheet only just closed, as in a rotation). Safe to call again: after a permission is
+     * granted, or when the sheet comes back to the front.
+     */
+    fun startScan() = onMain {
         ensureStarted()
-        refreshRadio()
+        main.removeCallbacks(endSheetLinger)
+        if (!demand.holds(HeartRateScanDemand.Reason.Sheet) && !sheetLingering) _found.value = emptyList()
+        sheetLingering = false
+        scanFailed = false
+        refreshRadioNow()
         demand.acquire(HeartRateScanDemand.Reason.Sheet)
         startRadioScan()
     }
 
     /** Stops the sheet's list. A run's range probe, if one is going, keeps the scan. */
-    fun stopScan() {
-        if (demand.release(HeartRateScanDemand.Reason.Sheet)) stopRadioScan()
+    fun stopScan() = onMain {
+        if (!demand.holds(HeartRateScanDemand.Reason.Sheet)) return@onMain
+        sheetLingering = true
+        main.removeCallbacks(endSheetLinger)
+        main.postDelayed(endSheetLinger, LINGER_MS)
+        if (demand.release(HeartRateScanDemand.Reason.Sheet)) scheduleStop()
+    }
+
+    private val endSheetLinger = Runnable {
+        requireMain()
+        sheetLingering = false
+        if (!demand.holds(HeartRateScanDemand.Reason.Sheet)) _found.value = emptyList()
     }
 
     // ---- scanning: in range -----------------------------------------------------------------
@@ -169,8 +236,8 @@ class HeartRateCentral internal constructor(context: Context) {
         withContext(Dispatchers.Main.immediate) {
             if (added.isEmpty() || probing) return@withContext emptyList()
             ensureStarted()
-            refreshRadio()
-            if (_radio.value != HeartRateRadioState.On) return@withContext emptyList()
+            refreshRadioNow()
+            if (!radioUsable()) return@withContext emptyList()
             seen.clear()
             probing = true
             demand.acquire(HeartRateScanDemand.Reason.Probe)
@@ -179,28 +246,43 @@ class HeartRateCentral internal constructor(context: Context) {
                 delay(withinMs)
             } finally {
                 probing = false
-                if (demand.release(HeartRateScanDemand.Reason.Probe)) stopRadioScan()
+                if (demand.release(HeartRateScanDemand.Reason.Probe)) scheduleStop()
             }
             val found = seen.toSet()
             seen.clear()
             HeartRateRange.inRange(added, found)
         }
 
-    @SuppressLint("MissingPermission")
     private fun startRadioScan() {
-        if (scanning || !demand.wanted || _radio.value != HeartRateRadioState.On) return
-        val scanner = manager?.adapter?.bluetoothLeScanner ?: return
-        // Only heart rate devices (0x180D). Nothing else nearby is listed or recorded.
-        val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(HEART_RATE_SERVICE)).build()
-        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-        scanning = runCatching { scanner.startScan(listOf(filter), settings, scanCallback) }.isSuccess
+        requireMain()
+        main.removeCallbacks(lingerStop)
+        // Already scanning for this demand: nothing to start (Android refuses a fifth start in 30 s).
+        if (scanning || !demand.wanted || !radioUsable()) return
+        val started = runCatching { scan.start(scanCallback) }.getOrDefault(false)
+        scanning = started
+        scanFailed = !started
+        refreshRadioNow()
     }
 
-    @SuppressLint("MissingPermission")
     private fun stopRadioScan() {
+        requireMain()
         if (!scanning) return
         scanning = false
-        if (hasPermission(scanPermission)) runCatching { manager?.adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
+        runCatching { scan.stop(scanCallback) }
+    }
+
+    /**
+     * A stop waits a moment, so a close followed at once by an open (a rotation, a probe then the
+     * sheet) keeps the one scan instead of stopping and starting it against the system's limit.
+     */
+    private fun scheduleStop() {
+        main.removeCallbacks(lingerStop)
+        main.postDelayed(lingerStop, LINGER_MS)
+    }
+
+    private val lingerStop = Runnable {
+        requireMain()
+        if (!demand.wanted) stopRadioScan()
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -214,13 +296,23 @@ class HeartRateCentral internal constructor(context: Context) {
         }
 
         override fun onScanFailed(errorCode: Int) {
-            main.post { scanning = false }
+            main.post { onScanFailure() }
         }
     }
 
-    private fun onAdvertisement(address: String, name: String?, rssi: Int?) {
+    internal fun onAdvertisement(address: String, name: String?, rssi: Int?) {
+        requireMain()
         if (probing) seen.add(address)
-        if (demand.wanted) _found.value = HeartRateScan.merged(_found.value, address, name, rssi)
+        // The list belongs to the sheet; a run's probe keeps its own results.
+        if (demand.holds(HeartRateScanDemand.Reason.Sheet)) _found.value = HeartRateScan.merged(_found.value, address, name, rssi)
+    }
+
+    /** The system stopped or refused the scan: say so, instead of "Looking" for ever. */
+    internal fun onScanFailure() {
+        requireMain()
+        scanning = false
+        scanFailed = true
+        refreshRadioNow()
     }
 
     // ---- a run's connection -----------------------------------------------------------------
@@ -231,23 +323,23 @@ class HeartRateCentral internal constructor(context: Context) {
      * is ignored (one source per run). An address that is not in [allowed] -- the person's added
      * list, read from storage when not handed over -- is refused, so nothing upstream can make this
      * connect to a stranger's strap. [onReading] is called on the main thread with a bpm above zero
-     * and the epoch milliseconds it arrived.
+     * and the epoch milliseconds it arrived. Callable from any thread.
      */
     fun connect(
         address: String,
         allowed: List<AddedHeartRateDevice>? = null,
         onReading: (bpm: Int, atEpochMs: Long) -> Unit,
-    ) {
+    ) = onMain {
         val added = allowed ?: SettingsStore.get(appContext).heartRateDevices
         reconnect.begin(address, added)
-        if (reconnect.target != address) return
+        if (reconnect.target != address) return@onMain
         this.onReading = onReading
         ensureStarted()
         attemptConnection(autoConnect = false)
     }
 
-    /** Ends the run's connection: no reconnect, no more readings, and the callback is let go. */
-    fun disconnect() {
+    /** Ends the run's connection: no reconnect, no more readings, and the callback is let go. Callable from any thread. */
+    fun disconnect() = onMain {
         main.removeCallbacks(retry)
         reconnect.end()
         onReading = null
@@ -258,6 +350,7 @@ class HeartRateCentral internal constructor(context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun attemptConnection(autoConnect: Boolean) {
+        requireMain()
         val address = reconnect.target ?: return
         if (gatt != null) return   // an attempt is already live
         val adapter = manager?.adapter ?: return
@@ -266,23 +359,30 @@ class HeartRateCentral internal constructor(context: Context) {
         val device = runCatching { adapter.getRemoteDevice(address.uppercase()) }.getOrNull() ?: return
         working = false
         gatt = connectGatt(device, autoConnect)
+        // No handle at all is a failed attempt, not a silence: back off and try the same device.
+        if (gatt == null) linkEnded()
     }
 
+    // Deprecated in SDK 37; its replacement does not exist at minSdk 26 (WatchLinkTransport says the same).
     @SuppressLint("MissingPermission")
-    @Suppress("DEPRECATION")   // the overload without a PHY is the only one at minSdk 26
-    private fun connectGatt(device: android.bluetooth.BluetoothDevice, autoConnect: Boolean): BluetoothGatt? =
-        runCatching { device.connectGatt(appContext, autoConnect, gattCallback, android.bluetooth.BluetoothDevice.TRANSPORT_LE) }.getOrNull()
+    @Suppress("DEPRECATION")
+    private fun connectGatt(device: BluetoothDevice, autoConnect: Boolean): BluetoothGatt? =
+        runCatching { device.connectGatt(appContext, autoConnect, gattCallback, BluetoothDevice.TRANSPORT_LE) }.getOrNull()
 
     @SuppressLint("MissingPermission")
     private fun closeGatt() {
+        requireMain()
         val g = gatt ?: return
         gatt = null
         working = false
-        if (hasPermission(connectPermission)) runCatching { g.disconnect(); g.close() }
+        // close() frees the handle whatever the permission says; disconnect() needs it.
+        if (hasPermission(connectPermission)) runCatching { g.disconnect() }
+        runCatching { g.close() }
     }
 
     /** A link ended. A working one that dropped is retried at once; one that never worked, after a pause. */
     private fun linkEnded() {
+        requireMain()
         val address = reconnect.target
         val wasWorking = working
         closeGatt()
@@ -355,22 +455,38 @@ class HeartRateCentral internal constructor(context: Context) {
         }
     }
 
-    /** Binder thread in, main thread out. Garbled bytes and a zero are no reading. */
-    private fun onMeasurement(g: BluetoothGatt, data: ByteArray, atEpochMs: Long) {
+    /**
+     * A measurement from [g], from whatever thread the stack calls on: bytes that are no reading
+     * stop here; the rest hop to the main thread, and only the link this run holds right now is
+     * heard. The one path from the radio to the run -- the real callbacks and the tests both use it.
+     */
+    internal fun onMeasurement(g: BluetoothGatt, data: ByteArray, atEpochMs: Long) {
         val bpm = HeartRateMeasurement.bpm(data) ?: return
         main.post { if (g === gatt) deliver(g.device.address, bpm, atEpochMs) }
     }
 
     /** What reaches the run: only the run's own device, only while the run holds it. */
     internal fun deliver(address: String, bpm: Int, atEpochMs: Long) {
+        requireMain()
         if (reconnect.target?.equals(address, ignoreCase = true) != true) return
         onReading?.invoke(bpm, atEpochMs)
     }
 
-    /** Test seam for [onMeasurement]'s thread hop: bytes as a strap sends them, from any thread. */
-    internal fun receiveForTest(address: String, data: ByteArray, atEpochMs: Long) {
-        val bpm = HeartRateMeasurement.bpm(data) ?: return
-        main.post { deliver(address, bpm, atEpochMs) }
+    /** The real radio's scan. Filtered to the Heart Rate service: nothing else nearby is listed. */
+    private inner class AndroidScanControl : ScanControl {
+        @SuppressLint("MissingPermission")
+        override fun start(callback: ScanCallback): Boolean {
+            val scanner = manager?.adapter?.bluetoothLeScanner ?: return false
+            val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(HEART_RATE_SERVICE)).build()
+            val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+            scanner.startScan(listOf(filter), settings, callback)
+            return true
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun stop(callback: ScanCallback) {
+            if (hasPermission(scanPermission)) manager?.adapter?.bluetoothLeScanner?.stopScan(callback)
+        }
     }
 
     // ---- permissions --------------------------------------------------------------------------
@@ -391,6 +507,9 @@ class HeartRateCentral internal constructor(context: Context) {
         /** 0x2A37, Heart Rate Measurement. */
         val HEART_RATE_MEASUREMENT: UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
         private val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+        /** How long a scan outlives its last holder, so a close then an open does not restart it. */
+        internal const val LINGER_MS = 2_000L
 
         /** `ScanResult.rssi` for "not available". */
         private const val RSSI_NOT_AVAILABLE = 127

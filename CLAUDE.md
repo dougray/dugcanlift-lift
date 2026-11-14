@@ -1050,7 +1050,10 @@ demand) and `HeartRateBluetoothTest` pins them; `HeartRateCentral` is the thin r
   added list, and connects by `getRemoteDevice(address)`, never from a scan result.
 - **A dropped source is reconnected, never swapped**: the same address only, at once after a drop, 2 s
   then 5 s after a failed connect; `disconnect()` ends it and lets the callback go.
+- **Main-confined**: every public mutator hops to the main thread when called from another, so a
+  service or view model may call it from anywhere. One radio scan outlives its last holder by 2 s
+  (`LINGER_MS`) so a rotation does not restart it against Android's five-starts-in-30-s limit.
 - The radio's state is a `StateFlow` (`HeartRateRadioState`), so the sheet says why it is empty
-  instead of "Looking" for ever. Tracked and shown, never targeted.
+  instead of "Looking" for ever, including a scan the system refused (`ScanFailed`). Tracked and shown, never targeted.
 - No new permission and no `connectedDevice` foreground service type: the recording's location
   service keeps the process alive (`HeartRateManifestTest`).
