@@ -189,3 +189,33 @@ class HeartRateReconnect {
         val RETRY_DELAYS_MS = listOf(2_000L, 5_000L)
     }
 }
+
+/** Settings' words for heart rate, in one place so a test can pin them against the iPhone's. */
+object HeartRateSettingsCopy {
+    const val SECTION_TITLE = "Heart rate"
+    const val AUTOMATIC = "Automatic"
+    const val OFF = "Off"
+    const val ADD_BUTTON = "Add a Bluetooth heart rate device"
+    const val FOOTER =
+        "Automatic uses a device you've added when it's nearby, then LIFT on your watch. " +
+            "Bands that save heart rate to Health Connect fill in the summary after the run."
+    const val SHEET_TITLE = "Add a device"
+    const val SHEET_HINT = "Turn on your strap, or heart rate broadcast on your watch."
+}
+
+/** One row of the heart rate setting: what choosing it stores, and what it is called. */
+data class HeartRateChoice(val setting: HeartRateSetting, val title: String)
+
+object HeartRateChoices {
+    /**
+     * Automatic, Off, then each added device by name in the order added, then -- only when a watch
+     * is paired and can send heart rate ([watchName] non-null) -- the watch by its name. A device
+     * with no stored name still gets a row.
+     */
+    fun rows(devices: List<AddedHeartRateDevice>, watchName: String? = null): List<HeartRateChoice> = buildList {
+        add(HeartRateChoice(HeartRateSetting.Automatic, HeartRateSettingsCopy.AUTOMATIC))
+        add(HeartRateChoice(HeartRateSetting.Off, HeartRateSettingsCopy.OFF))
+        devices.forEach { add(HeartRateChoice(HeartRateSetting.Device(it.id), HeartRateScan.displayName(it.name))) }
+        if (watchName != null) add(HeartRateChoice(HeartRateSetting.Watch, watchName))
+    }
+}

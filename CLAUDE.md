@@ -1034,3 +1034,23 @@ outside one.
   granted; otherwise the row is absent.
 - **Licences**: MapLibre Native (BSD-2), Noto Sans (OFL 1.1) and the OpenStreetMap / OpenFreeMap
   credit are in `NOTICE`. Every map also shows the credit in its corner (the kit's).
+
+## Bluetooth heart rate devices
+
+A run's heart rate can come from a Bluetooth strap (service 0x180D) the person **added** from the
+scan list in Home's Heart rate card. `data/HeartRateBluetooth.kt` holds every rule as plain Kotlin
+(scan list, in-range in added order, reconnect backoff 0 / 2 s / 5 s, radio-state copy, shared scan
+demand) and `HeartRateBluetoothTest` pins them; `HeartRateCentral` is the thin radio shell and is
+**unproven on hardware**. Rules a change must not break:
+
+- **One `HeartRateCentral`** (`HeartRateCentral.get(context)`), shared by a run and the add sheet.
+  Creating it makes no scanner, no GATT and no receiver; the permission prompt belongs to the sheet
+  (the central never asks). `HeartRateCentralTest` scans the source so nothing else constructs one.
+- **Never connect a device nobody added.** `connect(address, allowed)` refuses an address not in the
+  added list, and connects by `getRemoteDevice(address)`, never from a scan result.
+- **A dropped source is reconnected, never swapped**: the same address only, at once after a drop, 2 s
+  then 5 s after a failed connect; `disconnect()` ends it and lets the callback go.
+- The radio's state is a `StateFlow` (`HeartRateRadioState`), so the sheet says why it is empty
+  instead of "Looking" for ever. Tracked and shown, never targeted.
+- No new permission and no `connectedDevice` foreground service type: the recording's location
+  service keeps the process alive (`HeartRateManifestTest`).
