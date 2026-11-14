@@ -16,6 +16,8 @@ import java.util.TimeZone
  */
 object VO2MaxText {
 
+    private const val MAX_PLAUSIBLE = 1000.0
+
     /**
      * `VO2 max 46.2 · Nov 8`, or null for a value that is not a real estimate (zero, negative, not
      * finite): blank is never a zero.
@@ -46,13 +48,12 @@ object VO2MaxText {
      * is a zero, not an estimate.
      */
     internal fun number(value: Double): String? {
-        if (!value.isFinite() || value <= 0.0) return null
+        // A VO2 max is a few tens of ml/kg/min, never near a thousand. Refusing anything at or
+        // above that keeps a corrupt figure (1e16, 1e300, Double.MAX_VALUE) from putting a
+        // hundreds-of-digits string on the screen.
+        if (!value.isFinite() || value <= 0.0 || value >= MAX_PLAUSIBLE) return null
         val rounded = BigDecimal(value.toString()).setScale(1, RoundingMode.HALF_UP)
         if (rounded.signum() <= 0) return null
         return rounded.stripTrailingZeros().toPlainString()
     }
 }
-
-/** "MMM d" the way the reader's locale orders it ("Nov 8", "8 Nov"). */
-internal fun readersMonthDayPattern(locale: Locale): String =
-    android.text.format.DateFormat.getBestDateTimePattern(locale, "MMMd")

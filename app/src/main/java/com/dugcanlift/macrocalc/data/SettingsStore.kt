@@ -162,7 +162,7 @@ class SettingsStore private constructor(context: Context) {
      * only ever picks a device the person added. On this phone only: not in the backup file.
      */
     var heartRateSetting: HeartRateSetting
-        get() = HeartRateSetting.fromStored(prefs.getString(KEY_HEART_RATE_SETTING, null))
+        get() = HeartRateSetting.fromStored(runCatching { prefs.getString(KEY_HEART_RATE_SETTING, null) }.getOrNull())
         set(value) { prefs.edit().putString(KEY_HEART_RATE_SETTING, value.toStored()).apply() }
 
     /**
@@ -181,9 +181,12 @@ class SettingsStore private constructor(context: Context) {
         }.getOrDefault(emptyList())
         set(value) {
             prefs.edit().apply {
-                if (value.isEmpty()) remove(KEY_HEART_RATE_DEVICES)
+                // One entry per id, the first kept in the order added: the picker takes the first
+                // match, so a repeated id must not shadow or reorder anything.
+                val unique = value.distinctBy { it.id }.filter { it.id.isNotEmpty() }
+                if (unique.isEmpty()) remove(KEY_HEART_RATE_DEVICES)
                 else putString(KEY_HEART_RATE_DEVICES, org.json.JSONArray().apply {
-                    value.forEach { put(org.json.JSONObject().put("id", it.id).put("name", it.name)) }
+                    unique.forEach { put(org.json.JSONObject().put("id", it.id).put("name", it.name)) }
                 }.toString())
             }.apply()
         }

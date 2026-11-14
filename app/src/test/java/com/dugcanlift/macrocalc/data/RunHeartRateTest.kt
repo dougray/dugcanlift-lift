@@ -54,6 +54,14 @@ class RunHeartRateTest {
     }
 
     @Test
+    fun `bit zero with other flag bits set is still sixteen bit`() {
+        // 0x11: UInt16 plus bit 4. 0x10: bit 4 alone is still UInt8.
+        assertEquals(300, HeartRateMeasurement.bpm(bytes(0x11, 0x2C, 0x01, 0xFF)))
+        assertEquals(65, HeartRateMeasurement.bpm(bytes(0x10, 65, 0xFF)))
+        assertNull(HeartRateMeasurement.bpm(bytes(0x11, 0x2C)))
+    }
+
+    @Test
     fun `other flag bits do not change the width`() {
         // Bit 3 (energy expended) set, bit 0 clear: still one byte of bpm.
         assertEquals(65, HeartRateMeasurement.bpm(bytes(0x08, 65, 0xFF, 0xFF)))
@@ -134,6 +142,13 @@ class RunHeartRateTest {
     @Test
     fun `a reading over ten seconds old is hidden`() {
         assertNull(LiveHeartRate.shown(LiveHeartRate.Reading(150, start), start + 10_100))
+    }
+
+    @Test
+    fun `a reading exactly ten seconds old still shows because the rule is at most ten`() {
+        // lift-ios: `now - at <= staleAfter` shows. Same here, so both platforms agree to the ms.
+        assertEquals(150, LiveHeartRate.shown(LiveHeartRate.Reading(150, start), start + 10_000))
+        assertNull(LiveHeartRate.shown(LiveHeartRate.Reading(150, start), start + 10_001))
     }
 
     @Test
