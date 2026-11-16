@@ -54,7 +54,9 @@ import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.focusSummary
 import com.dugcanlift.macrocalc.data.HeartRateLines
 import com.dugcanlift.macrocalc.data.LoggedExercise
+import com.dugcanlift.macrocalc.data.LiveRunExtras
 import com.dugcanlift.macrocalc.data.LiveRunStats
+import com.dugcanlift.macrocalc.data.VO2MaxLookup
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.RoutePoint
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
@@ -450,8 +452,13 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
             onOpenLive = { screenWanted = true },
             onFinishLive = {
                 scope.launch {
-                    // Null means a second tap: the first already saved the run.
-                    RecordingFinisher.finish(tracker, outdoorRepo)?.let { reviewingActivityId = it.id }
+                    // Null means a second tap: the first already saves the run.
+                    try {
+                        RecordingFinisher.finish(context, tracker, outdoorRepo)?.let { reviewingActivityId = it.id }
+                    } catch (e: Exception) {
+                        // The run was put back to recording: nothing is lost.
+                        feedback.show(RunFinishCopy.SAVE_FAILED)
+                    }
                 }
             },
             sideBySide = sideBySide
@@ -966,13 +973,15 @@ private fun OutdoorHighlights(
                             ?.takeIf { last.distanceMeters >= OutdoorRecords.MINIMUM_PACE_DISTANCE_METERS }
                             ?.let(OutdoorRecords::paceText) ?: "—")
                 }
+                // Asked once per run shown, on or before its end: never a later estimate.
+                FinishedRunHeartRate(last, rememberVO2MaxLine(last.id, last.endedAtEpochMs))
             }
         }
     }
 
     // While a run records its live card is the first card, in Last route's place.
     val firstCard: (@Composable (Modifier) -> Unit)? = when {
-        live != null -> { m -> LiveRunCard(live, sideBySide, onOpenLive, onFinishLive, m) }
+        live != null -> { m -> LiveRunCard(live, LocationTracker.get(LocalContext.current).heartRate, sideBySide, onOpenLive, onFinishLive, m) }
         last != null -> { m -> lastCard(last, m) }
         else -> null
     }
@@ -1010,6 +1019,7 @@ internal class LiveRunState(
 @Composable
 private fun LiveRunCard(
     live: LiveRunState,
+    heartRate: RunHeartRateController,
     sideBySide: Boolean,
     onOpen: () -> Unit,
     onFinish: () -> Unit,
@@ -1023,6 +1033,8 @@ private fun LiveRunCard(
         }
     }
     val stats = LiveRunStats.compute(live.points, live.startedAtEpochMs, nowMs)
+    // Asked once while this card shows, held in state: the 1 s tick never queries.
+    val vo2MaxLine = rememberVO2MaxLine(live.startedAtEpochMs, VO2MaxLookup.LATEST)
 
     Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1044,8 +1056,9 @@ private fun LiveRunCard(
                 OutdoorStat("Distance", stats.distanceText())
                 OutdoorStat("Pace", stats.paceText())
             }
-            // Heart rate and VO2 max lines go here (plan 3); nothing draws in this slot yet.
-            liveExtras()
+            // Read here, with this composable's own tick, so the number goes to a dash at ten
+            // seconds without anything else changing.
+            LiveRunExtrasBlock(LiveRunExtras(heartRate.liveHeartRate(nowMs), vo2MaxLine))
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onOpen, modifier = Modifier.weight(1f), colors = dclOutlinedButtonColors()) {
@@ -1058,10 +1071,6 @@ private fun LiveRunCard(
         }
     }
 }
-
-/** The live card's slot for plan 3's heart rate and VO2 max lines. Empty on purpose. */
-@Composable
-private fun liveExtras() {}
 
 @Composable
 private fun RowScope.OutdoorStat(label: String, value: String) {

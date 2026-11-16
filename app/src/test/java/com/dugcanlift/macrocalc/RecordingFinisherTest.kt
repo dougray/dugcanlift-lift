@@ -26,6 +26,7 @@ class RecordingFinisherTest {
     private lateinit var context: Context
     private lateinit var tracker: LocationTracker
     private lateinit var repository: OutdoorActivityRepository
+    private val history = FakeHistory()
 
     @Before
     fun setUp() {
@@ -48,8 +49,8 @@ class RecordingFinisherTest {
         assertTrue(tracker.start(OutdoorActivityType.WALK))
         assertTrue(tracker.isRecording.value)
 
-        val first = RecordingFinisher.finish(tracker, repository)
-        val second = RecordingFinisher.finish(tracker, repository)
+        val first = RecordingFinisher.finish(context, tracker, repository, history)
+        val second = RecordingFinisher.finish(context, tracker, repository, history)
 
         assertNotNull(first)
         assertNull(second)
@@ -62,7 +63,7 @@ class RecordingFinisherTest {
 
     @Test
     fun finishWithNothingRecordingSavesNothing() = runTest {
-        assertNull(RecordingFinisher.finish(tracker, repository))
+        assertNull(RecordingFinisher.finish(context, tracker, repository, history))
         assertEquals(0, repository.activitiesForBackup().size)
     }
 
@@ -70,7 +71,7 @@ class RecordingFinisherTest {
     fun finishWorksWithNoScreenAtAll() = runTest {
         // The stranded case: the tracker runs, no recording screen was ever composed.
         assertTrue(tracker.start(OutdoorActivityType.HIKE))
-        val saved = RecordingFinisher.finish(tracker, repository)
+        val saved = RecordingFinisher.finish(context, tracker, repository, history)
         assertNotNull(saved)
         assertEquals(OutdoorActivityType.HIKE, saved!!.activityType)
         assertEquals(1, repository.activitiesForBackup().size)
@@ -81,7 +82,7 @@ class RecordingFinisherTest {
         assertTrue(tracker.start(OutdoorActivityType.RUN))
         tracker.stop()
         assertFalse(tracker.isRecording.value)
-        assertNull(RecordingFinisher.finish(tracker, repository))
+        assertNull(RecordingFinisher.finish(context, tracker, repository, history))
         assertEquals(0, repository.activitiesForBackup().size)
     }
 }

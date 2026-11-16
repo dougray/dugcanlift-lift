@@ -65,7 +65,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.LiveRunStats
 import com.dugcanlift.macrocalc.data.OutdoorActivityMath
+import com.dugcanlift.macrocalc.data.LiveRunExtras
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
+import com.dugcanlift.macrocalc.data.VO2MaxLookup
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.RoutePoint
 import com.dugcanlift.macrocalc.data.formattedElevationGainFeet
@@ -123,6 +125,7 @@ fun OutdoorRecordingScreen(
     val tracker = remember { LocationTracker.get(context) }
     val repository = remember { OutdoorActivityRepository.get(context) }
     val scope = rememberCoroutineScope()
+    val feedback = LocalAppFeedback.current
 
     var selectedActivityType by remember { mutableStateOf(activityType) }
     // Source of truth for "is a recording live" lives on the tracker, not
@@ -214,6 +217,9 @@ fun OutdoorRecordingScreen(
         elevationGainMeters = OutdoorActivityMath.elevationGainMeters(routePoints)
     ).formattedElevationGainFeet()
 
+    // Asked once while this run records, held in state; no query per tick.
+    val liveVo2Line = rememberVO2MaxLine(startedAtEpochMs, if (isRecordingActive) VO2MaxLookup.LATEST else null)
+
     val activityChips: @Composable () -> Unit = {
         if (!isRecordingActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -235,6 +241,8 @@ fun OutdoorRecordingScreen(
             OutdoorStatRow(label = "Distance", value = liveStats.distanceText())
             OutdoorStatRow(label = "Pace", value = liveStats.paceText())
             OutdoorStatRow(label = "Elevation", value = elevationText)
+            // The same lines Train's card shows. Read with this screen's own once-a-second `nowMs`.
+            LiveRunExtrasBlock(LiveRunExtras(tracker.heartRate.liveHeartRate(nowMs), liveVo2Line))
             if (providerDisabled) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -276,7 +284,12 @@ fun OutdoorRecordingScreen(
                         // The same finish Train's card runs. A second tap finds nothing
                         // recording and is ignored without a word: the first one saved.
                         scope.launch {
-                            RecordingFinisher.finish(tracker, repository)?.let(onFinished)
+                            try {
+                                RecordingFinisher.finish(context, tracker, repository)?.let(onFinished)
+                            } catch (e: Exception) {
+                                // The run was put back to recording: nothing is lost.
+                                feedback.show(RunFinishCopy.SAVE_FAILED)
+                            }
                         }
                     },
                     modifier = Modifier.weight(1f)

@@ -41,6 +41,12 @@
          stops dead a month back for no visible reason. Optional: refusing it
          costs the older steps and nothing else. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <!-- A run's summary: the heart rate Health Connect holds for the run's own minutes (a watch or
+         band that saves to Health Connect), and the newest VO2 max estimate. Each is its own
+         grant and both are optional: refusing them costs those two lines and nothing else.
+         Asked for only from the heart rate card on Home, after it says what they are for. -->
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
     <!-- Write side: exporting a finished Run/Hike as an exercise session,
          its GPS route, its distance, and its elevation gain. Each is its own
          separate grant — Health Connect can let an app log a workout without

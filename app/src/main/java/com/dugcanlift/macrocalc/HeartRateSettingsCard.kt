@@ -12,7 +12,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +27,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.PermissionController
+import com.dugcanlift.macrocalc.data.HealthConnectManager
+import com.dugcanlift.macrocalc.data.HeartRateAccessOffer
 import com.dugcanlift.macrocalc.data.HeartRateChoices
 import com.dugcanlift.macrocalc.data.HeartRateDevices
 import com.dugcanlift.macrocalc.data.HeartRateSetting
@@ -50,6 +55,16 @@ fun HeartRateSettingsCard(modifier: Modifier = Modifier) {
     var setting by remember { mutableStateOf(settings.heartRateSetting) }
     var devices by remember { mutableStateOf(settings.heartRateDevices) }
     var adding by rememberSaveable { mutableStateOf(false) }
+
+    // People who connected Health Connect for steps before heart rate existed were never asked for
+    // the two newer reads, and nothing else asks for a permission added later. Never asked on its
+    // own: only this button opens Health Connect's sheet, after the footer below says what it is for.
+    val healthConnectAvailable = remember { HealthConnectManager.isAvailable(context) }
+    var granted by remember { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(Unit) { granted = HealthConnectManager.grantedPermissions(context) }
+    val grantLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract()
+    ) { result -> granted = result }
 
     // The watch row waits for the watch link (LIFT Link v5): no watch is offered as a source yet.
     val rows = HeartRateChoices.rows(devices, watchName = null)
@@ -95,6 +110,12 @@ fun HeartRateSettingsCard(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (HeartRateAccessOffer.shouldOffer(healthConnectAvailable, granted, HealthConnectManager.heartRatePermission)) {
+                TextButton(
+                    onClick = { grantLauncher.launch(HealthConnectManager.heartRatePermissions) },
+                    colors = dclTextButtonColors()
+                ) { Text(HeartRateSettingsCopy.HEALTH_CONNECT_BUTTON) }
+            }
         }
     }
 

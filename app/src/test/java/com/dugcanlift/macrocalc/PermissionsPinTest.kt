@@ -41,11 +41,14 @@ class PermissionsPinTest {
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
-        // "Health Connect and Apple Health" > "Android — Health Connect". Reads: steps only, plus
-        // history older than 30 days. Writes: a finished run, walk or hike as an exercise session
+        // "Health Connect and Apple Health" > "Android — Health Connect". Reads: steps, plus
+        // history older than 30 days, plus (heart rate on a run) the heart rate Health Connect
+        // holds for a run's own minutes and the newest VO2 max estimate. Writes: a finished run, walk or hike as an exercise session
         // with its route, distance and elevation gain.
         "android.permission.health.READ_STEPS",
         "android.permission.health.READ_HEALTH_DATA_HISTORY",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_VO2_MAX",
         "android.permission.health.WRITE_EXERCISE",
         "android.permission.health.WRITE_EXERCISE_ROUTE",
         "android.permission.health.WRITE_DISTANCE",

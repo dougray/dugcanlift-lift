@@ -110,20 +110,44 @@ class OutdoorActivityRepository private constructor(context: Context) {
     }
 
     suspend fun save(activity: OutdoorActivity) = withContext(Dispatchers.IO) {
-        val existing = read()
-        val updated = if (existing.any { it.id == activity.id }) {
-            existing.map { if (it.id == activity.id) activity else it }
-        } else {
-            existing + activity
+        synchronized(this@OutdoorActivityRepository) {
+            val existing = read()
+            val updated = if (existing.any { it.id == activity.id }) {
+                existing.map { if (it.id == activity.id) activity else it }
+            } else {
+                existing + activity
+            }
+            write(updated)
+            _activities.value = updated
         }
-        write(updated)
-        _activities.value = updated
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        val updated = read().filterNot { it.id == id }
-        write(updated)
-        _activities.value = updated
+        synchronized(this@OutdoorActivityRepository) {
+            val updated = read().filterNot { it.id == id }
+            write(updated)
+            _activities.value = updated
+        }
+    }
+
+    /**
+     * Writes a heart rate record onto a saved run, read-modify-write under one lock against what
+     * is stored *now*: false (and nothing written) when the run is gone -- deleted while Health
+     * Connect answered -- or has figures already. Fields the review changed meanwhile (an export's
+     * record id) are kept, because the record is merged into the stored run, not a stale copy.
+     * Returns the run as stored, or null.
+     */
+    suspend fun fillHeartRate(id: String, record: RunHeartRateRecord): OutdoorActivity? = withContext(Dispatchers.IO) {
+        synchronized(this@OutdoorActivityRepository) {
+            val existing = read()
+            val current = existing.firstOrNull { it.id == id } ?: return@synchronized null
+            if (RunHeartRateFinish.hasFigures(current)) return@synchronized null
+            val filled = RunHeartRateFinish.apply(record, current)
+            val updated = existing.map { if (it.id == id) filled else it }
+            write(updated)
+            _activities.value = updated
+            filled
+        }
     }
 
     /** Finished activities only, read from the file rather than [activities],

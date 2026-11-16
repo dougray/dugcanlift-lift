@@ -8,6 +8,9 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ElevationGainedRecord
 import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.Vo2MaxRecord
+import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.metadata.Device
@@ -35,6 +38,20 @@ import java.time.format.DateTimeFormatter
  * export itself.
  */
 object HealthConnectManager {
+
+    /**
+     * What a run's summary reads: heart rate between its start and end, and the newest VO2 max
+     * estimate. Kept apart from [permissions] (steps), which still decides "steps connected", and
+     * from [permissionsToRequest]: a person is asked for these from the heart rate card, after it
+     * says what they are for, never as part of the steps button.
+     */
+    val heartRatePermissions: Set<String> = setOf(
+        HealthPermission.getReadPermission(HeartRateRecord::class),
+        HealthPermission.getReadPermission(Vo2MaxRecord::class)
+    )
+
+    /** The one whose absence the card offers a grant for (see [HeartRateAccessOffer]). */
+    val heartRatePermission: String = HealthPermission.getReadPermission(HeartRateRecord::class)
 
     val permissions: Set<String> = setOf(
         HealthPermission.getReadPermission(StepsRecord::class)
@@ -83,6 +100,18 @@ object HealthConnectManager {
         if (!isAvailable(context)) return false
         val client = HealthConnectClient.getOrCreate(context)
         return client.permissionController.getGrantedPermissions().containsAll(permissions)
+    }
+
+    /** What this app may read right now, empty when Health Connect is unavailable or refuses. */
+    suspend fun grantedPermissions(context: Context): Set<String> {
+        if (!isAvailable(context)) return emptySet()
+        return try {
+            HealthConnectClient.getOrCreate(context).permissionController.getGrantedPermissions()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptySet()
+        }
     }
 
     suspend fun hasWritePermission(context: Context): Boolean {
@@ -214,6 +243,83 @@ object HealthConnectManager {
             // A failed history read must not stop someone sending their log.
             emptyMap()
         }
+    }
+
+    /**
+     * Every heart rate sample Health Connect holds between [startEpochMs] and [endEpochMs], from
+     * any source (a watch, a band, another app), in bpm. Empty when Health Connect is unavailable,
+     * the read permission is not granted, or the read fails: "denied" and "none" look the same, so
+     * nothing is invented and nothing is shown. Cancellation is never swallowed.
+     */
+    suspend fun heartRates(context: Context, startEpochMs: Long, endEpochMs: Long): List<Int> {
+        if (!isAvailable(context) || endEpochMs <= startEpochMs) return emptyList()
+        return try {
+            val client = HealthConnectClient.getOrCreate(context)
+            if (heartRatePermission !in client.permissionController.getGrantedPermissions()) return emptyList()
+            val bpm = ArrayList<Int>()
+            var pageToken: String? = null
+            do {
+                val response = client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateRecord::class,
+                        timeRangeFilter = TimeRangeFilter.between(
+                            Instant.ofEpochMilli(startEpochMs), Instant.ofEpochMilli(endEpochMs)
+                        ),
+                        pageToken = pageToken
+                    )
+                )
+                response.records.forEach { record ->
+                    record.samples.forEach { sample ->
+                        // Only a pulse inside the run's own window counts.
+                        val at = sample.time.toEpochMilli()
+                        if (at in startEpochMs..endEpochMs) bpm.add(sample.beatsPerMinute.toInt())
+                    }
+                }
+                pageToken = response.pageToken
+            } while (pageToken != null)
+            bpm
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** The newest VO2 max estimate at or before [onOrBeforeEpochMs], or null (none, denied, failed). */
+    suspend fun latestVO2Max(context: Context, onOrBeforeEpochMs: Long): VO2MaxEstimate? {
+        if (!isAvailable(context)) return null
+        return try {
+            val client = HealthConnectClient.getOrCreate(context)
+            if (HealthPermission.getReadPermission(Vo2MaxRecord::class) !in
+                client.permissionController.getGrantedPermissions()) return null
+            val before = if (onOrBeforeEpochMs == VO2MaxLookup.LATEST) Instant.now()
+            else Instant.ofEpochMilli(onOrBeforeEpochMs)
+            val response = client.readRecords(
+                ReadRecordsRequest(
+                    recordType = Vo2MaxRecord::class,
+                    // `before` is exclusive of the end instant; one millisecond makes it "on or before".
+                    timeRangeFilter = TimeRangeFilter.before(before.plusMillis(1)),
+                    ascendingOrder = false,
+                    pageSize = 1
+                )
+            )
+            response.records.firstOrNull()?.let {
+                VO2MaxEstimate(it.vo2MillilitersPerMinuteKilogram, it.time.toEpochMilli())
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** The real Health Connect, as the pipeline's two read interfaces. */
+    class History(context: Context) : HeartRateHistory, VO2MaxHistory {
+        private val appContext = context.applicationContext
+        override suspend fun heartRates(startEpochMs: Long, endEpochMs: Long): List<Int> =
+            heartRates(appContext, startEpochMs, endEpochMs)
+        override suspend fun latestVO2Max(onOrBeforeEpochMs: Long): VO2MaxEstimate? =
+            latestVO2Max(appContext, onOrBeforeEpochMs)
     }
 
     private val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")

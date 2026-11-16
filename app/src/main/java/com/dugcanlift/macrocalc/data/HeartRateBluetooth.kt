@@ -215,6 +215,8 @@ object HeartRateSettingsCopy {
     const val FOOTER =
         "Automatic uses a device you've added when it's nearby, then LIFT on your watch. " +
             "Bands that save heart rate to Health Connect fill in the summary after the run."
+    /** Beside the steps card's "Read steps from Health Connect": the same sheet, for the two newer reads. */
+    const val HEALTH_CONNECT_BUTTON = "Read heart rate and VO2 max from Health Connect"
     const val SHEET_TITLE = "Add a device"
     const val SHEET_HINT = "Turn on your strap, or heart rate broadcast on your watch."
 }
