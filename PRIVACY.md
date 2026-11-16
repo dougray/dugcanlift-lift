@@ -103,6 +103,13 @@ requests whatsoever.
   asks for this only when you tap **Read steps from Health Connect** on the
   Steps card, after the card explains it. Steps are not stored by the app and
   are never sent anywhere else.
+- **Health Connect (heart rate and VO2 max, read-only: `READ_HEART_RATE`,
+  `READ_VO2_MAX`)** — used to fill in a finished run's average and highest heart
+  rate when no Bluetooth strap supplied them, and to show your newest VO2 max
+  estimate on a run. The app asks for these only when you tap **Read heart rate
+  and VO2 max from Health Connect** on the Heart rate card. A run keeps its
+  average, its highest heart rate and the name of where it came from; the
+  readings and the VO2 max are not stored and are never sent anywhere.
 - **Health Connect (write: `WRITE_EXERCISE`, `WRITE_EXERCISE_ROUTE`,
   `WRITE_DISTANCE`, `WRITE_ELEVATION_GAINED`)** — when you finish a Run or
   Hike and choose to export it, the app can write that activity to Health

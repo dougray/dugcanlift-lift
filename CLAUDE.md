@@ -1057,3 +1057,29 @@ demand) and `HeartRateBluetoothTest` pins them; `HeartRateCentral` is the thin r
   instead of "Looking" for ever, including a scan the system refused (`ScanFailed`). Tracked and shown, never targeted.
 - No new permission and no `connectedDevice` foreground service type: the recording's location
   service keeps the process alive (`HeartRateManifestTest`).
+
+## A run's heart rate and VO2 max
+
+`RunHeartRateController` (owned by `LocationTracker`, which tells it when a run starts and stops, so a
+Discard that only calls `stop()` still lets the strap go) picks the run's **one** source once, at
+start: `inRange(added)` for 3 s, `HeartRateSourcePicker.pick`, and **only the picker's output is
+connected**. A pick that finishes after the run ended or began finishing connects nothing; a strap
+that appears later is not used live (Health Connect fills the summary after the run); a source that
+goes quiet shows a dash after 10 s and is reconnected by the radio, never swapped. The watch is not
+a source yet (`watchAvailable = false`; the watch link is its own slice). The rules are in
+`data/RunHeartRatePipeline.kt` (plain Kotlin) and pinned by `RunHeartRatePipelineTest`,
+`RunHeartRateControllerTest`, `RecordingFinisherTest`.
+
+- **Finish** (`RecordingFinisher.finish(context, ...)`): snapshots the route and end time at the tap,
+  asks Health Connect only when no strap spoke and the setting is not Off (10 s timeout), then takes
+  the run from the tracker (`takeRecording(startedAt)`: only *that* run) and saves once under
+  `NonCancellable`. A second Finish is a no-op; a Discard while it waits wins; a save that throws puts
+  the run back to recording (`LocationTracker.resume`) and rethrows.
+- **The review re-asks** Health Connect once per appearance for a run with no figures that ended under
+  7 days ago, and writes through `OutdoorActivityRepository.fillHeartRate`, which merges into the
+  stored run and refuses a deleted run or one that has figures.
+- **VO2 max is read for display, never stored**, once per appearance (`rememberVO2MaxLine`): the
+  live card the newest estimate, a finished run the newest on or before its end. It is not gated by
+  the heart rate Off setting.
+- `READ_HEART_RATE` and `READ_VO2_MAX` are asked for only from the Heart rate card's button
+  (`HeartRateAccessOffer`), after its footer explains them; the Steps button still asks for steps.
