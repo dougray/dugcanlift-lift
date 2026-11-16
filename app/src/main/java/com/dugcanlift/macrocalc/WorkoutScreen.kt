@@ -451,15 +451,14 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
             live = liveRun,
             onOpenLive = { screenWanted = true },
             onFinishLive = {
-                scope.launch {
-                    // Null means a second tap: the first already saves the run.
-                    try {
-                        RecordingFinisher.finish(context, tracker, outdoorRepo)?.let { reviewingActivityId = it.id }
-                    } catch (e: Exception) {
-                        // The run was put back to recording: nothing is lost.
-                        feedback.show(RunFinishCopy.SAVE_FAILED)
-                    }
-                }
+                // In the tracker's own scope: leaving Train during the Health Connect wait does not
+                // cancel the Finish. Present, the review opens; gone, the run is saved and shows in
+                // Last route. A null result (a second tap) says nothing: the first saves the run.
+                RecordingFinisher.launchFinish(
+                    context, tracker, outdoorRepo,
+                    onSaved = { reviewingActivityId = it.id },
+                    onFailed = { feedback.show(it) }
+                )
             },
             sideBySide = sideBySide
         )

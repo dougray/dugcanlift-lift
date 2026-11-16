@@ -14,6 +14,9 @@ import androidx.core.content.ContextCompat
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.RoutePoint
 import kotlin.math.abs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,6 +63,12 @@ class LocationTracker private constructor(context: Context) {
     }
 
     @Volatile var runListener: RunListener? = null
+
+    /**
+     * Outlives every screen: a Finish the person tapped completes (and saves) even if they switch
+     * tabs or press Back while Health Connect answers.
+     */
+    val finishScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /**
      * This run's heart rate. Owned here, with the run, rather than by a screen: a screen leaving
@@ -187,7 +196,8 @@ class LocationTracker private constructor(context: Context) {
 
         _routePoints.value = points
         _providerDisabled.value = false
-        lastKnownAltitudeMeters = 0.0
+        // A put-back run carries on from its last altitude: a fix without one must not read as sea level.
+        lastKnownAltitudeMeters = points.lastOrNull()?.altitudeMeters ?: 0.0
 
         return try {
             locationManager.requestLocationUpdates(

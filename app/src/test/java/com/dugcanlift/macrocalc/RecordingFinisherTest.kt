@@ -9,7 +9,10 @@ import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.AddedHeartRateDevice
 import com.dugcanlift.macrocalc.data.HeartRateSetting
+import android.location.Location
 import java.io.File
+import kotlinx.coroutines.Job
+import org.junit.Assert.assertSame
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -247,6 +250,10 @@ class RecordingFinisherTest {
         installRadio(backgroundScope).inRangeAnswer = emptyList()
         assertTrue(tracker.start(OutdoorActivityType.RUN))
         runCurrent()
+        fix(40.0, -105.0, altitude = 1600.0)
+        fix(40.0001, -105.0, altitude = 1601.0)
+        val route = tracker.routePoints.value
+        assertEquals(2, route.size)
         val startedAt = tracker.startedAtEpochMs.value
         // Make the store unwritable: its temp file's name is taken by a directory.
         val blocker = File(context.filesDir, "outdoor_activities.json.tmp").also { it.mkdirs() }
@@ -257,6 +264,7 @@ class RecordingFinisherTest {
         assertTrue(threw)
         assertTrue(tracker.isRecording.value) // nothing lost: the run is back
         assertEquals(startedAt, tracker.startedAtEpochMs.value) // with its own start time
+        assertEquals(route, tracker.routePoints.value) // and its route points
         assertFalse(tracker.heartRate.isFinishing)
         assertEquals(0, repository.activitiesForBackup().size)
 
@@ -265,5 +273,225 @@ class RecordingFinisherTest {
         assertEquals(1, repository.activitiesForBackup().size)
         assertNull(RecordingFinisher.finish(context, tracker, repository, history))
         assertEquals(1, repository.activitiesForBackup().size)
+    }
+
+    // ---- the run-ending path: put back, leaving the screen, gates, cancellation -----------------
+
+    private var fixes = 0
+
+    /** A GPS fix the tracker's own listener receives; each is 10 s and 11 m on from the last, past its filters. */
+    private fun fix(lat: Double, lon: Double, altitude: Double? = null) {
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        fixes++
+        val location = Location(LocationManager.GPS_PROVIDER).apply {
+            latitude = lat; longitude = lon; accuracy = 5f; time = System.currentTimeMillis()
+            elapsedRealtimeNanos = android.os.SystemClock.elapsedRealtimeNanos() + fixes * 10_000_000_000L
+            if (altitude != null) this.altitude = altitude
+        }
+        shadowOf(manager).simulateLocation(location)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+    }
+
+    /** Finish with a save that fails after [beforeFailing] has changed the world. */
+    private suspend fun finishWithFailingSave(beforeFailing: () -> Unit): RunNotSavedException {
+        try {
+            RecordingFinisher.finish(context, tracker, repository, history, saveRun = {
+                beforeFailing()
+                throw java.io.IOException("disk full")
+            })
+        } catch (e: RunNotSavedException) {
+            return e
+        }
+        throw AssertionError("finish did not fail")
+    }
+
+    @Test
+    fun `a run that cannot be put back says so, with GPS off`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val failure = finishWithFailingSave { shadowOf(manager).setProviderEnabled(LocationManager.GPS_PROVIDER, false) }
+        assertFalse(failure.putBack)
+        assertFalse(tracker.isRecording.value)
+        assertEquals(RunFinishCopy.RUN_LOST, RunFinishCopy.messageFor(failure))
+    }
+
+    @Test
+    fun `a run that cannot be put back says so, with location permission revoked`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        val app = context as Application
+        val failure = finishWithFailingSave { shadowOf(app).denyPermissions(Manifest.permission.ACCESS_FINE_LOCATION) }
+        assertFalse(failure.putBack)
+        assertEquals(RunFinishCopy.RUN_LOST, RunFinishCopy.messageFor(failure))
+    }
+
+    @Test
+    fun `a run that cannot be put back says so, when another run began during the save`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        val failure = finishWithFailingSave { assertTrue(tracker.start(OutdoorActivityType.WALK)) }
+        assertFalse(failure.putBack)
+        assertEquals(OutdoorActivityType.WALK, tracker.activityType.value) // the new run is not disturbed
+        assertEquals(RunFinishCopy.RUN_LOST, RunFinishCopy.messageFor(failure))
+    }
+
+    @Test
+    fun `a run that is put back says it is still recording`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        val failure = finishWithFailingSave { }
+        assertTrue(failure.putBack)
+        assertTrue(tracker.isRecording.value)
+        assertEquals(RunFinishCopy.SAVE_FAILED, RunFinishCopy.messageFor(failure))
+    }
+
+    @Test
+    fun `the words follow what is true and a cancellation says nothing`() {
+        assertNull(RunFinishCopy.messageFor(kotlinx.coroutines.CancellationException("screen left")))
+        assertEquals(RunFinishCopy.SAVE_FAILED, RunFinishCopy.messageFor(RunNotSavedException(true, RuntimeException())))
+        assertEquals(RunFinishCopy.RUN_LOST, RunFinishCopy.messageFor(RunNotSavedException(false, RuntimeException())))
+        assertEquals(RunFinishCopy.SAVE_FAILED, RunFinishCopy.messageFor(IllegalStateException()))
+        assertFalse(RunFinishCopy.SAVE_FAILED == RunFinishCopy.RUN_LOST)
+    }
+
+    @Test
+    fun `a Finish started from a screen still saves exactly once after that screen's scope is cancelled`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        runCurrent()
+        history.gate = CompletableDeferred()
+        history.result = listOf(110, 130)
+        // A click handler on a screen: it only starts the Finish, which runs in the tracker's scope.
+        val screen = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        var saved: com.dugcanlift.macrocalc.data.OutdoorActivity? = null
+        val failures = ArrayList<String>()
+        lateinit var finish: Job
+        screen.launch(kotlinx.coroutines.Dispatchers.Unconfined) {
+            finish = RecordingFinisher.launchFinish(
+                context, tracker, repository, onSaved = { saved = it }, onFailed = { failures.add(it) },
+                scope = backgroundScope, history = history
+            )
+            kotlinx.coroutines.awaitCancellation()
+        }
+        runCurrent()
+        screen.coroutineContext[Job]!!.cancel() // a tab switch or Back during the Health Connect wait
+        history.gate!!.complete(Unit)
+        finish.join()
+
+        assertNotNull(saved)
+        assertEquals(1, repository.activitiesForBackup().size)
+        assertEquals(saved!!.id, repository.activitiesForBackup().single().id)
+        assertTrue(failures.isEmpty())
+        assertEquals(1, history.calls.size)
+    }
+
+    @Test
+    fun `a cancelled Finish shows no failure and saves nothing`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        runCurrent()
+        history.gate = CompletableDeferred()
+        val failures = ArrayList<String>()
+        var savedCount = 0
+        val job = RecordingFinisher.launchFinish(
+            context, tracker, repository, onSaved = { savedCount++ }, onFailed = { failures.add(it) },
+            scope = backgroundScope, history = history
+        )
+        runCurrent()
+        job.cancel()
+        job.join()
+        assertTrue(failures.toString(), failures.isEmpty())
+        assertEquals(0, savedCount)
+        assertEquals(0, repository.activitiesForBackup().size)
+        assertTrue(tracker.isRecording.value) // the run goes on, and the next Finish saves it
+    }
+
+    @Test
+    fun `a failed Finish through the launcher says the words that are true`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        runCurrent()
+        val blocker = File(context.filesDir, "outdoor_activities.json.tmp").also { it.mkdirs() }
+        val failures = ArrayList<String>()
+        RecordingFinisher.launchFinish(
+            context, tracker, repository, onSaved = {}, onFailed = { failures.add(it) },
+            scope = backgroundScope, history = history
+        ).join()
+        blocker.delete()
+        assertEquals(listOf(RunFinishCopy.SAVE_FAILED), failures)
+    }
+
+    @Test
+    fun `cancelled during the save, a saved run is never put back and never saved twice`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        runCurrent()
+        lateinit var job: Job
+        var saves = 0
+        job = launch {
+            // Whether the cancellation surfaces on return from the save or at the next suspension,
+            // the run is on disk once and is not put back to record again.
+            try {
+                RecordingFinisher.finish(context, tracker, repository, history, saveRun = {
+                    job.cancel() // the screen's scope dies while the save runs
+                    saves++
+                    repository.save(it)
+                })
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            }
+        }
+        job.join()
+        assertEquals(1, saves)
+        assertEquals(1, repository.activitiesForBackup().size) // saved
+        assertFalse(tracker.isRecording.value) // and not put back
+        assertNull(RecordingFinisher.finish(context, tracker, repository, history)) // a retry has nothing to save
+        assertEquals(1, repository.activitiesForBackup().size)
+    }
+
+    @Test
+    fun `a Finish still waiting for a discarded run does not cost the next run its strap or its own Finish`() = runTest {
+        val central = installRadio(backgroundScope)
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        runCurrent()
+        // Run A: no readings, so its Finish asks a slow Health Connect.
+        history.gate = CompletableDeferred()
+        history.result = listOf(100)
+        var aResult: Any? = "unset"
+        val a = launch { aResult = RecordingFinisher.finish(context, tracker, repository, history) }
+        runCurrent()
+        tracker.stop() // Discard
+        Thread.sleep(5)
+        central.probe = CompletableDeferred() // B's three second look is still going when...
+        assertTrue(tracker.start(OutdoorActivityType.WALK))
+        runCurrent()
+        central.probe!!.complete(Unit) // ...it finishes, with A's wait still open
+        runCurrent()
+        central.deliver(150, System.currentTimeMillis())
+        central.deliver(170, System.currentTimeMillis())
+
+        val b = RecordingFinisher.finish(context, tracker, repository, history)!! // B's own Finish works
+        assertEquals("Polar H10", b.heartRateSource)
+        assertEquals(160, b.averageBpm)
+        assertEquals(OutdoorActivityType.WALK, b.activityType)
+
+        history.gate!!.complete(Unit)
+        a.join()
+        assertNull(aResult)
+        assertEquals(1, repository.activitiesForBackup().size) // only B
+    }
+
+    @Test
+    fun `a put-back run carries on from its last altitude, not sea level`() = runTest {
+        installRadio(backgroundScope).inRangeAnswer = emptyList()
+        assertTrue(tracker.start(OutdoorActivityType.RUN))
+        fix(40.0, -105.0, altitude = 1600.0)
+        val failure = finishWithFailingSave { }
+        assertTrue(failure.putBack)
+        fix(40.0002, -105.0) // a fix with no altitude of its own
+        val points = tracker.routePoints.value
+        assertEquals(2, points.size)
+        assertEquals(1600.0, points.last().altitudeMeters, 0.0)
     }
 }

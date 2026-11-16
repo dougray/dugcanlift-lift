@@ -312,5 +312,7 @@ class RunHeartRatePipelineTest {
         // Declining only VO2 max is not nagged for it.
         assertFalse(HeartRateAccessOffer.shouldOffer(available = true, granted = setOf(hr), heartRatePermission = hr))
         assertFalse(HeartRateAccessOffer.shouldOffer(available = false, granted = steps, heartRatePermission = hr))
+        // Nothing flashes before Health Connect has answered once.
+        assertFalse(HeartRateAccessOffer.shouldOffer(available = true, granted = null, heartRatePermission = hr))
     }
 }

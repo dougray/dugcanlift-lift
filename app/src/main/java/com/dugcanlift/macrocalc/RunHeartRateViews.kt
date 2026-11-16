@@ -80,7 +80,18 @@ internal fun FinishedRunHeartRate(activity: OutdoorActivity, vo2MaxLine: String?
     }
 }
 
-/** Words a failed Finish shows. */
+/** Words a failed Finish shows, chosen by what is true. */
 internal object RunFinishCopy {
     const val SAVE_FAILED = "Couldn't save this run. It is still recording: tap Finish to try again."
+    const val RUN_LOST = "Couldn't save this run, and it can't be put back. Start a new one."
+
+    /**
+     * What to say about a failed Finish, or null for nothing: a cancellation is no failure and no
+     * save was tried. The "still recording" words only when the run really is back.
+     */
+    fun messageFor(e: Throwable): String? = when {
+        e is kotlinx.coroutines.CancellationException -> null
+        e is RunNotSavedException && !e.putBack -> RUN_LOST
+        else -> SAVE_FAILED
+    }
 }

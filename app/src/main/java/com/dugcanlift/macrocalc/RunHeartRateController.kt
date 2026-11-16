@@ -57,10 +57,12 @@ class RunHeartRateController(
     private var runSetting: HeartRateSetting = HeartRateSetting.Automatic
     private var session: RunHeartRateSession? = null
     private var picking: Job? = null
-    private var finishingStartedAt: Long? = null
+    // The runs whose Finish is waiting, by start time: the gate belongs to a run, so a Finish still
+    // waiting for a discarded run never blocks (or is cleared by) the next run's.
+    private val finishing = HashSet<Long>()
 
-    /** The run being finished, if any; one Finish at a time. */
-    @get:Synchronized val isFinishing: Boolean get() = finishingStartedAt != null
+    /** Whether any run's Finish is waiting. */
+    @get:Synchronized val isFinishing: Boolean get() = finishing.isNotEmpty()
 
     @Synchronized
     override fun onRunStarted(startedAtEpochMs: Long) {
@@ -85,7 +87,7 @@ class RunHeartRateController(
             val new = RunHeartRateSession(source)
             // Under the lock, so a Finish or stop cannot slip between the check and the connect.
             synchronized(this@RunHeartRateController) {
-                if (runStartedAt != startedAtEpochMs || finishingStartedAt != null) return@launch
+                if (runStartedAt != startedAtEpochMs || startedAtEpochMs in finishing) return@launch
                 session = new
                 if (source is LiveHeartRateSource.Device) {
                     // Weak, and the session only: the radio holds this callback for the run and
@@ -128,15 +130,14 @@ class RunHeartRateController(
     }
 
     /**
-     * Starts Finish for the run named [startedAtEpochMs]: null when another Finish is waiting (a
-     * double tap), otherwise what Finish decides the run's figures from, taken without ending the
+     * Starts Finish for the run named [startedAtEpochMs]: null when *that run's* Finish is already
+     * waiting (a double tap), otherwise what Finish decides the run's figures from, taken without ending the
      * session -- if saving fails the run goes on. From here a pick still waiting connects nothing.
      * Pair with [endFinish].
      */
     @Synchronized
     fun beginFinish(startedAtEpochMs: Long): FinishHeartRate? {
-        if (finishingStartedAt != null) return null
-        finishingStartedAt = startedAtEpochMs
+        if (!finishing.add(startedAtEpochMs)) return null
         val current = if (runStartedAt == startedAtEpochMs) session else null
         return FinishHeartRate(
             readings = current?.readings ?: emptyList(),
@@ -146,8 +147,8 @@ class RunHeartRateController(
     }
 
     @Synchronized
-    fun endFinish() {
-        finishingStartedAt = null
+    fun endFinish(startedAtEpochMs: Long) {
+        finishing.remove(startedAtEpochMs)
     }
 
     companion object {

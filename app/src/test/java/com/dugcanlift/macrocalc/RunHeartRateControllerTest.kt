@@ -245,8 +245,43 @@ class RunHeartRateControllerTest {
         runCurrent()
         assertNotNull(c.beginFinish(t0))
         assertNull(c.beginFinish(t0))
-        c.endFinish()
+        c.endFinish(t0)
         assertNotNull(c.beginFinish(t0))
+    }
+
+    @Test
+    fun `the finish gate belongs to a run, so an old wait never blocks or clears the next run's`() = runTest {
+        val c = controller(backgroundScope, FakeCentral())
+        c.onRunStarted(t0)
+        runCurrent()
+        assertNotNull(c.beginFinish(t0)) // run A's Finish waits on a slow Health Connect
+        c.onRunStopped(t0) // discarded
+        c.onRunStarted(t0 + 50_000) // run B
+        runCurrent()
+        assertNotNull(c.beginFinish(t0 + 50_000)) // B can finish while A's wait is still open
+        assertNull(c.beginFinish(t0 + 50_000)) // and B's own double tap is still refused
+        c.endFinish(t0) // A's wait ends...
+        assertNull(c.beginFinish(t0 + 50_000)) // ...which does not clear B's gate
+        c.endFinish(t0 + 50_000)
+        assertNotNull(c.beginFinish(t0 + 50_000))
+    }
+
+    @Test
+    fun `an old runs Finish does not stop the next runs strap being picked`() = runTest {
+        val central = FakeCentral(inRangeAnswer = listOf(polar))
+        val c = controller(backgroundScope, central)
+        c.onRunStarted(t0)
+        runCurrent()
+        assertNotNull(c.beginFinish(t0)) // A's wait stays open
+        c.onRunStopped(t0)
+        central.probe = CompletableDeferred() // B's three second look
+        c.onRunStarted(t0 + 50_000)
+        runCurrent()
+        central.probe!!.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(polar.id, polar.id), central.connects) // B connected
+        central.deliver(150, t0 + 51_000)
+        assertEquals("150 bpm", c.liveHeartRate(t0 + 52_000)?.number)
     }
 
     @Test

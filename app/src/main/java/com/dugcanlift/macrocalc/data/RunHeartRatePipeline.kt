@@ -201,6 +201,7 @@ data class LiveRunExtras(val heartRate: LiveHeartRateLine?, val vo2MaxLine: Stri
  * choice made for step history), and one who declined everything can ask again.
  */
 object HeartRateAccessOffer {
-    fun shouldOffer(available: Boolean, granted: Set<String>, heartRatePermission: String): Boolean =
-        available && heartRatePermission !in granted
+    /** [granted] is null until Health Connect has answered once: no button flashes before then. */
+    fun shouldOffer(available: Boolean, granted: Set<String>?, heartRatePermission: String): Boolean =
+        available && granted != null && heartRatePermission !in granted
 }

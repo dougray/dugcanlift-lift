@@ -60,7 +60,7 @@ fun HeartRateSettingsCard(modifier: Modifier = Modifier) {
     // the two newer reads, and nothing else asks for a permission added later. Never asked on its
     // own: only this button opens Health Connect's sheet, after the footer below says what it is for.
     val healthConnectAvailable = remember { HealthConnectManager.isAvailable(context) }
-    var granted by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var granted by remember { mutableStateOf<Set<String>?>(null) }
     LaunchedEffect(Unit) { granted = HealthConnectManager.grantedPermissions(context) }
     val grantLauncher = rememberLauncherForActivityResult(
         contract = PermissionController.createRequestPermissionResultContract()

@@ -46,7 +46,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +71,6 @@ import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.RoutePoint
 import com.dugcanlift.macrocalc.data.formattedElevationGainFeet
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -124,7 +122,6 @@ fun OutdoorRecordingScreen(
     val context = LocalContext.current
     val tracker = remember { LocationTracker.get(context) }
     val repository = remember { OutdoorActivityRepository.get(context) }
-    val scope = rememberCoroutineScope()
     val feedback = LocalAppFeedback.current
 
     var selectedActivityType by remember { mutableStateOf(activityType) }
@@ -283,14 +280,13 @@ fun OutdoorRecordingScreen(
                     onClick = {
                         // The same finish Train's card runs. A second tap finds nothing
                         // recording and is ignored without a word: the first one saved.
-                        scope.launch {
-                            try {
-                                RecordingFinisher.finish(context, tracker, repository)?.let(onFinished)
-                            } catch (e: Exception) {
-                                // The run was put back to recording: nothing is lost.
-                                feedback.show(RunFinishCopy.SAVE_FAILED)
-                            }
-                        }
+                        // The tracker's own scope: Back during the Health Connect wait does not
+                        // cancel it. A second tap finds one waiting and says nothing.
+                        RecordingFinisher.launchFinish(
+                            context, tracker, repository,
+                            onSaved = onFinished,
+                            onFailed = { feedback.show(it) }
+                        )
                     },
                     modifier = Modifier.weight(1f)
                 ) {

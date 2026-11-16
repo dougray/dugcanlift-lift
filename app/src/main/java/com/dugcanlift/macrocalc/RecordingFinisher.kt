@@ -7,7 +7,10 @@ import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityMath
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
 import com.dugcanlift.macrocalc.data.RunHeartRateFinish
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -27,10 +30,19 @@ import kotlinx.coroutines.withContext
  * leaving mid-wait cancels only the wait, and the run goes on recording.
  *
  * Only then is the run taken from the tracker and saved under [NonCancellable], once. If that
- * save throws, the run is put back to recording with its route and start time, so nothing is lost
- * and a second Finish saves it once; the failure is rethrown so the caller can say so. (Before,
- * a save that threw lost a run the tracker had already stopped.) The heart rate session is not
- * resumed with it: a run put back has no live source, and Health Connect fills the summary.
+ * save throws, the run is put back to recording with its route and start time, and a
+ * [RunNotSavedException] says whether that worked ([RunNotSavedException.putBack]): it cannot when
+ * GPS is off, location permission was revoked, the foreground service is refused, or another run
+ * began while the save ran. A run that *was* saved is never put back, even if the caller was
+ * cancelled during the save (a second Finish would save a duplicate). (Before, a save that threw
+ * lost a run the tracker had already stopped.)
+ *
+ * A put-back run starts a fresh heart rate pick ([RunHeartRateController.onRunStarted]), so its
+ * next Finish keeps the Avg/Max of only the readings after it was put back (under the strap's
+ * name when the strap is found again) or, with none, asks Health Connect for the whole run.
+ *
+ * Callers on a screen use [launchFinish], which runs this in the tracker's own scope: leaving the
+ * screen during the Health Connect wait does not cancel the person's Finish.
  */
 object RecordingFinisher {
 
@@ -41,6 +53,7 @@ object RecordingFinisher {
         history: HeartRateHistory = HealthConnectManager.History(context),
         nowEpochMs: Long = System.currentTimeMillis(),
         queryTimeoutMs: Long = RunHeartRateFinish.QUERY_TIMEOUT_MS,
+        saveRun: suspend (OutdoorActivity) -> Unit = { repository.save(it) },
     ): OutdoorActivity? {
         val snapshot = tracker.snapshotRecording() ?: return null
         val figures = tracker.heartRate.beginFinish(snapshot.startedAtEpochMs) ?: return null
@@ -69,16 +82,43 @@ object RecordingFinisher {
                     routePoints = snapshot.routePoints,
                 ),
             )
+            var saved = false
             try {
                 // The run is already stopped, so a screen leaving mid-save must not drop it.
-                withContext(NonCancellable) { repository.save(finished) }
+                withContext(NonCancellable) { saveRun(finished); saved = true }
             } catch (e: Exception) {
-                tracker.resume(taken)
-                throw e
+                // Saved, then cancelled on the way out: the run is on disk, so never put it back.
+                if (saved) throw e
+                // Released first, so the put-back run's own heart rate pick is not refused.
+                tracker.heartRate.endFinish(snapshot.startedAtEpochMs)
+                val putBack = runCatching { tracker.resume(taken) }.getOrDefault(false)
+                throw RunNotSavedException(putBack, e)
             }
             return finished
         } finally {
-            tracker.heartRate.endFinish()
+            tracker.heartRate.endFinish(snapshot.startedAtEpochMs)
+        }
+    }
+
+    /**
+     * Finish in the tracker's scope, so it completes even if the screen that tapped it is gone.
+     * [onSaved] gets the run on the main thread (a screen still present opens the review; one that
+     * left just has the saved run appear in Last route, which reads the repository). [onFailed]
+     * gets the words to say, never for a cancellation and never when no save was tried.
+     */
+    fun launchFinish(
+        context: Context,
+        tracker: LocationTracker,
+        repository: OutdoorActivityRepository,
+        onSaved: (OutdoorActivity) -> Unit,
+        onFailed: (String) -> Unit,
+        scope: CoroutineScope = tracker.finishScope,
+        history: HeartRateHistory = HealthConnectManager.History(context),
+    ): Job = scope.launch {
+        try {
+            finish(context, tracker, repository, history)?.let(onSaved)
+        } catch (e: Exception) {
+            RunFinishCopy.messageFor(e)?.let(onFailed)
         }
     }
 }
@@ -103,3 +143,6 @@ object RecordingScreenState {
     /** Run, Walk and Hike are one run at a time. */
     fun runButtonsEnabled(trackerRecording: Boolean): Boolean = !trackerRecording
 }
+
+/** A Finish whose save failed. [putBack]: the run is recording again with its route; false means it is lost. */
+class RunNotSavedException(val putBack: Boolean, cause: Throwable) : Exception("The run was not saved", cause)
