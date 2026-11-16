@@ -508,6 +508,20 @@ object LinkPayloads {
         )
     }
 
+    // ---- RUN_HR (version 5) -------------------------------------------------------------------
+
+    fun encodeRunHeartRate(reading: RunHeartRate): ByteArray =
+        ByteWriter().u16(reading.bpm).u32(reading.atEpochSec).toByteArray()
+
+    fun decodeRunHeartRate(bytes: ByteArray): RunHeartRate {
+        val r = ByteReader(bytes)
+        val bpm = r.u16()
+        if (bpm < 1) throw LinkDecodeException("a bpm of zero is not a heart rate")
+        val at = r.u32()
+        r.end()
+        return RunHeartRate(bpm, at)
+    }
+
     // ---- ACK / ERROR ----------------------------------------------------------------------
 
     fun encodeAck(ack: LinkAck): ByteArray = ByteWriter()

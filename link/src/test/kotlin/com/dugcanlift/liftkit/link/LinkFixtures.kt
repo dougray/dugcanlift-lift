@@ -16,6 +16,9 @@ object LinkFixtures {
     /** 185 lb to the gram. A number that is round in pounds and not in kilograms, on purpose. */
     const val BENCH_KG = 83.915
 
+    /** Version 5: 142 bpm at 1_762_800_000 s. */
+    val runHeartRate = RunHeartRate(bpm = 142, atEpochSec = 1_762_800_000L)
+
     val nonce: ByteArray = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
     val peerNonce: ByteArray = byteArrayOf(-1, -2, -3, -4, -5, -6, -7, -8)
 

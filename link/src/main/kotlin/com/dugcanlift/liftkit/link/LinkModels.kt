@@ -334,3 +334,15 @@ data class LinkAck(
 
 /** A refusal. [detail] is free text for a log, never for a decision. */
 data class LinkErrorMessage(val error: LinkError, val detail: String = "")
+
+/**
+ * One heart-rate reading during a run (version 5): [bpm] and when it was taken, in whole seconds
+ * since the epoch. **A zero is never a heart rate** — it is a sensor saying it has nothing — so one
+ * cannot be built, and the decoder refuses it. The `u16` bpm and `u32` time are big-endian.
+ */
+data class RunHeartRate(val bpm: Int, val atEpochSec: Long) {
+    init {
+        require(bpm in 1..0xFFFF) { "bpm $bpm is not a heart rate" }
+        require(atEpochSec in 0..0xFFFFFFFFL) { "time $atEpochSec does not fit a u32" }
+    }
+}
