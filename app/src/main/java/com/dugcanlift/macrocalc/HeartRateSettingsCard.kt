@@ -78,6 +78,15 @@ fun HeartRateSettingsCard(modifier: Modifier = Modifier) {
         WatchHeartRateRules.settingsName(watchStore.isPaired, watchStore.pairedName, watchStore.pairedLinkVersion)
     }
     val rows = HeartRateChoices.rows(devices, watchName = watchName)
+    // A chosen Watch with no watch row to show (forgotten, or last linked below 5) becomes Automatic,
+    // as removing a strap resets its own row, so a radio button is always selected.
+    LaunchedEffect(watchName) {
+        val next = WatchHeartRateRules.settingAfterWatchGone(setting, watchLinkedAtV5 = watchName != null)
+        if (next != setting) {
+            setting = next
+            settings.heartRateSetting = next
+        }
+    }
 
     Card(modifier = modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {

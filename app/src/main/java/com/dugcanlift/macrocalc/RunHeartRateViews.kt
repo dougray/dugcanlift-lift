@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dugcanlift.macrocalc.data.HealthConnectManager
@@ -53,7 +54,11 @@ internal fun LiveRunExtrasBlock(extras: LiveRunExtras) {
         Spacer(modifier = Modifier.height(8.dp))
         extras.heartRate?.let { line ->
             Text(line.number, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-            Text(line.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // A long device name is cut for display only; the stored name is never sliced.
+            Text(
+                line.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
         extras.vo2MaxLine?.let { vo2 ->
             Text(vo2, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -71,7 +76,10 @@ internal fun FinishedRunHeartRate(activity: OutdoorActivity, vo2MaxLine: String?
         line?.let {
             Text(it.summary, style = MaterialTheme.typography.titleMedium)
             it.source?.let { source ->
-                Text(source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         vo2MaxLine?.let {

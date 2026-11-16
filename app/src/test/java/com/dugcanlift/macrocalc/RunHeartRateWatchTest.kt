@@ -177,15 +177,20 @@ class RunHeartRateWatchTest {
     }
 
     @Test
-    fun `an old reading is kept in the run but hidden`() = runTest {
+    fun `a watch clock behind the phone still shows each reading for the normal window from arrival`() = runTest {
         val watch = FakeWatch()
         val c = controller(backgroundScope, FakeCentral(), watch)
         c.onRunStarted(t0)
         runCurrent()
         now = t0 + 60_000
-        watch.deliver(140, sec(1_000)) // sampled a minute ago, delivered late
-        assertEquals("—", c.liveHeartRate(t0 + 60_000)?.number)
-        assertEquals(listOf(140), c.beginFinish(t0)!!.readings)
+        watch.deliver(140, sec(0)) // stamped a minute in the past, arriving now
+        assertEquals("140 bpm", c.liveHeartRate(t0 + 60_000)?.number)
+        assertEquals("140 bpm", c.liveHeartRate(t0 + 68_900)?.number)
+        assertEquals("—", c.liveHeartRate(t0 + 71_100)?.number) // gone about ten seconds after it arrived
+        now = t0 + 65_000
+        watch.deliver(150, sec(5_000)) // the next one, still a minute behind
+        assertEquals("150 bpm", c.liveHeartRate(t0 + 66_000)?.number)
+        assertEquals(listOf(140, 150), c.beginFinish(t0)!!.readings)
     }
 
     @Test

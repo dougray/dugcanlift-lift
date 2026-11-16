@@ -20,6 +20,9 @@ class WatchLinkStore private constructor(context: Context) {
     val pairedName: String? get() = prefs.getString(KEY_NAME, null)
     val isPaired: Boolean get() = pairedAddress != null
 
+    /** The name to show: the stored one, or "Wear OS watch" when there is none (never a bare "watch"). */
+    val pairedDisplayName: String get() = WatchHeartRateRules.displayName(pairedName)
+
     /**
      * The version this watch's link last settled on, kept so the heart rate settings can say whether
      * the watch is a source while it is out of range. Null until it has linked since this existed.

@@ -6,6 +6,7 @@ import com.dugcanlift.liftkit.link.LinkRole
 import com.dugcanlift.liftkit.link.LinkSession
 import com.dugcanlift.liftkit.link.LinkState
 import com.dugcanlift.liftkit.link.RunHeartRate
+import com.dugcanlift.macrocalc.data.HeartRateSetting
 import com.dugcanlift.macrocalc.data.LiveHeartRateSource
 
 // The Wear watch as a source of a run's heart rate (LIFT Link version 5), phone side.
@@ -20,7 +21,8 @@ import com.dugcanlift.macrocalc.data.LiveHeartRateSource
 interface WatchHeartRateLink {
     /**
      * The watch's name when a Wear watch is paired **and linked right now at version 5 or later**,
-     * else null. The negotiated version, not what the watch said it could speak: a link that settled
+     * else null. **Main thread only**: the real link answers null from any other thread, which would
+     * silently treat the watch as unavailable. The negotiated version, not what the watch said it could speak: a link that settled
      * at 4 has a watch that has never heard of these messages.
      */
     fun linkedName(): String?
@@ -54,8 +56,15 @@ object WatchHeartRateRules {
      */
     const val KEEPALIVE_MS = 60_000L
 
-    /** What a watch with no name of its own is called on screen. */
-    const val FALLBACK_NAME = "Wear watch"
+    /** What a watch with no name of its own is called on screen: the words the scan already used. */
+    const val FALLBACK_NAME = "Wear OS watch"
+
+    /**
+     * How far behind its own arrival a reading may be stamped and still keep that stamp. A watch
+     * clock behind the phone's by more than this would otherwise make every reading look stale for
+     * the whole run, so an older stamp is read as "taken just before it arrived".
+     */
+    const val BEHIND_ALLOWANCE_MS = 1_000L
 
     /**
      * A sensor's own sanity limit, not advice: a `u16` on the wire can say 65,535, which is not a
@@ -75,6 +84,15 @@ object WatchHeartRateRules {
     fun displayName(name: String?): String = name?.trim()?.takeIf { it.isNotEmpty() } ?: FALLBACK_NAME
 
     /**
+     * What the heart rate setting becomes when the watch may no longer be a source: [Watch] with no
+     * paired watch whose link settled at 5 or later becomes Automatic, as removing a strap resets its
+     * own row. Any other setting is untouched. A chosen Watch is never left pointing at a row that is
+     * not there, which would give a run no source and never use a strap in range.
+     */
+    fun settingAfterWatchGone(setting: HeartRateSetting, watchLinkedAtV5: Boolean): HeartRateSetting =
+        if (setting == HeartRateSetting.Watch && !watchLinkedAtV5) HeartRateSetting.Automatic else setting
+
+    /**
      * The decision when the watch is asked to start: [picked] stands only if the request was sent.
      * A watch that cannot be reached at that moment leaves the run with **no live source** -- it is
      * not stranded, Finish is not blocked, and Health Connect fills the summary after the run -- and
@@ -87,14 +105,16 @@ object WatchHeartRateRules {
     data class Reading(val bpm: Int, val atEpochMs: Long)
 
     /**
-     * A reading from the wire, or null when it is not a pulse. The sample's own time is kept (it can
-     * be old, and the stale rule hides it then), but **never later than [nowEpochMs]**: a watch clock
-     * ahead of the phone's must not keep a dead reading looking fresh for as long as the difference.
+     * A reading from the wire, or null when it is not a pulse. The sample's own time is kept within
+     * [BEHIND_ALLOWANCE_MS, nowEpochMs]: **never later than now** (a watch clock ahead of the
+     * phone's must not keep a dead reading looking fresh for as long as the difference) and **never
+     * more than a second before it arrived** (a watch clock behind must not hide every reading for
+     * the whole run). The phone's ten second rule then runs from about the arrival.
      */
     fun reading(bpm: Int, atEpochSec: Long, nowEpochMs: Long): Reading? {
         if (bpm < 1 || bpm > MAX_PLAUSIBLE_BPM) return null
         val atMs = if (atEpochSec > Long.MAX_VALUE / 1000) Long.MAX_VALUE else atEpochSec * 1000
-        return Reading(bpm, minOf(atMs, nowEpochMs))
+        return Reading(bpm, atMs.coerceIn(nowEpochMs - BEHIND_ALLOWANCE_MS, nowEpochMs))
     }
 }
 

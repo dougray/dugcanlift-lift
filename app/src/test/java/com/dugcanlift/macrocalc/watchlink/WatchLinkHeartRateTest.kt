@@ -10,6 +10,7 @@ import com.dugcanlift.liftkit.link.LinkSession
 import com.dugcanlift.liftkit.link.LinkState
 import com.dugcanlift.liftkit.link.MessageType
 import com.dugcanlift.liftkit.link.RunHeartRate
+import com.dugcanlift.macrocalc.data.HeartRateSetting
 import com.dugcanlift.macrocalc.data.LiveHeartRateSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -100,8 +101,8 @@ class WatchLinkHeartRateTest {
         assertNull(WatchHeartRateRules.settingsName(true, "Pixel Watch 2", 4))
         assertNull(WatchHeartRateRules.settingsName(true, "Pixel Watch 2", null)) // never linked since the update
         assertNull(WatchHeartRateRules.settingsName(false, "Pixel Watch 2", 5)) // forgotten
-        assertEquals("Wear watch", WatchHeartRateRules.settingsName(true, null, 5))
-        assertEquals("Wear watch", WatchHeartRateRules.settingsName(true, " ", 5))
+        assertEquals("Wear OS watch", WatchHeartRateRules.settingsName(true, null, 5))
+        assertEquals("Wear OS watch", WatchHeartRateRules.settingsName(true, " ", 5))
     }
 
     // ---- sending ---------------------------------------------------------------------------------
@@ -238,7 +239,7 @@ class WatchLinkHeartRateTest {
 
     @Test
     fun `a reading keeps its own time, in milliseconds`() {
-        val now = 1_762_800_010_000L
+        val now = 1_762_800_004_300L
         assertEquals(WatchHeartRateRules.Reading(142, 1_762_800_004_000L), WatchHeartRateRules.reading(142, 1_762_800_004L, now))
     }
 
@@ -250,9 +251,34 @@ class WatchLinkHeartRateTest {
     }
 
     @Test
-    fun `an old reading stays old, so the stale rule hides it`() {
+    fun `a reading stamped within a second of arriving keeps its stamp`() {
+        val now = 1_762_800_010_500L
+        assertEquals(1_762_800_010_000L, WatchHeartRateRules.reading(142, 1_762_800_010L, now)!!.atEpochMs)
+    }
+
+    @Test
+    fun `a watch clock behind the phone is read as just before arrival, so it cannot hide every reading`() {
         val now = 1_762_800_010_000L
-        assertEquals(1_762_799_000_000L, WatchHeartRateRules.reading(142, 1_762_799_000L, now)!!.atEpochMs)
+        val behind = WatchHeartRateRules.reading(142, 1_762_800_010L - 60, now)!!
+        assertEquals(now - WatchHeartRateRules.BEHIND_ALLOWANCE_MS, behind.atEpochMs)
+        assertEquals(now, WatchHeartRateRules.reading(142, 1_762_800_010L + 60, now)!!.atEpochMs) // ahead: as before
+    }
+
+    @Test
+    fun `a forgotten or below 5 watch resets a chosen Watch to Automatic and nothing else`() {
+        val strap = HeartRateSetting.Device("AA:BB")
+        assertEquals(HeartRateSetting.Automatic, WatchHeartRateRules.settingAfterWatchGone(HeartRateSetting.Watch, watchLinkedAtV5 = false))
+        assertEquals(HeartRateSetting.Watch, WatchHeartRateRules.settingAfterWatchGone(HeartRateSetting.Watch, watchLinkedAtV5 = true))
+        for (setting in listOf(HeartRateSetting.Automatic, HeartRateSetting.Off, strap)) {
+            assertEquals(setting, WatchHeartRateRules.settingAfterWatchGone(setting, watchLinkedAtV5 = false))
+            assertEquals(setting, WatchHeartRateRules.settingAfterWatchGone(setting, watchLinkedAtV5 = true))
+        }
+        // The v4 case as the card and the transport compute it: paired, but last linked at 4.
+        val rowName = WatchHeartRateRules.settingsName(paired = true, name = "Old watch", lastLinkVersion = 4)
+        assertEquals(HeartRateSetting.Automatic, WatchHeartRateRules.settingAfterWatchGone(HeartRateSetting.Watch, rowName != null))
+        // And forgotten: not paired at all.
+        val forgotten = WatchHeartRateRules.settingsName(paired = false, name = null, lastLinkVersion = null)
+        assertEquals(HeartRateSetting.Automatic, WatchHeartRateRules.settingAfterWatchGone(HeartRateSetting.Watch, forgotten != null))
     }
 
     @Test

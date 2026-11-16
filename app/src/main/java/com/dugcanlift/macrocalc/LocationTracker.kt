@@ -56,7 +56,11 @@ class LocationTracker private constructor(context: Context) {
 
     private val appContext = context.applicationContext
 
-    /** Told when a run begins and when it stops, however it stops (Finish, Discard, a different type). */
+    /**
+     * Told when a run begins and when it stops, however it stops (Finish, Discard, a different type).
+     * **Main thread only**: the heart rate controller reads the watch link from these calls, and the
+     * link answers "unavailable" to any other thread, which would silently drop the watch as a source.
+     */
     interface RunListener {
         fun onRunStarted(startedAtEpochMs: Long)
         fun onRunStopped(startedAtEpochMs: Long)
