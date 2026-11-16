@@ -15,6 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,9 @@ import com.dugcanlift.macrocalc.data.HeartRateSetting
 import com.dugcanlift.macrocalc.data.HeartRateSettingsCopy
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.ui.theme.dclAccentText
+import com.dugcanlift.macrocalc.watchlink.WatchHeartRateRules
+import com.dugcanlift.macrocalc.watchlink.WatchLinkStore
+import com.dugcanlift.macrocalc.watchlink.WatchLinkTransport
 import com.dugcanlift.macrocalc.ui.theme.dclCardBorder
 import com.dugcanlift.macrocalc.ui.theme.dclTextButtonColors
 
@@ -66,8 +70,14 @@ fun HeartRateSettingsCard(modifier: Modifier = Modifier) {
         contract = PermissionController.createRequestPermissionResultContract()
     ) { result -> granted = result }
 
-    // The watch row waits for the watch link (LIFT Link v5): no watch is offered as a source yet.
-    val rows = HeartRateChoices.rows(devices, watchName = null)
+    // The watch row: the Wear watch's name, only while it is paired and its link last settled at
+    // version 5 or later. The link's status keys the read, so pairing or forgetting redraws it.
+    val watchStore = remember { WatchLinkStore.get(context) }
+    val linkStatus by remember { WatchLinkTransport.get(context) }.status.collectAsState()
+    val watchName = remember(linkStatus) {
+        WatchHeartRateRules.settingsName(watchStore.isPaired, watchStore.pairedName, watchStore.pairedLinkVersion)
+    }
+    val rows = HeartRateChoices.rows(devices, watchName = watchName)
 
     Card(modifier = modifier.fillMaxWidth(), border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {

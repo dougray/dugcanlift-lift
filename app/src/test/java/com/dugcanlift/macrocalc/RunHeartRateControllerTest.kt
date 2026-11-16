@@ -2,6 +2,7 @@ package com.dugcanlift.macrocalc
 
 import com.dugcanlift.macrocalc.data.AddedHeartRateDevice
 import com.dugcanlift.macrocalc.data.HeartRateSetting
+import com.dugcanlift.macrocalc.watchlink.WatchHeartRateLink
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -58,8 +59,8 @@ class RunHeartRateControllerTest {
         central: FakeCentral,
         setting: HeartRateSetting = HeartRateSetting.Automatic,
         added: List<AddedHeartRateDevice> = listOf(polar, wahoo),
-        watch: Boolean = false,
-    ) = RunHeartRateController(central, { setting }, { added }, { watch }, scope)
+        watch: WatchHeartRateLink = WatchHeartRateLink.None,
+    ) = RunHeartRateController(central, { setting }, { added }, watch, scope)
 
     @Test
     fun `the source is picked once at start from the added devices and nothing wider`() = runTest {
@@ -89,7 +90,7 @@ class RunHeartRateControllerTest {
     fun `Off and Watch never touch the radio and show nothing in this build`() = runTest {
         for (setting in listOf(HeartRateSetting.Off, HeartRateSetting.Watch)) {
             val central = FakeCentral(listOf(polar))
-            val c = controller(backgroundScope, central, setting = setting, watch = false)
+            val c = controller(backgroundScope, central, setting = setting)
             c.onRunStarted(t0)
             runCurrent()
             assertTrue(central.inRangeCalls.isEmpty())

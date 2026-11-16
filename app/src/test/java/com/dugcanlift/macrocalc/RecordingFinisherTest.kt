@@ -101,7 +101,7 @@ class RecordingFinisherTest {
 
     private fun installRadio(scope: kotlinx.coroutines.CoroutineScope, setting: HeartRateSetting = HeartRateSetting.Automatic): FakeCentral {
         val central = FakeCentral(inRangeAnswer = listOf(polar))
-        tracker.installHeartRate(RunHeartRateController(central, { setting }, { listOf(polar) }, { false }, scope))
+        tracker.installHeartRate(RunHeartRateController(central, { setting }, { listOf(polar) }, com.dugcanlift.macrocalc.watchlink.WatchHeartRateLink.None, scope))
         return central
     }
 

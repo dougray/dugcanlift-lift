@@ -20,6 +20,16 @@ class WatchLinkStore private constructor(context: Context) {
     val pairedName: String? get() = prefs.getString(KEY_NAME, null)
     val isPaired: Boolean get() = pairedAddress != null
 
+    /**
+     * The version this watch's link last settled on, kept so the heart rate settings can say whether
+     * the watch is a source while it is out of range. Null until it has linked since this existed.
+     */
+    val pairedLinkVersion: Int? get() = prefs.getInt(KEY_LINK_VERSION, 0).takeIf { it > 0 }
+
+    fun recordLinkVersion(version: Int) {
+        prefs.edit().putInt(KEY_LINK_VERSION, version).apply()
+    }
+
     fun isPaired(address: String?): Boolean =
         address != null && pairedAddress?.equals(address, ignoreCase = true) == true
 
@@ -30,7 +40,7 @@ class WatchLinkStore private constructor(context: Context) {
     /** Forget the watch. Sessions it already sent stay in the log — they are the lifter's, not the
      *  link's — but the revision records go, so a re-paired watch starts clean. */
     fun forget() {
-        prefs.edit().remove(KEY_ADDRESS).remove(KEY_NAME).remove(KEY_SESSIONS).remove(KEY_PLANS).apply()
+        prefs.edit().remove(KEY_ADDRESS).remove(KEY_NAME).remove(KEY_LINK_VERSION).remove(KEY_SESSIONS).remove(KEY_PLANS).apply()
     }
 
     /** What this phone last stored for a session the watch sent. See [WatchPlanMapper.reconcile]. */
@@ -62,6 +72,7 @@ class WatchLinkStore private constructor(context: Context) {
     companion object {
         private const val KEY_ADDRESS = "paired_watch_address"
         private const val KEY_NAME = "paired_watch_name"
+        private const val KEY_LINK_VERSION = "paired_link_version"
         private const val KEY_SESSIONS = "applied_sessions"
         private const val KEY_PLANS = "pushed_plans"
         private const val MAX_ENTRIES = 400

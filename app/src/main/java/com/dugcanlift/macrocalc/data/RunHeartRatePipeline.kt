@@ -75,7 +75,7 @@ object RunHeartRateFinish {
     /** The source stored when Health Connect, not a strap or the watch, supplied the figures. */
     const val HEALTH_SOURCE = "Health Connect"
 
-    /** Stored for a run the watch measured; the watch's own name replaces it in the watch slice. */
+    /** Stored for a run the watch measured only when the watch has no name of its own to store. */
     const val WATCH_SOURCE = "Watch"
 
     /**
@@ -182,11 +182,10 @@ object RunHeartRateWords {
 }
 
 /** The name a run stores beside its figures. */
-val LiveHeartRateSource.storedName: String
-    get() = when (this) {
-        is LiveHeartRateSource.Device -> name
-        LiveHeartRateSource.Watch -> RunHeartRateFinish.WATCH_SOURCE
-    }
+fun LiveHeartRateSource.storedName(watchName: String? = null): String = when (this) {
+    is LiveHeartRateSource.Device -> name
+    LiveHeartRateSource.Watch -> watchName?.takeIf { it.isNotBlank() } ?: RunHeartRateFinish.WATCH_SOURCE
+}
 
 /** What the live card's extra lines say, as plain values (the composable only draws them). */
 data class LiveRunExtras(val heartRate: LiveHeartRateLine?, val vo2MaxLine: String?) {

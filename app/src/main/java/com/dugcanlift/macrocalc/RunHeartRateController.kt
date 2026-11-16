@@ -11,11 +11,15 @@ import com.dugcanlift.macrocalc.data.RunHeartRateSession
 import com.dugcanlift.macrocalc.data.RunHeartRateWords
 import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.storedName
+import com.dugcanlift.macrocalc.watchlink.WatchHeartRateLink
+import com.dugcanlift.macrocalc.watchlink.WatchHeartRateRules
+import com.dugcanlift.macrocalc.watchlink.WatchLinkTransport
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -38,6 +42,14 @@ interface HeartRateConnecting {
  * after the look is not used live -- Health Connect fills the summary after the run -- and nothing
  * re-picks when a reading goes quiet: a dropped source is reconnected by the radio, never swapped.
  *
+ * **The watch** (LIFT Link version 5) is a source only when the link is READY and settled at 5 or
+ * later at that moment. When it is the pick, the run asks it to start; a request that cannot be sent
+ * leaves the run with no live source (Health Connect fills the summary), never another source. While
+ * the run lasts it asks again every [WatchHeartRateRules.KEEPALIVE_MS] (the watch ends a run it has
+ * not heard about for five minutes) and the link asks again on every reconnect; a link that drops
+ * just stops the readings, and the number goes to a dash at ten seconds. The run's end -- Finish,
+ * Discard, Cancel, or the next run starting -- tells the watch to stop, once.
+ *
  * A run is named by its start time, the tracker's own identity for it. A pick that completes
  * after the run ended, was replaced, or began finishing connects nothing.
  *
@@ -48,15 +60,21 @@ class RunHeartRateController(
     private val central: HeartRateConnecting,
     private val setting: () -> HeartRateSetting,
     private val added: () -> List<AddedHeartRateDevice>,
-    private val watchAvailable: () -> Boolean,
+    private val watch: WatchHeartRateLink,
     private val scope: CoroutineScope,
     private val lookMs: Long = 3_000L,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : LocationTracker.RunListener {
 
     private var runStartedAt: Long? = null
     private var runSetting: HeartRateSetting = HeartRateSetting.Automatic
     private var session: RunHeartRateSession? = null
     private var picking: Job? = null
+    private var keepalive: Job? = null
+    // True from a watch start that was sent until the run's end sends the stop.
+    private var watchActive = false
+    // The watch's own name, read when the run began: it is the run's source name for the run.
+    private var runWatchName: String? = null
     // The runs whose Finish is waiting, by start time: the gate belongs to a run, so a Finish still
     // waiting for a discarded run never blocks (or is cleared by) the next run's.
     private val finishing = HashSet<Long>()
@@ -71,9 +89,11 @@ class RunHeartRateController(
         val added = added()
         runStartedAt = startedAtEpochMs
         runSetting = setting
-        // Read once, now, like the setting: a watch paired mid-run changes nothing. The watch is
-        // not a source in this build yet (the watch link is its own slice), so it is never offered.
-        val watchAvailable = setting != HeartRateSetting.Off && watchAvailable()
+        // Read once, now, like the setting: a watch paired mid-run changes nothing. Offered only
+        // while its link is READY at version 5 or later (a v4 watch has never heard of any of this).
+        val watchName = if (setting != HeartRateSetting.Off) watch.linkedName() else null
+        val watchAvailable = watchName != null
+        val clock = this.clock
         picking = scope.launch {
             var inRange: List<AddedHeartRateDevice> = emptyList()
             when (setting) {
@@ -84,10 +104,28 @@ class RunHeartRateController(
                 HeartRateSetting.Watch, HeartRateSetting.Off -> Unit
             }
             val source = HeartRateSourcePicker.pick(setting, inRange, watchAvailable)
-            val new = RunHeartRateSession(source)
+            var new = RunHeartRateSession(source)
             // Under the lock, so a Finish or stop cannot slip between the check and the connect.
             synchronized(this@RunHeartRateController) {
                 if (runStartedAt != startedAtEpochMs || startedAtEpochMs in finishing) return@launch
+                if (source is LiveHeartRateSource.Watch) {
+                    // Weak, and the session only, as for a strap: the link holds this callback for
+                    // the run and must not hold the run's owner. The watch's own clock is the
+                    // reading's time (clamped to now), so the ten second rule is the phone's.
+                    val weak = WeakReference(new)
+                    val sent = watch.begin { bpm, atEpochSec ->
+                        val reading = WatchHeartRateRules.reading(bpm, atEpochSec, clock())
+                        if (reading != null) weak.get()?.receive(reading.bpm, reading.atEpochMs)
+                    }
+                    if (sent) {
+                        watchActive = true
+                        runWatchName = watchName
+                        startKeepaliveLocked(startedAtEpochMs)
+                    } else {
+                        // Not reachable now: no live source, and Health Connect fills the summary.
+                        new = RunHeartRateSession(WatchHeartRateRules.sourceAfterStart(source, requestSent = false))
+                    }
+                }
                 session = new
                 if (source is LiveHeartRateSource.Device) {
                     // Weak, and the session only: the radio holds this callback for the run and
@@ -104,14 +142,42 @@ class RunHeartRateController(
         if (runStartedAt == startedAtEpochMs) endRunLocked()
     }
 
+    /**
+     * Asks the watch again every minute for as long as this run lasts. Holds the controller weakly:
+     * the loop is the scope's, and a controller that was dropped must not be kept alive by a timer.
+     */
+    private fun startKeepaliveLocked(startedAtEpochMs: Long) {
+        keepalive?.cancel()
+        val weak = WeakReference(this)
+        keepalive = scope.launch {
+            while (true) {
+                delay(WatchHeartRateRules.KEEPALIVE_MS)
+                val self = weak.get() ?: break
+                if (!self.keepaliveTick(startedAtEpochMs)) break
+            }
+        }
+    }
+
+    @Synchronized
+    private fun keepaliveTick(startedAtEpochMs: Long): Boolean {
+        if (runStartedAt != startedAtEpochMs || !watchActive) return false
+        watch.refresh()
+        return true
+    }
+
     private fun endRunLocked() {
         picking?.cancel()
         picking = null
+        keepalive?.cancel()
+        keepalive = null
         if (runStartedAt != null) {
             // Lets the strap go and ends the session, so a late reading is dropped.
             central.disconnect()
             session?.end()
         }
+        if (watchActive) watch.end() // one stop; the link ignores a second
+        watchActive = false
+        runWatchName = null
         session = null
         runStartedAt = null
     }
@@ -126,7 +192,7 @@ class RunHeartRateController(
     fun liveHeartRate(nowEpochMs: Long): LiveHeartRateLine? {
         val current = session ?: return null
         val source = current.source ?: return null
-        return LiveHeartRateLine(RunHeartRateWords.live(current.shown(nowEpochMs)), RunHeartRateWords.source(source.storedName))
+        return LiveHeartRateLine(RunHeartRateWords.live(current.shown(nowEpochMs)), RunHeartRateWords.source(source.storedName(runWatchName)))
     }
 
     /**
@@ -141,7 +207,7 @@ class RunHeartRateController(
         val current = if (runStartedAt == startedAtEpochMs) session else null
         return FinishHeartRate(
             readings = current?.readings ?: emptyList(),
-            sourceName = current?.source?.storedName,
+            sourceName = current?.source?.storedName(runWatchName),
             setting = if (runStartedAt == startedAtEpochMs) runSetting else setting(),
         )
     }
@@ -170,7 +236,7 @@ class RunHeartRateController(
                 },
                 setting = { settings.heartRateSetting },
                 added = { settings.heartRateDevices },
-                watchAvailable = { false },
+                watch = WatchLinkTransport.get(app).heartRate,
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
             )
         }

@@ -117,6 +117,33 @@ class WatchLinkTransport private constructor(context: Context) {
     private val _lastEvent = MutableStateFlow<String?>(null)
     val lastEvent: StateFlow<String?> = _lastEvent.asStateFlow()
 
+    /**
+     * Run heart rate (version 5): what a run asks of the watch. Every message goes out through
+     * [queue] on the main thread, like everything else here; a call from another thread says no (or
+     * is posted, when there is nothing to answer), so the controller's callers cannot race the
+     * write queue. [onLinkReady] and [onReading] are fed by [apply] below.
+     */
+    private val relay = WatchHeartRateRelay(
+        session = { session },
+        send = ::queue,
+        pairedName = { store.pairedName },
+    )
+
+    val heartRate: WatchHeartRateLink = object : WatchHeartRateLink {
+        private fun onMain() = Looper.myLooper() == Looper.getMainLooper()
+
+        override fun linkedName(): String? = if (onMain()) relay.linkedName() else null
+
+        override fun begin(onReading: (bpm: Int, atEpochSec: Long) -> Unit): Boolean =
+            onMain() && relay.begin(onReading)
+
+        override fun refresh(): Boolean = onMain() && relay.refresh()
+
+        override fun end() {
+            if (onMain()) relay.end() else main.post { relay.end() }
+        }
+    }
+
     private var gatt: BluetoothGatt? = null
     private var rx: BluetoothGattCharacteristic? = null
     private var tx: BluetoothGattCharacteristic? = null
@@ -478,8 +505,14 @@ class WatchLinkTransport private constructor(context: Context) {
                     val address = gatt?.device?.address
                     val name = event.peerName.ifBlank { pairingName }
                     if (address != null) store.remember(address, name)
+                    // What the settings card needs to know without the watch in range: whether this
+                    // watch last linked at a version that carries run heart rate.
+                    session?.negotiatedVersion?.let { store.recordLinkVersion(it) }
                     pairingName = name
                     _status.value = Status.Linked(name)
+                    // Back (or first) READY: a run that wants heart rate asks the watch again, because
+                    // the watch ends a run on any disconnect.
+                    relay.onLinkReady()
                 }
                 LinkEvent.PairingRejected -> {
                     fail("Pairing was refused.")
@@ -497,6 +530,10 @@ class WatchLinkTransport private constructor(context: Context) {
                     else "The link failed (${event.error.error.name})."
                 )
                 is LinkEvent.PlanReceived -> Unit   // only a watch receives plans; the session refuses it here
+                // The phone is not the watch: a start or stop request is the watch's to act on, and
+                // the session never raises these here (it refuses them as UNEXPECTED_MESSAGE).
+                LinkEvent.RunHeartRateStartRequested, LinkEvent.RunHeartRateStopRequested -> Unit
+                is LinkEvent.RunHeartRateReceived -> relay.onReading(event.reading)
             }
         }
     }

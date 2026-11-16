@@ -68,4 +68,17 @@ class WatchLinkStoreTest {
         assertNull("the oldest went", store.appliedSession("s0"))
         assertEquals(AppliedRevision(1, 449), store.appliedSession("s449"))
     }
+
+    @Test
+    fun `the version a watch last linked at is remembered, and forgotten with the watch`() {
+        val store = store
+        assertNull(store.pairedLinkVersion)
+        store.remember("AA:BB:CC:DD:EE:FF", "Pixel Watch 2")
+        store.recordLinkVersion(5)
+        assertEquals(5, store.pairedLinkVersion)
+        store.recordLinkVersion(4) // the watch app was rolled back
+        assertEquals(4, store.pairedLinkVersion)
+        store.forget()
+        assertNull(store.pairedLinkVersion)
+    }
 }
