@@ -53,9 +53,11 @@ class PermissionsPinTest {
         "android.permission.health.WRITE_EXERCISE_ROUTE",
         "android.permission.health.WRITE_DISTANCE",
         "android.permission.health.WRITE_ELEVATION_GAINED",
-        // LIFT Link, the Bluetooth LE channel to the LIFT Wear OS watch (watchlink/). The page does
-        // not describe it yet: it arrived after v1.16, and the release that ships it needs the
-        // page's wording first.
+        // LIFT Link, the Bluetooth LE channel to the LIFT Wear OS watch (watchlink/), and the
+        // Bluetooth heart rate straps a person adds (HeartRateCentral: a scan for service 0x180D,
+        // then a connection to an added one). The page does not describe either yet: they arrived
+        // after v1.16, and the release that ships them needs the page's wording first
+        // (PRIVACY.md's "Nearby devices" entry is the draft of it).
         "android.permission.BLUETOOTH_SCAN usesPermissionFlags=neverForLocation",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH maxSdkVersion=30",

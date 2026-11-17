@@ -105,7 +105,7 @@ requests whatsoever.
   are never sent anywhere else.
 - **Health Connect (heart rate and VO2 max, read-only: `READ_HEART_RATE`,
   `READ_VO2_MAX`)** — used to fill in a finished run's average and highest heart
-  rate when no Bluetooth strap supplied them, and to show your newest VO2 max
+  rate when no strap or watch supplied them, and to show your newest VO2 max
   estimate on a run. The app asks for these only when you tap **Read heart rate
   and VO2 max from Health Connect** on the Heart rate card. A run keeps its
   average, its highest heart rate and the name of where it came from; the
@@ -120,14 +120,25 @@ requests whatsoever.
   other kind of data. As with step data, this stays on-device between the app
   and Health Connect; nothing is uploaded anywhere by this app.
 - **Nearby devices / Bluetooth (`BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`; on
-  Android 11 and older `BLUETOOTH`, `BLUETOOTH_ADMIN`)** — used only if you
-  pair the LIFT watch app for Wear OS, from the Watch card on Home. The phone
-  looks for LIFT's own watch app once, to pair, and then connects only to the
-  watch you chose. What crosses that link is the day's workout (exercises,
-  sets, target weights and your last numbers for each) going to the watch, and
-  sessions you finished on the watch coming back into your log. It goes
-  directly between your phone and your watch over an encrypted Bluetooth
-  connection — no server, no account, nothing else. The scan is declared
+  Android 11 and older `BLUETOOTH`, `BLUETOOTH_ADMIN`)** — used only for two
+  things you set up yourself.
+  *The LIFT watch app for Wear OS*, from the Watch card on Home: the phone looks
+  for LIFT's own watch app once, to pair, and then connects only to the watch you
+  chose. What crosses that link is the day's workout (exercises, sets, target
+  weights and your last numbers for each) going to the watch, and sessions you
+  finished on the watch (with the heart rate it measured) coming back into your
+  log. During a run, when the watch is the heart rate source you chose, the phone
+  also asks the watch to start and stop measuring (and asks again about once a
+  minute while the run lasts), and the watch sends its heart rate readings back.
+  *A Bluetooth heart rate strap*, from the Heart rate card on Home: while you add
+  one, the phone lists the heart rate devices nearby (those offering the standard
+  Bluetooth heart rate service, 0x180D); the one you pick has its Bluetooth
+  address and name stored on this phone. During a run the phone looks for the
+  straps you added, connects only to one of them, and reads its heart rate. A run
+  keeps its average, its highest heart rate and the name of where it came from;
+  the readings themselves are not stored. All of this goes directly between your
+  phone and the watch or strap — over an encrypted Bluetooth connection for the
+  watch — with no server, no account, nothing else. The scan is declared
   `neverForLocation`: it is not used to work out where you are. On Android 11
   and older, Android itself requires location permission and location services
   for any Bluetooth scan; LIFT asks for nothing new there, because route

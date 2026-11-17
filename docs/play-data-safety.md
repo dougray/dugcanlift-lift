@@ -87,6 +87,13 @@ Google Drive.
   the readings and the VO2 max are not stored. **Play Console step for Doug:**
   the Health Connect permissions declaration gains these two with their reasons
   before the release that ships them.
+- **Heart rate on a run (not collected):** from a Bluetooth strap the person added
+  (`HeartRateCentral.kt`) or from the Wear OS watch over LIFT Link
+  (`watchlink/WatchRunHeartRate.kt`, `RunHeartRateController.kt`). It is read on the
+  phone, shown on the live card, and not stored: the run keeps only its average,
+  highest and the source's name (`data/OutdoorActivity.kt`). The added strap's
+  Bluetooth address and name are kept on the phone (`data/SettingsStore.kt`). Nothing
+  leaves the phone.
 - **Health Connect writes:** an exercise session with route, distance and
   elevation gain, on the user's tap (`WRITE_EXERCISE`, `WRITE_EXERCISE_ROUTE`,
   `WRITE_DISTANCE`, `WRITE_ELEVATION_GAINED`; `data/HealthConnectManager.kt`).
