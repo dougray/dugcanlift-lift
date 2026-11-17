@@ -46,6 +46,24 @@ class LinkWireFixtureTest {
         assertBytes("frame.planRequestV2", planRequest(LinkProtocol.VERSION_WITH_PLAN_SIDES))
         assertBytes("frame.planRequestV3", planRequest(LinkProtocol.VERSION_WITH_SET_TYPES))
         assertBytes("frame.planRequestV4", planRequest(LinkProtocol.VERSION_WITH_HEART_RATE))
+        assertBytes("frame.planRequestV5", planRequest(LinkProtocol.VERSION_WITH_RUN_HEART_RATE))
+    }
+
+    @Test fun `the version 5 messages frame to the fixture's bytes`() {
+        fun frame(type: MessageType, payload: ByteArray = ByteArray(0)) = LinkFrames.encode(
+            LinkFrame(
+                LinkProtocol.VERSION_WITH_RUN_HEART_RATE, type.code,
+                LinkFrame.FLAG_FIRST or LinkFrame.FLAG_LAST, 0, payload,
+            )
+        )
+        assertBytes("frame.runHeartRateStart", frame(MessageType.RUN_HR_START))
+        assertBytes("frame.runHeartRateStop", frame(MessageType.RUN_HR_STOP))
+        assertBytes("frame.runHeartRate", frame(MessageType.RUN_HR, LinkPayloads.encodeRunHeartRate(LinkFixtures.runHeartRate)))
+    }
+
+    @Test fun `a run heart rate reading encodes to the fixture's bytes and decodes back`() {
+        assertBytes("runHeartRate", LinkPayloads.encodeRunHeartRate(LinkFixtures.runHeartRate))
+        assertEquals(LinkFixtures.runHeartRate, LinkPayloads.decodeRunHeartRate(fixture.getValue("runHeartRate")))
     }
 
     @Test fun `hello encodes to the fixture's bytes`() = assertBytes("hello", LinkPayloads.encodeHello(LinkFixtures.hello))

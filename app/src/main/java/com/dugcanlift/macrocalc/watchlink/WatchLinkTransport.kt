@@ -23,6 +23,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
 import com.dugcanlift.liftkit.link.AckOutcome
@@ -46,6 +47,7 @@ import com.dugcanlift.liftkit.link.Plan
 import com.dugcanlift.liftkit.link.PlanSource
 import com.dugcanlift.liftkit.link.Reaction
 import com.dugcanlift.macrocalc.data.RoutineRepository
+import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.ScheduledSessionRepository
 import com.dugcanlift.macrocalc.data.WorkoutRepository
 import com.dugcanlift.macrocalc.data.onDate
@@ -107,7 +109,7 @@ class WatchLinkTransport private constructor(context: Context) {
 
     data class FoundWatch(val address: String, val name: String, val rssi: Int)
 
-    private val _status = MutableStateFlow<Status>(if (store.isPaired) Status.Waiting(store.pairedName ?: "watch") else Status.Idle)
+    private val _status = MutableStateFlow<Status>(if (store.isPaired) Status.Waiting(store.pairedDisplayName) else Status.Idle)
     val status: StateFlow<Status> = _status.asStateFlow()
 
     private val _found = MutableStateFlow<List<FoundWatch>>(emptyList())
@@ -117,12 +119,45 @@ class WatchLinkTransport private constructor(context: Context) {
     private val _lastEvent = MutableStateFlow<String?>(null)
     val lastEvent: StateFlow<String?> = _lastEvent.asStateFlow()
 
+    /**
+     * Run heart rate (version 5): what a run asks of the watch. Every message goes out through
+     * [queue] on the main thread, like everything else here; a call from another thread says no (or
+     * is posted, when there is nothing to answer), so the controller's callers cannot race the
+     * write queue. [onLinkReady] and [onReading] are fed by [apply] below.
+     */
+    private val relay = WatchHeartRateRelay(
+        session = { session },
+        send = ::queue,
+        pairedName = { store.pairedName },
+    )
+
+    val heartRate: WatchHeartRateLink = object : WatchHeartRateLink {
+        private fun onMain(what: String): Boolean {
+            val ok = Looper.myLooper() == Looper.getMainLooper()
+            // Not a crash: an off-main call just cannot reach the write queue. But it would silently
+            // make the watch unavailable for a run, so it is said in the log.
+            if (!ok) Log.w(TAG, "$what called off the main thread; the watch is treated as unavailable")
+            return ok
+        }
+
+        override fun linkedName(): String? = if (onMain("linkedName")) relay.linkedName() else null
+
+        override fun begin(onReading: (bpm: Int, atEpochSec: Long) -> Unit): Boolean =
+            onMain("begin") && relay.begin(onReading)
+
+        override fun refresh(): Boolean = onMain("refresh") && relay.refresh()
+
+        override fun end() {
+            if (Looper.myLooper() == Looper.getMainLooper()) relay.end() else main.post { relay.end() }
+        }
+    }
+
     private var gatt: BluetoothGatt? = null
     private var rx: BluetoothGattCharacteristic? = null
     private var tx: BluetoothGattCharacteristic? = null
     private var session: LinkSession? = null
     private var codec = LinkCodec()
-    private var pairingName: String = "watch"
+    private var pairingName: String = WatchHeartRateRules.FALLBACK_NAME
     private var bondReceiver: BroadcastReceiver? = null
     private var notificationsPending = false
 
@@ -165,7 +200,7 @@ class WatchLinkTransport private constructor(context: Context) {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val name = result.scanRecord?.deviceName
                 ?: (if (hasPermission(connectPermission)) runCatching { result.device.name }.getOrNull() else null)
-                ?: "Wear OS watch"
+                ?: WatchHeartRateRules.FALLBACK_NAME
             val watch = FoundWatch(result.device.address, name, result.rssi)
             main.post {
                 _found.value = (_found.value.filterNot { it.address == watch.address } + watch).sortedByDescending { it.rssi }
@@ -201,7 +236,7 @@ class WatchLinkTransport private constructor(context: Context) {
         if (gatt != null) return
         if (unavailableReason(forScan = false) != null) return
         val device = manager?.adapter?.getRemoteDevice(address) ?: return
-        pairingName = store.pairedName ?: "watch"
+        pairingName = store.pairedDisplayName
         connect(device, autoConnect = true)
         _status.value = Status.Waiting(pairingName)
     }
@@ -217,13 +252,14 @@ class WatchLinkTransport private constructor(context: Context) {
 
     fun disconnect() {
         close()
-        _status.value = if (store.isPaired) Status.Waiting(store.pairedName ?: "watch") else Status.Idle
+        _status.value = if (store.isPaired) Status.Waiting(store.pairedDisplayName) else Status.Idle
     }
 
     /** Forget the watch. The system Bluetooth bond is the user's to remove in Settings — this stops
      *  LIFT talking to it, which is what the button promises. */
     fun forget() {
         store.forget()
+        resetWatchHeartRateSetting(watchLinkedAtV5 = false)
         close()
         _status.value = Status.Idle
     }
@@ -478,8 +514,17 @@ class WatchLinkTransport private constructor(context: Context) {
                     val address = gatt?.device?.address
                     val name = event.peerName.ifBlank { pairingName }
                     if (address != null) store.remember(address, name)
+                    // What the settings card needs to know without the watch in range: whether this
+                    // watch last linked at a version that carries run heart rate.
+                    session?.negotiatedVersion?.let {
+                        store.recordLinkVersion(it)
+                        resetWatchHeartRateSetting(watchLinkedAtV5 = it >= LinkProtocol.VERSION_WITH_RUN_HEART_RATE)
+                    }
                     pairingName = name
                     _status.value = Status.Linked(name)
+                    // Back (or first) READY: a run that wants heart rate asks the watch again, because
+                    // the watch ends a run on any disconnect.
+                    relay.onLinkReady()
                 }
                 LinkEvent.PairingRejected -> {
                     fail("Pairing was refused.")
@@ -497,6 +542,10 @@ class WatchLinkTransport private constructor(context: Context) {
                     else "The link failed (${event.error.error.name})."
                 )
                 is LinkEvent.PlanReceived -> Unit   // only a watch receives plans; the session refuses it here
+                // The phone is not the watch: a start or stop request is the watch's to act on, and
+                // the session never raises these here (it refuses them as UNEXPECTED_MESSAGE).
+                LinkEvent.RunHeartRateStartRequested, LinkEvent.RunHeartRateStopRequested -> Unit
+                is LinkEvent.RunHeartRateReceived -> relay.onReading(event.reading)
             }
         }
     }
@@ -566,6 +615,14 @@ class WatchLinkTransport private constructor(context: Context) {
         }
     }
 
+    /** A chosen "Watch" with no watch to be a source becomes Automatic, as removing a strap resets its row. */
+    private fun resetWatchHeartRateSetting(watchLinkedAtV5: Boolean) {
+        val settings = SettingsStore.get(appContext)
+        val current = settings.heartRateSetting
+        val next = WatchHeartRateRules.settingAfterWatchGone(current, watchLinkedAtV5)
+        if (next != current) settings.heartRateSetting = next
+    }
+
     private fun fail(reason: String) {
         close()
         _status.value = Status.Failed(reason)
@@ -607,6 +664,7 @@ class WatchLinkTransport private constructor(context: Context) {
     private fun uuid(text: String): UUID = UUID.fromString(text)
 
     companion object {
+        private const val TAG = "WatchLinkTransport"
         private const val SCAN_MILLIS = 30_000L
 
         /** Not named in `BluetoothGatt` below API 33's docs, but stable ATT error codes. */

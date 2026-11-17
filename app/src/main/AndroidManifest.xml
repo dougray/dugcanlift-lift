@@ -41,6 +41,12 @@
          stops dead a month back for no visible reason. Optional: refusing it
          costs the older steps and nothing else. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <!-- A run's summary: the heart rate Health Connect holds for the run's own minutes (a watch or
+         band that saves to Health Connect), and the newest VO2 max estimate. Each is its own
+         grant and both are optional: refusing them costs those two lines and nothing else.
+         Asked for only from the heart rate card on Home, after it says what they are for. -->
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
     <!-- Write side: exporting a finished Run/Hike as an exercise session,
          its GPS route, its distance, and its elevation gain. Each is its own
          separate grant — Health Connect can let an app log a workout without
@@ -52,11 +58,14 @@
     <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
     <uses-permission android:name="android.permission.health.WRITE_ELEVATION_GAINED" />
 
-    <!-- LIFT Link: the Bluetooth LE channel to the LIFT Wear OS watch (watchlink/). The phone is
-         the central: it scans once, to pair, and connects to the remembered watch afterwards.
-         neverForLocation because a scan here only ever looks for LIFT's own service UUID and
-         nothing derives a location from it - which is also what lets Android 12+ grant it
-         without the location permission. No ADVERTISE: the phone never advertises. -->
+    <!-- LIFT Link: the Bluetooth LE channel to the LIFT Wear OS watch (watchlink/), and the
+         Bluetooth heart rate straps a person adds (HeartRateCentral). The phone is the central: it
+         scans once to pair the watch and connects to the remembered watch afterwards, and it scans
+         for the standard heart rate service (0x180D) to list straps to add and to find the added
+         ones at the start of a run. neverForLocation because a scan here only ever looks for LIFT's
+         own service UUID or 0x180D and nothing derives a location from it - which is also what lets
+         Android 12+ grant it without the location permission. No ADVERTISE: the phone never
+         advertises. -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"

@@ -25,11 +25,24 @@
 # no heart rate never writes -- so every line above is unchanged, `session` included. The two lines
 # added for version 4 are `session.heartRate` and `frame.planRequestV4`, derived the same way, by a
 # separate implementation from LINK-PROTOCOL.md "Version 4".
+#
+# Version 5 added heart rate during a run -- three messages, RUN_HR_START (0x12) and RUN_HR_STOP (0x13)
+# from the phone with an empty payload, RUN_HR (0x22) from the watch -- and changed no payload that
+# existed, so every line above is unchanged. The lines added for version 5 are `frame.planRequestV5`,
+# `frame.runHeartRateStart`, `frame.runHeartRateStop`, `runHeartRate` and `frame.runHeartRate`. Their
+# bytes were worked out by hand and checked with a separate implementation (a Python CRC-16/CCITT-FALSE,
+# which also reproduces `frame.planRequestV4`) from LINK-PROTOCOL.md "Version 5": 142 bpm is 008e, and
+# 1762800000 seconds is 69123180, both big-endian like the 8-byte header.
 
 frame.planRequest 0111030000007e67
 frame.planRequestV2 021103000000b087
 frame.planRequestV3 031103000000f527
 frame.planRequestV4 0411030000003d66
+frame.planRequestV5 05110300000078c6
+frame.runHeartRateStart 0512030000009614
+frame.runHeartRateStop 0513030000003c45
+frame.runHeartRate 0522030000065d89008e69123180
+runHeartRate 008e69123180
 hello 0101000007506978656c20380102030405060708
 helloAck 010101000d47616c61787920576174636836fffefdfcfbfaf9f8
 plan.sides 002439623164376635612d336334322d346531382d396136302d3764326335653866316230330000000400044c65677301000001000b53706c697420537175617408000202000812000801

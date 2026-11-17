@@ -46,7 +46,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,12 +64,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.LiveRunStats
 import com.dugcanlift.macrocalc.data.OutdoorActivityMath
+import com.dugcanlift.macrocalc.data.LiveRunExtras
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
+import com.dugcanlift.macrocalc.data.VO2MaxLookup
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.RoutePoint
 import com.dugcanlift.macrocalc.data.formattedElevationGainFeet
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -122,7 +122,7 @@ fun OutdoorRecordingScreen(
     val context = LocalContext.current
     val tracker = remember { LocationTracker.get(context) }
     val repository = remember { OutdoorActivityRepository.get(context) }
-    val scope = rememberCoroutineScope()
+    val feedback = LocalAppFeedback.current
 
     var selectedActivityType by remember { mutableStateOf(activityType) }
     // Source of truth for "is a recording live" lives on the tracker, not
@@ -131,6 +131,7 @@ fun OutdoorRecordingScreen(
     val startedAtEpochMs by tracker.startedAtEpochMs.collectAsState()
     val trackerActivityType by tracker.activityType.collectAsState()
     val providerDisabled by tracker.providerDisabled.collectAsState()
+    val finishingRuns by tracker.heartRate.finishingRuns.collectAsState()
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusNeedsSettings by remember { mutableStateOf(false) }
@@ -214,6 +215,9 @@ fun OutdoorRecordingScreen(
         elevationGainMeters = OutdoorActivityMath.elevationGainMeters(routePoints)
     ).formattedElevationGainFeet()
 
+    // Asked once while this run records, held in state; no query per tick.
+    val liveVo2Line = rememberVO2MaxLine(startedAtEpochMs, if (isRecordingActive) VO2MaxLookup.LATEST else null)
+
     val activityChips: @Composable () -> Unit = {
         if (!isRecordingActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -235,6 +239,8 @@ fun OutdoorRecordingScreen(
             OutdoorStatRow(label = "Distance", value = liveStats.distanceText())
             OutdoorStatRow(label = "Pace", value = liveStats.paceText())
             OutdoorStatRow(label = "Elevation", value = elevationText)
+            // The same lines Train's card shows. Read with this screen's own once-a-second `nowMs`.
+            LiveRunExtrasBlock(LiveRunExtras(tracker.heartRate.liveHeartRate(nowMs), liveVo2Line))
             if (providerDisabled) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -275,10 +281,17 @@ fun OutdoorRecordingScreen(
                     onClick = {
                         // The same finish Train's card runs. A second tap finds nothing
                         // recording and is ignored without a word: the first one saved.
-                        scope.launch {
-                            RecordingFinisher.finish(tracker, repository)?.let(onFinished)
-                        }
+                        // The tracker's own scope: Back during the Health Connect wait does not
+                        // cancel it. A second tap finds one waiting and says nothing.
+                        RecordingFinisher.launchFinish(
+                            context, tracker, repository,
+                            onSaved = onFinished,
+                            onFailed = { feedback.show(it) }
+                        )
                     },
+                    // Disabled while this run's Finish waits on Health Connect (up to 10 s); Cancel
+                    // stays live, so a Discard in that window still wins.
+                    enabled = startedAtEpochMs?.let { it !in finishingRuns } ?: true,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Finish")

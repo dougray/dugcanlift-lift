@@ -68,4 +68,27 @@ class WatchLinkStoreTest {
         assertNull("the oldest went", store.appliedSession("s0"))
         assertEquals(AppliedRevision(1, 449), store.appliedSession("s449"))
     }
+
+    @Test
+    fun `a watch with no stored name is called Wear OS watch, never a bare watch`() {
+        val store = store
+        assertEquals("Wear OS watch", store.pairedDisplayName)
+        store.remember("AA:BB:CC:DD:EE:FF", "  ")
+        assertEquals("Wear OS watch", store.pairedDisplayName)
+        store.remember("AA:BB:CC:DD:EE:FF", "Pixel Watch 2")
+        assertEquals("Pixel Watch 2", store.pairedDisplayName)
+    }
+
+    @Test
+    fun `the version a watch last linked at is remembered, and forgotten with the watch`() {
+        val store = store
+        assertNull(store.pairedLinkVersion)
+        store.remember("AA:BB:CC:DD:EE:FF", "Pixel Watch 2")
+        store.recordLinkVersion(5)
+        assertEquals(5, store.pairedLinkVersion)
+        store.recordLinkVersion(4) // the watch app was rolled back
+        assertEquals(4, store.pairedLinkVersion)
+        store.forget()
+        assertNull(store.pairedLinkVersion)
+    }
 }

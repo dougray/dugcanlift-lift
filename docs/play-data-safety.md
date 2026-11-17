@@ -79,6 +79,21 @@ Google Drive.
   `READ_HEALTH_DATA_HISTORY` for more than 30 days), used for the dashboard and
   Send to Coach (`data/HealthConnectManager.kt`, `CoachCard.kt`). Not stored by
   the app.
+- **Health Connect reads, heart rate and VO2 max:** `READ_HEART_RATE` and
+  `READ_VO2_MAX`, used to show a recorded run's average and highest heart rate
+  and the newest VO2 max estimate (`data/HealthConnectManager.kt`,
+  `RecordingFinisher.kt`, `OutdoorReviewScreen.kt`). Only the run's average,
+  highest and the source's name are kept, in the run (`data/OutdoorActivity.kt`);
+  the readings and the VO2 max are not stored. **Play Console step for Doug:**
+  the Health Connect permissions declaration gains these two with their reasons
+  before the release that ships them.
+- **Heart rate on a run (not collected):** from a Bluetooth strap the person added
+  (`HeartRateCentral.kt`) or from the Wear OS watch over LIFT Link
+  (`watchlink/WatchRunHeartRate.kt`, `RunHeartRateController.kt`). It is read on the
+  phone, shown on the live card, and not stored: the run keeps only its average,
+  highest and the source's name (`data/OutdoorActivity.kt`). The added strap's
+  Bluetooth address and name are kept on the phone (`data/SettingsStore.kt`). Nothing
+  leaves the phone.
 - **Health Connect writes:** an exercise session with route, distance and
   elevation gain, on the user's tap (`WRITE_EXERCISE`, `WRITE_EXERCISE_ROUTE`,
   `WRITE_DISTANCE`, `WRITE_ELEVATION_GAINED`; `data/HealthConnectManager.kt`).

@@ -35,6 +35,15 @@ sealed interface LinkEvent {
     data class SessionFinished(val session: FinishedSession) : LinkEvent
     data class Acknowledged(val ack: LinkAck) : LinkEvent
 
+    /** Watch only (version 5): the phone asks for heart rate during a run. Sent again as a refresh. */
+    data object RunHeartRateStartRequested : LinkEvent
+
+    /** Watch only (version 5): the phone is done with it. */
+    data object RunHeartRateStopRequested : LinkEvent
+
+    /** Phone only (version 5): one reading from the watch. */
+    data class RunHeartRateReceived(val reading: RunHeartRate) : LinkEvent
+
     /** The peer refused something while the link stayed up. Worth a log, not a teardown. */
     data class Refused(val error: LinkErrorMessage) : LinkEvent
 
@@ -123,7 +132,9 @@ class LinkSession(
     }
 
     fun receive(message: LinkMessage): Reaction {
-        val type = message.known
+        // Known **to the version this link settled on**: a v4 peer would have answered an opcode added
+        // in v5 as unknown, and a v5 build on that link answers the same, rather than acting on it.
+        val type = message.known?.takeIf { it.since <= (negotiatedVersion ?: LinkProtocol.VERSION) }
             ?: return refuse(LinkError.UNKNOWN_TYPE, "opcode 0x${message.type.toString(16)}", fatal = false)
         return try {
             handle(type, message.payload)
@@ -176,6 +187,33 @@ class LinkSession(
         return LinkMessage(MessageType.SESSION_FINISHED, LinkPayloads.encodeSession(forPeer))
     }
 
+    /** Whether this link carries heart rate during a run: it settled on version 5 or later. */
+    val supportsRunHeartRate: Boolean get() = !settledBelow(LinkProtocol.VERSION_WITH_RUN_HEART_RATE)
+
+    /**
+     * Asks the watch to start measuring heart rate for a run (empty payload), or `null` when the
+     * link settled below version 5 and the watch has never heard of the message. Sent again as a
+     * refresh: the watch ends a run it has not heard about for a while. The phone's to send.
+     */
+    fun startRunHeartRate(): LinkMessage? {
+        requireReady(LinkRole.CENTRAL, "start run heart rate")
+        return if (supportsRunHeartRate) LinkMessage(MessageType.RUN_HR_START) else null
+    }
+
+    /** Tells the watch to stop (empty payload); `null` below version 5. The phone's to send. */
+    fun stopRunHeartRate(): LinkMessage? {
+        requireReady(LinkRole.CENTRAL, "stop run heart rate")
+        return if (supportsRunHeartRate) LinkMessage(MessageType.RUN_HR_STOP) else null
+    }
+
+    /** One reading for the phone; `null` below version 5. The watch's to send. */
+    fun reportRunHeartRate(reading: RunHeartRate): LinkMessage? {
+        requireReady(LinkRole.PERIPHERAL, "report run heart rate")
+        return if (supportsRunHeartRate) {
+            LinkMessage(MessageType.RUN_HR, LinkPayloads.encodeRunHeartRate(reading))
+        } else null
+    }
+
     private fun settledBelow(version: Int): Boolean =
         (negotiatedVersion ?: LinkProtocol.MIN_SUPPORTED_VERSION) < version
 
@@ -200,6 +238,9 @@ class LinkSession(
         MessageType.PLAN_REQUEST -> data(LinkRole.CENTRAL) { LinkEvent.PlanRequested }
         MessageType.SET_LOGGED -> data(LinkRole.CENTRAL) { LinkEvent.SetLogged(LinkPayloads.decodeLoggedSet(payload)) }
         MessageType.SESSION_FINISHED -> data(LinkRole.CENTRAL) { LinkEvent.SessionFinished(LinkPayloads.decodeSession(payload)) }
+        MessageType.RUN_HR_START -> data(LinkRole.PERIPHERAL) { LinkEvent.RunHeartRateStartRequested }
+        MessageType.RUN_HR_STOP -> data(LinkRole.PERIPHERAL) { LinkEvent.RunHeartRateStopRequested }
+        MessageType.RUN_HR -> data(LinkRole.CENTRAL) { LinkEvent.RunHeartRateReceived(LinkPayloads.decodeRunHeartRate(payload)) }
         MessageType.ACK -> data(null) { LinkEvent.Acknowledged(LinkPayloads.decodeAck(payload)) }
         MessageType.ERROR -> onError(payload)
     }

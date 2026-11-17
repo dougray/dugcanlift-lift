@@ -41,18 +41,23 @@ class PermissionsPinTest {
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
-        // "Health Connect and Apple Health" > "Android — Health Connect". Reads: steps only, plus
-        // history older than 30 days. Writes: a finished run, walk or hike as an exercise session
+        // "Health Connect and Apple Health" > "Android — Health Connect". Reads: steps, plus
+        // history older than 30 days, plus (heart rate on a run) the heart rate Health Connect
+        // holds for a run's own minutes and the newest VO2 max estimate. Writes: a finished run, walk or hike as an exercise session
         // with its route, distance and elevation gain.
         "android.permission.health.READ_STEPS",
         "android.permission.health.READ_HEALTH_DATA_HISTORY",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_VO2_MAX",
         "android.permission.health.WRITE_EXERCISE",
         "android.permission.health.WRITE_EXERCISE_ROUTE",
         "android.permission.health.WRITE_DISTANCE",
         "android.permission.health.WRITE_ELEVATION_GAINED",
-        // LIFT Link, the Bluetooth LE channel to the LIFT Wear OS watch (watchlink/). The page does
-        // not describe it yet: it arrived after v1.16, and the release that ships it needs the
-        // page's wording first.
+        // LIFT Link, the Bluetooth LE channel to the LIFT Wear OS watch (watchlink/), and the
+        // Bluetooth heart rate straps a person adds (HeartRateCentral: a scan for service 0x180D,
+        // then a connection to an added one). The page does not describe either yet: they arrived
+        // after v1.16, and the release that ships them needs the page's wording first
+        // (PRIVACY.md's "Nearby devices" entry is the draft of it).
         "android.permission.BLUETOOTH_SCAN usesPermissionFlags=neverForLocation",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH maxSdkVersion=30",

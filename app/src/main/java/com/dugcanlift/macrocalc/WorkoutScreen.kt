@@ -54,7 +54,9 @@ import com.dugcanlift.macrocalc.data.COMMON_EQUIPMENT
 import com.dugcanlift.macrocalc.data.focusSummary
 import com.dugcanlift.macrocalc.data.HeartRateLines
 import com.dugcanlift.macrocalc.data.LoggedExercise
+import com.dugcanlift.macrocalc.data.LiveRunExtras
 import com.dugcanlift.macrocalc.data.LiveRunStats
+import com.dugcanlift.macrocalc.data.VO2MaxLookup
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.RoutePoint
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
@@ -449,10 +451,14 @@ fun WorkoutScreen(modifier: Modifier = Modifier) {
             live = liveRun,
             onOpenLive = { screenWanted = true },
             onFinishLive = {
-                scope.launch {
-                    // Null means a second tap: the first already saved the run.
-                    RecordingFinisher.finish(tracker, outdoorRepo)?.let { reviewingActivityId = it.id }
-                }
+                // In the tracker's own scope: leaving Train during the Health Connect wait does not
+                // cancel the Finish. Present, the review opens; gone, the run is saved and shows in
+                // Last route. A null result (a second tap) says nothing: the first saves the run.
+                RecordingFinisher.launchFinish(
+                    context, tracker, outdoorRepo,
+                    onSaved = { reviewingActivityId = it.id },
+                    onFailed = { feedback.show(it) }
+                )
             },
             sideBySide = sideBySide
         )
@@ -966,13 +972,15 @@ private fun OutdoorHighlights(
                             ?.takeIf { last.distanceMeters >= OutdoorRecords.MINIMUM_PACE_DISTANCE_METERS }
                             ?.let(OutdoorRecords::paceText) ?: "—")
                 }
+                // Asked once per run shown, on or before its end: never a later estimate.
+                FinishedRunHeartRate(last, rememberVO2MaxLine(last.id, last.endedAtEpochMs))
             }
         }
     }
 
     // While a run records its live card is the first card, in Last route's place.
     val firstCard: (@Composable (Modifier) -> Unit)? = when {
-        live != null -> { m -> LiveRunCard(live, sideBySide, onOpenLive, onFinishLive, m) }
+        live != null -> { m -> LiveRunCard(live, LocationTracker.get(LocalContext.current).heartRate, sideBySide, onOpenLive, onFinishLive, m) }
         last != null -> { m -> lastCard(last, m) }
         else -> null
     }
@@ -1010,6 +1018,7 @@ internal class LiveRunState(
 @Composable
 private fun LiveRunCard(
     live: LiveRunState,
+    heartRate: RunHeartRateController,
     sideBySide: Boolean,
     onOpen: () -> Unit,
     onFinish: () -> Unit,
@@ -1023,6 +1032,10 @@ private fun LiveRunCard(
         }
     }
     val stats = LiveRunStats.compute(live.points, live.startedAtEpochMs, nowMs)
+    // Asked once while this card shows, held in state: the 1 s tick never queries.
+    val vo2MaxLine = rememberVO2MaxLine(live.startedAtEpochMs, VO2MaxLookup.LATEST)
+    val finishingRuns by heartRate.finishingRuns.collectAsState()
+    val finishing = live.startedAtEpochMs in finishingRuns
 
     Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1044,24 +1057,23 @@ private fun LiveRunCard(
                 OutdoorStat("Distance", stats.distanceText())
                 OutdoorStat("Pace", stats.paceText())
             }
-            // Heart rate and VO2 max lines go here (plan 3); nothing draws in this slot yet.
-            liveExtras()
+            // Read here, with this composable's own tick, so the number goes to a dash at ten
+            // seconds without anything else changing.
+            LiveRunExtrasBlock(LiveRunExtras(heartRate.liveHeartRate(nowMs), vo2MaxLine))
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onOpen, modifier = Modifier.weight(1f), colors = dclOutlinedButtonColors()) {
                     Text("Open")
                 }
-                Button(onClick = onFinish, modifier = Modifier.weight(1f)) {
+                // Disabled while this run's Finish waits on Health Connect (up to 10 s), so a tap is
+                // never silently ignored. Cancel stays live: a Discard in that window still wins.
+                Button(onClick = onFinish, enabled = !finishing, modifier = Modifier.weight(1f)) {
                     Text("Finish")
                 }
             }
         }
     }
 }
-
-/** The live card's slot for plan 3's heart rate and VO2 max lines. Empty on purpose. */
-@Composable
-private fun liveExtras() {}
 
 @Composable
 private fun RowScope.OutdoorStat(label: String, value: String) {
