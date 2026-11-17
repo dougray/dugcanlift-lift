@@ -170,8 +170,8 @@ class LinkHeartRateTest {
         assertEquals(150, LinkPayloads.decodeLoggedSet(peripheral(peerVersion = 4).reportSet(report).payload).set.maxBpm)
     }
 
-    @Test fun `this build speaks version 4 and frames at it once settled`() {
-        assertEquals(4, LinkProtocol.VERSION)
+    @Test fun `version 4 keeps its number and frames at it once settled`() {
+        // Not `LinkProtocol.VERSION`, which is 5 now: heart rate is still version 4's addition.
         assertEquals(4, LinkProtocol.VERSION_WITH_HEART_RATE)
         assertTrue(LinkProtocol.VERSION_WITH_HEART_RATE > LinkProtocol.VERSION_WITH_SET_TYPES)
         val codec = LinkCodec().apply { version = 4 }

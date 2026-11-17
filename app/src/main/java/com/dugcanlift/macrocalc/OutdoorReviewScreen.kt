@@ -27,10 +27,13 @@ import androidx.health.connect.client.PermissionController
 import com.dugcanlift.macrocalc.data.HealthConnectManager
 import com.dugcanlift.macrocalc.data.OutdoorActivity
 import com.dugcanlift.macrocalc.data.OutdoorActivityRepository
+import com.dugcanlift.macrocalc.data.RunHeartRateFinish
+import com.dugcanlift.macrocalc.data.SettingsStore
 import com.dugcanlift.macrocalc.data.formattedDistanceMiles
 import com.dugcanlift.macrocalc.data.formattedDuration
 import com.dugcanlift.macrocalc.data.formattedElevationGainFeet
 import com.dugcanlift.macrocalc.data.formattedPace
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /**
@@ -61,6 +64,27 @@ fun OutdoorReviewScreen(
     LaunchedEffect(Unit) {
         hasWritePermission = HealthConnectManager.hasWritePermission(context)
     }
+
+    // A run with no heart rate yet, seen within seven days of its end, asks Health Connect once
+    // per appearance: a watch syncs some time after a run. The write happens only after the
+    // answer, only if this effect is still alive (cancelled when the screen leaves or the run
+    // changes), and only if the stored run still exists and still has no figures -- so a run
+    // deleted or discarded meanwhile is never written back, and nothing the review changed is
+    // overwritten (the repository merges into what is stored now).
+    LaunchedEffect(activity.id) {
+        val setting = SettingsStore.get(context).heartRateSetting
+        val record = RunHeartRateFinish.requery(
+            currentActivity, setting, HealthConnectManager.History(context), System.currentTimeMillis()
+        ) ?: return@LaunchedEffect
+        ensureActive()
+        val stored = repository.fillHeartRate(activity.id, record) ?: return@LaunchedEffect
+        ensureActive()
+        currentActivity = currentActivity.copy(
+            averageBpm = stored.averageBpm, maxBpm = stored.maxBpm, heartRateSource = stored.heartRateSource
+        )
+    }
+    // VO2 max is read for display, never stored: once per appearance, on or before the run's end.
+    val vo2MaxLine = rememberVO2MaxLine(activity.id, activity.endedAtEpochMs)
 
     fun exportNow() {
         scope.launch {
@@ -107,6 +131,7 @@ fun OutdoorReviewScreen(
             OutdoorStatRow(label = "Distance", value = currentActivity.formattedDistanceMiles())
             OutdoorStatRow(label = "Pace", value = currentActivity.formattedPace())
             OutdoorStatRow(label = "Elevation", value = currentActivity.formattedElevationGainFeet())
+            FinishedRunHeartRate(currentActivity, vo2MaxLine)
 
             Spacer(modifier = Modifier.height(16.dp))
 

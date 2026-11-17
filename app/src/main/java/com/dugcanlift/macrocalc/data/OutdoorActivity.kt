@@ -21,7 +21,14 @@ data class OutdoorActivity(
     val activeCalories: Double? = null,
     val routePoints: List<RoutePoint> = emptyList(),
     /** Set only after a successful Health Connect export — never export twice. */
-    val healthConnectRecordId: String? = null
+    val healthConnectRecordId: String? = null,
+    /**
+     * What the run kept of its heart rate: whole bpm, or null for "no figure" -- never zero.
+     * [heartRateSource] is the name of the strap or watch it came from.
+     */
+    val averageBpm: Int? = null,
+    val maxBpm: Int? = null,
+    val heartRateSource: String? = null
 ) {
     val durationMs: Long? get() = endedAtEpochMs?.minus(startedAtEpochMs)
 
@@ -43,6 +50,9 @@ internal fun OutdoorActivity.toJson(): JSONObject = JSONObject().apply {
     put("elevationGainMeters", elevationGainMeters)
     activeCalories?.let { put("activeCalories", it) }
     healthConnectRecordId?.let { put("healthConnectRecordId", it) }
+    averageBpm?.let { put("averageBpm", it) }
+    maxBpm?.let { put("maxBpm", it) }
+    heartRateSource?.let { put("heartRateSource", it) }
     put("routePoints", JSONArray().also { array ->
         routePoints.forEach { p ->
             array.put(JSONObject()
@@ -81,7 +91,11 @@ internal fun outdoorActivityFromJson(o: JSONObject): OutdoorActivity {
         activeCalories = o.finiteDoubleOrNull("activeCalories"),
         routePoints = points,
         healthConnectRecordId = if (o.has("healthConnectRecordId") && !o.isNull("healthConnectRecordId"))
-            o.optString("healthConnectRecordId") else null
+            o.optString("healthConnectRecordId") else null,
+        // Optional and additive: a file written before heart rate has none of the three.
+        averageBpm = wholeBpmOrNull(o.opt("averageBpm")),
+        maxBpm = wholeBpmOrNull(o.opt("maxBpm")),
+        heartRateSource = sourceNameOrNull(o.opt("heartRateSource"))
     )
 }
 
@@ -96,20 +110,44 @@ class OutdoorActivityRepository private constructor(context: Context) {
     }
 
     suspend fun save(activity: OutdoorActivity) = withContext(Dispatchers.IO) {
-        val existing = read()
-        val updated = if (existing.any { it.id == activity.id }) {
-            existing.map { if (it.id == activity.id) activity else it }
-        } else {
-            existing + activity
+        synchronized(this@OutdoorActivityRepository) {
+            val existing = read()
+            val updated = if (existing.any { it.id == activity.id }) {
+                existing.map { if (it.id == activity.id) activity else it }
+            } else {
+                existing + activity
+            }
+            write(updated)
+            _activities.value = updated
         }
-        write(updated)
-        _activities.value = updated
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        val updated = read().filterNot { it.id == id }
-        write(updated)
-        _activities.value = updated
+        synchronized(this@OutdoorActivityRepository) {
+            val updated = read().filterNot { it.id == id }
+            write(updated)
+            _activities.value = updated
+        }
+    }
+
+    /**
+     * Writes a heart rate record onto a saved run, read-modify-write under one lock against what
+     * is stored *now*: false (and nothing written) when the run is gone -- deleted while Health
+     * Connect answered -- or has figures already. Fields the review changed meanwhile (an export's
+     * record id) are kept, because the record is merged into the stored run, not a stale copy.
+     * Returns the run as stored, or null.
+     */
+    suspend fun fillHeartRate(id: String, record: RunHeartRateRecord): OutdoorActivity? = withContext(Dispatchers.IO) {
+        synchronized(this@OutdoorActivityRepository) {
+            val existing = read()
+            val current = existing.firstOrNull { it.id == id } ?: return@synchronized null
+            if (RunHeartRateFinish.hasFigures(current)) return@synchronized null
+            val filled = RunHeartRateFinish.apply(record, current)
+            val updated = existing.map { if (it.id == id) filled else it }
+            write(updated)
+            _activities.value = updated
+            filled
+        }
     }
 
     /** Finished activities only, read from the file rather than [activities],

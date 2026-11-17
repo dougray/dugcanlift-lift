@@ -656,6 +656,10 @@ fun DashboardScreen(
         TrainingSettingsCard()
     }
 
+    val heartRateCard: @Composable () -> Unit = rememberMovablePart {
+        HeartRateSettingsCard()
+    }
+
     val mapsCard: @Composable () -> Unit = rememberMovablePart {
         MapsSettingsCard(outdoor = outdoorActivities)
     }
@@ -715,6 +719,8 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 trainingSettingsCard()
                 Spacer(modifier = Modifier.height(16.dp))
+                heartRateCard()
+                Spacer(modifier = Modifier.height(16.dp))
                 mapsCard()
                 Spacer(modifier = Modifier.height(16.dp))
                 servingCard()
@@ -738,6 +744,7 @@ fun DashboardScreen(
                     coachCard()
                     watchCard()
                     trainingSettingsCard()
+                    heartRateCard()
                     mapsCard()
                     servingCard()
                     appearanceCard()

@@ -318,6 +318,13 @@ object BackupStore {
                     .put("horizontalAccuracyMeters", p.horizontalAccuracyMeters))
             }
         })
+        // Heart rate: each key omitted when unknown, so a run without one writes the file it
+        // always did. Whole bpm and the source's name, nothing graded.
+        .apply {
+            a.averageBpm?.let { put("averageBpm", it) }
+            a.maxBpm?.let { put("maxBpm", it) }
+            a.heartRateSource?.let { put("heartRateSource", it) }
+        }
 
     /**
      * An activity from a file, or null for anything that is not a finished
@@ -365,7 +372,11 @@ object BackupStore {
             elevationGainMeters = finite(o.opt("elevationGainMeters"))
                 ?: OutdoorActivityMath.elevationGainMeters(points),
             routePoints = points,
-            healthConnectRecordId = null
+            healthConnectRecordId = null,
+            // A string, a bool, 141.5 or 1e300 is not a measurement: null, never a throw.
+            averageBpm = wholeBpmOrNull(o.opt("averageBpm")),
+            maxBpm = wholeBpmOrNull(o.opt("maxBpm")),
+            heartRateSource = sourceNameOrNull(o.opt("heartRateSource"))
         )
     }
 

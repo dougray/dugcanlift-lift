@@ -53,7 +53,9 @@ class PermissionsRationaleActivity : ComponentActivity() {
         const val HEALTH_CONNECT_SUMMARY =
             "LIFT reads your steps and step history from Health Connect to show today's " +
                 "steps against your goal, and to include daily steps in Send to Coach when " +
-                "you choose to. It writes a run, walk or hike, with its route, distance and " +
+                "you choose to. It reads your heart rate and VO2 max from Health Connect, " +
+                "only to show them on a run you recorded, and keeps just the run's average " +
+                "and highest heart rate. It writes a run, walk or hike, with its route, distance and " +
                 "climb, only when you tap Export to Health Connect. LIFT has no servers: " +
                 "your steps leave this phone only in an email you send to your coach yourself."
     }

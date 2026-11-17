@@ -14,6 +14,9 @@ import androidx.core.content.ContextCompat
 import com.dugcanlift.macrocalc.data.OutdoorActivityType
 import com.dugcanlift.macrocalc.data.RoutePoint
 import kotlin.math.abs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +55,39 @@ import kotlinx.coroutines.flow.asStateFlow
 class LocationTracker private constructor(context: Context) {
 
     private val appContext = context.applicationContext
+
+    /**
+     * Told when a run begins and when it stops, however it stops (Finish, Discard, a different type).
+     * **Main thread only**: the heart rate controller reads the watch link from these calls, and the
+     * link answers "unavailable" to any other thread, which would silently drop the watch as a source.
+     */
+    interface RunListener {
+        fun onRunStarted(startedAtEpochMs: Long)
+        fun onRunStopped(startedAtEpochMs: Long)
+    }
+
+    @Volatile var runListener: RunListener? = null
+
+    /**
+     * Outlives every screen: a Finish the person tapped completes (and saves) even if they switch
+     * tabs or press Back while Health Connect answers.
+     */
+    val finishScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /**
+     * This run's heart rate. Owned here, with the run, rather than by a screen: a screen leaving
+     * (a tab switch) must not end or restart a run's heart rate, and a Discard that only calls
+     * [stop] still lets the strap go.
+     */
+    var heartRate: RunHeartRateController = RunHeartRateController.forApp(appContext).also { runListener = it }
+        private set
+
+    /** For tests: a controller with a fake radio, listening to this tracker's runs. */
+    internal fun installHeartRate(controller: RunHeartRateController) {
+        heartRate = controller
+        runListener = controller
+    }
+
     private val locationManager =
         appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
@@ -133,8 +169,20 @@ class LocationTracker private constructor(context: Context) {
      * running must never silently continue the old route into what looks
      * like a brand new recording (see C-2 in the final-review fix wave).
      */
+    fun start(activityType: OutdoorActivityType): Boolean = begin(activityType, null, emptyList())
+
+    /**
+     * Puts a run [takeRecording] handed over back to recording, with the route and start time it
+     * had, when saving it failed. False (nothing changes) if something else is recording now or
+     * the device cannot record; the caller still holds [recording] then.
+     */
+    fun resume(recording: TakenRecording): Boolean {
+        if (_isRecording.value) return false
+        return begin(recording.activityType, recording.startedAtEpochMs, recording.routePoints)
+    }
+
     @SuppressLint("MissingPermission") // checked explicitly via hasForegroundLocationPermission()
-    fun start(activityType: OutdoorActivityType): Boolean {
+    private fun begin(activityType: OutdoorActivityType, startedAt: Long?, points: List<RoutePoint>): Boolean {
         if (_isRecording.value) {
             if (_activityType.value == activityType) return true
             stop()
@@ -150,9 +198,10 @@ class LocationTracker private constructor(context: Context) {
         // wave).
         if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) return false
 
-        _routePoints.value = emptyList()
+        _routePoints.value = points
         _providerDisabled.value = false
-        lastKnownAltitudeMeters = 0.0
+        // A put-back run carries on from its last altitude: a fix without one must not read as sea level.
+        lastKnownAltitudeMeters = points.lastOrNull()?.altitudeMeters ?: 0.0
 
         return try {
             locationManager.requestLocationUpdates(
@@ -166,9 +215,11 @@ class LocationTracker private constructor(context: Context) {
                 appContext,
                 Intent(appContext, LocationRecordingService::class.java)
             )
+            val began = startedAt ?: System.currentTimeMillis()
             _activityType.value = activityType
-            _startedAtEpochMs.value = System.currentTimeMillis()
+            _startedAtEpochMs.value = began
             _isRecording.value = true
+            runListener?.onRunStarted(began)
             true
         } catch (e: SecurityException) {
             locationManager.removeUpdates(listener)
@@ -184,11 +235,50 @@ class LocationTracker private constructor(context: Context) {
     /** Stops recording. Safe to call even if not currently recording. */
     fun stop() {
         if (!_isRecording.value) return
+        val startedAt = _startedAtEpochMs.value
         locationManager.removeUpdates(listener)
         _isRecording.value = false
         _activityType.value = null
         _startedAtEpochMs.value = null
         appContext.stopService(Intent(appContext, LocationRecordingService::class.java))
+        if (startedAt != null) runListener?.onRunStopped(startedAt)
+    }
+
+    /** A recording handed over by [takeRecording]. */
+    class TakenRecording(
+        val activityType: OutdoorActivityType,
+        val startedAtEpochMs: Long,
+        val routePoints: List<RoutePoint>
+    )
+
+    /**
+     * Stops the recording and returns what it held, in one step; null if nothing was recording (or, when
+     * [onlyStartedAtEpochMs] is given, if what records is not that run).
+     * Synchronized so two callers (a double tap on Finish) cannot both receive the run.
+     */
+    @Synchronized
+    fun takeRecording(onlyStartedAtEpochMs: Long? = null): TakenRecording? {
+        if (!_isRecording.value) return null
+        // A Finish names the run it began for: if that one is gone and another records, leave it be.
+        if (onlyStartedAtEpochMs != null && _startedAtEpochMs.value != onlyStartedAtEpochMs) return null
+        val type = _activityType.value
+        val started = _startedAtEpochMs.value
+        val points = _routePoints.value
+        stop()
+        if (type == null || started == null) return null
+        return TakenRecording(type, started, points)
+    }
+
+    /**
+     * What the run holds right now, without stopping it: the route and times Finish decides its
+     * figures from, taken at the tap. Null if nothing is recording.
+     */
+    @Synchronized
+    fun snapshotRecording(): TakenRecording? {
+        if (!_isRecording.value) return null
+        val type = _activityType.value ?: return null
+        val started = _startedAtEpochMs.value ?: return null
+        return TakenRecording(type, started, _routePoints.value)
     }
 
     private fun onLocation(location: Location) {

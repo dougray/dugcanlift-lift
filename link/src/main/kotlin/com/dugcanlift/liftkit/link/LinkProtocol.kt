@@ -31,7 +31,7 @@ object LinkProtocol {
      * politely instead of parsing a later layout as if it were this one. A version bump that
      * changes the header is therefore legal, because no old reader will ever get past byte 0.
      */
-    const val VERSION = 4
+    const val VERSION = 5
     const val MIN_SUPPORTED_VERSION = 1
 
     /**
@@ -76,6 +76,19 @@ object LinkProtocol {
     const val VERSION_WITH_HEART_RATE = 4
 
     /**
+     * What version 5 added, and nothing else: heart rate during a run. Three messages and no change to
+     * any payload that existed — `RUN_HR_START` and `RUN_HR_STOP` from the phone (empty), and `RUN_HR`
+     * from the watch (a `u16` bpm, a `u32` of seconds since the epoch, big-endian). Nothing in a plan,
+     * a set or a session moved a byte, so every earlier fixture line is unchanged.
+     *
+     * A version-4 build has never heard of these opcodes and answers one `UNKNOWN_TYPE` with the link
+     * left up, so nothing is stripped for it as with the earlier bumps: **a phone must simply not send
+     * them to a link that settled below 5** ([LinkSession.supportsRunHeartRate]), and must not list
+     * such a watch as a source of run heart rate.
+     */
+    const val VERSION_WITH_RUN_HEART_RATE = 5
+
+    /**
      * An [MessageType.ERROR] is always sent at version 1, whatever version the link settled on,
      * for the same reason: version 1 is the one frame shape every build that has ever existed can
      * parse, so a refusal is always legible to the peer being refused.
@@ -115,15 +128,24 @@ object LinkProtocol {
  * [ACK] is the schema's `WORKOUT_SYNC_ACK`. The handshake types have no envelope equivalent
  * because WatchConnectivity does its own pairing and this link has to do its own.
  */
-enum class MessageType(val code: Int) {
+enum class MessageType(val code: Int, val since: Int = 1) {
     HELLO(0x01),
     HELLO_ACK(0x02),
     PAIR_CONFIRM(0x03),
     PAIR_RESULT(0x04),
     PLAN_PUSHED(0x10),
     PLAN_REQUEST(0x11),
+
+    /** Phone → watch, empty: start measuring heart rate for a run (version 5). */
+    RUN_HR_START(0x12, since = LinkProtocol.VERSION_WITH_RUN_HEART_RATE),
+
+    /** Phone → watch, empty: stop measuring (version 5). */
+    RUN_HR_STOP(0x13, since = LinkProtocol.VERSION_WITH_RUN_HEART_RATE),
     SET_LOGGED(0x20),
     SESSION_FINISHED(0x21),
+
+    /** Watch → phone: one reading, `u16` bpm then `u32` epoch seconds (version 5). */
+    RUN_HR(0x22, since = LinkProtocol.VERSION_WITH_RUN_HEART_RATE),
     ACK(0x30),
     ERROR(0x3F);
 
@@ -132,6 +154,13 @@ enum class MessageType(val code: Int) {
 
         /** null for an opcode this build does not know — which is refused, never guessed at. */
         fun from(code: Int): MessageType? = byCode[code]
+
+        /**
+         * What a link settled on [version] knows: an opcode added later is unknown there, exactly as
+         * it is to a build that predates it, so a v5 build on a v4 link refuses `0x22` the way the v4
+         * build would have.
+         */
+        fun from(code: Int, version: Int): MessageType? = byCode[code]?.takeIf { it.since <= version }
     }
 }
 

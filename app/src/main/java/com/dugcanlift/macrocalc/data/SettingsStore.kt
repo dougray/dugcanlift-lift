@@ -157,7 +157,43 @@ class SettingsStore private constructor(context: Context) {
         get() = PlateSetup.fromJson(prefs.getString(KEY_PLATE_SETUP, null))
         set(value) { prefs.edit().putString(KEY_PLATE_SETUP, value.toJson()).apply() }
 
+    /**
+     * Where a run's heart rate comes from ([HeartRateSourcePicker]). Unset is automatic, which
+     * only ever picks a device the person added. On this phone only: not in the backup file.
+     */
+    var heartRateSetting: HeartRateSetting
+        get() = HeartRateSetting.fromStored(runCatching { prefs.getString(KEY_HEART_RATE_SETTING, null) }.getOrNull())
+        set(value) { prefs.edit().putString(KEY_HEART_RATE_SETTING, value.toStored()).apply() }
+
+    /**
+     * The heart rate devices the person added, in the order added (automatic takes the first in
+     * range). Stored as one JSON array of `{id, name}`; an unreadable value is no devices. On this
+     * phone only: a Bluetooth address means nothing on another one.
+     */
+    var heartRateDevices: List<AddedHeartRateDevice>
+        get() = runCatching {
+            val array = org.json.JSONArray(prefs.getString(KEY_HEART_RATE_DEVICES, null) ?: return@runCatching emptyList())
+            (0 until array.length()).mapNotNull { i ->
+                val o = array.optJSONObject(i) ?: return@mapNotNull null
+                val id = (o.opt("id") as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                AddedHeartRateDevice(id, (o.opt("name") as? String) ?: "")
+            }
+        }.getOrDefault(emptyList())
+        set(value) {
+            prefs.edit().apply {
+                // One entry per id, the first kept in the order added: the picker takes the first
+                // match, so a repeated id must not shadow or reorder anything.
+                val unique = value.distinctBy { it.id }.filter { it.id.isNotEmpty() }
+                if (unique.isEmpty()) remove(KEY_HEART_RATE_DEVICES)
+                else putString(KEY_HEART_RATE_DEVICES, org.json.JSONArray().apply {
+                    unique.forEach { put(org.json.JSONObject().put("id", it.id).put("name", it.name)) }
+                }.toString())
+            }.apply()
+        }
+
     companion object {
+        private const val KEY_HEART_RATE_SETTING = "heart_rate_setting"
+        private const val KEY_HEART_RATE_DEVICES = "heart_rate_devices"
         private const val KEY_PLATE_SETUP = "plate_setup_pounds"
         private const val KEY_ROAD_RECENT = "road_food_recent"
         private const val KEY_ROAD_PICKS = "road_food_picks"

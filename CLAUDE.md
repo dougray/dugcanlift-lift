@@ -750,6 +750,19 @@ follows" bind this build) runs on a recipe page the person already has open and 
   `BookmarkletCopyTest` and `RecipeLinkIntentTest`: change them in every build or in none. Android
   has no Safari line and none of the web-only lines.
 
+## The run outlives its screen
+
+A run ends only on Cancel (confirmed) or Finish. Leaving the recording screen (app-bar **Back to Train**,
+the system Back gesture), switching tabs, rotating and backgrounding never stop it. Train's
+`Recording · Run|Walk|Hike` card (`LiveRunCard`, in Last route's place) shows whenever the tracker records, with
+**Open** and **Finish**; `RecordingScreenState` decides which face shows and disables Run/Walk/Hike while one
+records. The card and the screen read one function, `LiveRunStats` (no fix: `0:00`, `0.00 mi`, `—`; pace only from
+10 m). `RecordingFinisher.finish` is the only Finish: the tracker hands the run over once
+(`LocationTracker.takeRecording`), so a second call returns null and is ignored. `liveExtras` is plan 3's empty slot.
+Switching tabs while the full recording screen is up returns to Train showing the live card
+(Open / Finish) and the run keeps recording; Cancel now always asks "Discard this run?" (the
+confirmation moved there from the system Back gesture, which now just leaves the screen).
+
 ## Recording a route needs no background location
 
 The manifest does **not** declare `ACCESS_BACKGROUND_LOCATION`, and nothing asks
@@ -1001,8 +1014,9 @@ before changing anything here.
 
 A run's route is drawn over streets the person downloaded, by `:liftmap`'s `RouteMap`
 (MapLibre, from a single MBTiles file in `filesDir/liftmap/`), and falls back to the app's own
-`RoutePolylineCanvas` where no downloaded area covers the route. Three screens use it:
-the recording screen, the review screen (`interactive = true`) and Train's Last route card.
+`RoutePolylineCanvas` where no downloaded area covers the route. Four screens use it:
+the recording screen, the review screen (`interactive = true`), Train's Last route card and Train's live
+recording card.
 **`RoutePolylineCanvas` is only ever a `RouteMap` fallback** -- `MapNoNetworkTest` fails a call
 outside one.
 
@@ -1020,3 +1034,78 @@ outside one.
   granted; otherwise the row is absent.
 - **Licences**: MapLibre Native (BSD-2), Noto Sans (OFL 1.1) and the OpenStreetMap / OpenFreeMap
   credit are in `NOTICE`. Every map also shows the credit in its corner (the kit's).
+
+## Bluetooth heart rate devices
+
+A run's heart rate can come from a Bluetooth strap (service 0x180D) the person **added** from the
+scan list in Home's Heart rate card. `data/HeartRateBluetooth.kt` holds every rule as plain Kotlin
+(scan list, in-range in added order, reconnect backoff 0 / 2 s / 5 s, radio-state copy, shared scan
+demand) and `HeartRateBluetoothTest` pins them; `HeartRateCentral` is the thin radio shell and is
+**unproven on hardware**. Rules a change must not break:
+
+- **One `HeartRateCentral`** (`HeartRateCentral.get(context)`), shared by a run and the add sheet.
+  Creating it makes no scanner, no GATT and no receiver; the permission prompt belongs to the sheet
+  (the central never asks). `HeartRateCentralTest` scans the source so nothing else constructs one.
+- **Never connect a device nobody added.** `connect(address, allowed)` refuses an address not in the
+  added list, and connects by `getRemoteDevice(address)`, never from a scan result.
+- **A dropped source is reconnected, never swapped**: the same address only, at once after a drop, 2 s
+  then 5 s after a failed connect; `disconnect()` ends it and lets the callback go.
+- **Main-confined**: every public mutator hops to the main thread when called from another, so a
+  service or view model may call it from anywhere. One radio scan outlives its last holder by 2 s
+  (`LINGER_MS`) so a rotation does not restart it against Android's five-starts-in-30-s limit.
+- The radio's state is a `StateFlow` (`HeartRateRadioState`), so the sheet says why it is empty
+  instead of "Looking" for ever, including a scan the system refused (`ScanFailed`). Tracked and shown, never targeted.
+- No new permission and no `connectedDevice` foreground service type: the recording's location
+  service keeps the process alive (`HeartRateManifestTest`).
+
+## A run's heart rate and VO2 max
+
+`RunHeartRateController` (owned by `LocationTracker`, which tells it when a run starts and stops, so a
+Discard that only calls `stop()` still lets the strap go) picks the run's **one** source once, at
+start: `inRange(added)` for 3 s, `HeartRateSourcePicker.pick`, and **only the picker's output is
+connected**. A pick that finishes after the run ended or began finishing connects nothing; a strap
+that appears later is not used live (Health Connect fills the summary after the run); a source that
+goes quiet shows a dash after 10 s and is reconnected by the radio, never swapped. The watch is a
+source too, with its own rules below. The rules are in
+`data/RunHeartRatePipeline.kt` (plain Kotlin) and pinned by `RunHeartRatePipelineTest`,
+`RunHeartRateControllerTest`, `RecordingFinisherTest`.
+
+- **Finish** (`RecordingFinisher.finish(context, ...)`): snapshots the route and end time at the tap,
+  asks Health Connect only when no live source spoke and the setting is not Off (10 s timeout), then takes
+  the run from the tracker (`takeRecording(startedAt)`: only *that* run) and saves once under
+  `NonCancellable`. A second Finish is a no-op; a Discard while it waits wins; a save that throws puts
+  the run back to recording (`LocationTracker.resume`) and rethrows.
+- **The review re-asks** Health Connect once per appearance for a run with no figures that ended under
+  7 days ago, and writes through `OutdoorActivityRepository.fillHeartRate`, which merges into the
+  stored run and refuses a deleted run or one that has figures.
+- **VO2 max is read for display, never stored**, once per appearance (`rememberVO2MaxLine`): the
+  live card the newest estimate, a finished run the newest on or before its end. It is not gated by
+  the heart rate Off setting.
+- `READ_HEART_RATE` and `READ_VO2_MAX` are asked for only from the Heart rate card's button
+  (`HeartRateAccessOffer`), after its footer explains them; the Steps button still asks for steps.
+
+## The watch as a heart rate source
+
+The Wear OS watch can be a run's source over LIFT Link **version 5** (`RUN_HR_START` / `RUN_HR_STOP`
+from the phone, empty; `RUN_HR` back with bpm and the watch's time). `RunHeartRateController` drives
+it through `WatchHeartRateLink`; the rules are `watchlink/WatchRunHeartRate.kt`
+(`WatchHeartRateRules`), pinned by `RunHeartRateWatchTest` and `WatchLinkHeartRateTest`.
+
+- **Gated on the negotiated link**: the watch is offered only while the link is READY and settled at
+  version 5 or later at the moment the run starts. A v4 watch has never heard of any of it.
+- **Keepalive**: the run asks again every 60 s (`KEEPALIVE_MS`; the watch ends a run it has not heard
+  about for five minutes) and the link re-asks on every READY after a reconnect. A dropped link just
+  stops the readings and the number goes to a dash at 10 s. One `STOP` goes out at the run's end
+  (Finish, Discard or the next run starting); a second is ignored.
+- **The settings row** comes from `WatchLinkStore.pairedLinkVersion` (the version the link last
+  settled on, so it shows while the watch is out of range): paired and at 5 or later, else no row. A
+  `Watch` setting resets to Automatic when the watch is forgotten or last linked below 5, so a radio
+  button is always selected.
+- **Clock clamp**: a reading is stamped with the watch's own time, clamped to between 1 s before its
+  arrival and now, so a watch clock behind or ahead of the phone's never makes every reading stale or
+  future.
+- **300 bpm cap**: a watch reading above 300 is dropped (`MAX_PLAUSIBLE_BPM`; a `u16` can say 65,535).
+  Straps are not capped here.
+- **Names**: the stored source name is the watch's own name, or **"Wear OS watch"** when it has none
+  (`FALLBACK_NAME`, the words the scan already used). A request that cannot be sent leaves the run with
+  no live source (Health Connect fills the summary), never a strap in its place.
