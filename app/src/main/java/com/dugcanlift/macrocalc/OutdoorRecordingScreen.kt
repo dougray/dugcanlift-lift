@@ -131,6 +131,7 @@ fun OutdoorRecordingScreen(
     val startedAtEpochMs by tracker.startedAtEpochMs.collectAsState()
     val trackerActivityType by tracker.activityType.collectAsState()
     val providerDisabled by tracker.providerDisabled.collectAsState()
+    val finishingRuns by tracker.heartRate.finishingRuns.collectAsState()
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var statusNeedsSettings by remember { mutableStateOf(false) }
@@ -288,6 +289,9 @@ fun OutdoorRecordingScreen(
                             onFailed = { feedback.show(it) }
                         )
                     },
+                    // Disabled while this run's Finish waits on Health Connect (up to 10 s); Cancel
+                    // stays live, so a Discard in that window still wins.
+                    enabled = startedAtEpochMs?.let { it !in finishingRuns } ?: true,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Finish")

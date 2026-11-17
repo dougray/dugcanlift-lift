@@ -1034,6 +1034,8 @@ private fun LiveRunCard(
     val stats = LiveRunStats.compute(live.points, live.startedAtEpochMs, nowMs)
     // Asked once while this card shows, held in state: the 1 s tick never queries.
     val vo2MaxLine = rememberVO2MaxLine(live.startedAtEpochMs, VO2MaxLookup.LATEST)
+    val finishingRuns by heartRate.finishingRuns.collectAsState()
+    val finishing = live.startedAtEpochMs in finishingRuns
 
     Card(modifier = modifier, border = dclCardBorder()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1063,7 +1065,9 @@ private fun LiveRunCard(
                 OutlinedButton(onClick = onOpen, modifier = Modifier.weight(1f), colors = dclOutlinedButtonColors()) {
                     Text("Open")
                 }
-                Button(onClick = onFinish, modifier = Modifier.weight(1f)) {
+                // Disabled while this run's Finish waits on Health Connect (up to 10 s), so a tap is
+                // never silently ignored. Cancel stays live: a Discard in that window still wins.
+                Button(onClick = onFinish, enabled = !finishing, modifier = Modifier.weight(1f)) {
                     Text("Finish")
                 }
             }

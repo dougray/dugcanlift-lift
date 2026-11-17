@@ -19,6 +19,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -78,6 +81,11 @@ class RunHeartRateController(
     // The runs whose Finish is waiting, by start time: the gate belongs to a run, so a Finish still
     // waiting for a discarded run never blocks (or is cleared by) the next run's.
     private val finishing = HashSet<Long>()
+
+    private val _finishingRuns = MutableStateFlow<Set<Long>>(emptySet())
+
+    /** The runs whose Finish is waiting, by start time: a run's Finish buttons are disabled while it is in here. */
+    val finishingRuns: StateFlow<Set<Long>> = _finishingRuns.asStateFlow()
 
     /** Whether any run's Finish is waiting. */
     @get:Synchronized val isFinishing: Boolean get() = finishing.isNotEmpty()
@@ -204,6 +212,7 @@ class RunHeartRateController(
     @Synchronized
     fun beginFinish(startedAtEpochMs: Long): FinishHeartRate? {
         if (!finishing.add(startedAtEpochMs)) return null
+        _finishingRuns.value = finishing.toSet()
         val current = if (runStartedAt == startedAtEpochMs) session else null
         return FinishHeartRate(
             readings = current?.readings ?: emptyList(),
@@ -215,6 +224,7 @@ class RunHeartRateController(
     @Synchronized
     fun endFinish(startedAtEpochMs: Long) {
         finishing.remove(startedAtEpochMs)
+        _finishingRuns.value = finishing.toSet()
     }
 
     companion object {

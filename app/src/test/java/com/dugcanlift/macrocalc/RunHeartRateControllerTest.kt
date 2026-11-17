@@ -268,6 +268,25 @@ class RunHeartRateControllerTest {
     }
 
     @Test
+    fun `the Finish button state follows each run's own wait`() = runTest {
+        val c = controller(backgroundScope, FakeCentral())
+        c.onRunStarted(t0)
+        runCurrent()
+        assertTrue(c.finishingRuns.value.isEmpty()) // enabled before Finish
+        c.beginFinish(t0)
+        assertEquals(setOf(t0), c.finishingRuns.value) // disabled while it waits
+        c.onRunStopped(t0)
+        c.onRunStarted(t0 + 50_000) // the next run is not held by the old wait
+        runCurrent()
+        assertFalse((t0 + 50_000) in c.finishingRuns.value)
+        c.endFinish(t0)
+        assertTrue(c.finishingRuns.value.isEmpty()) // enabled again when it ends or fails
+        c.beginFinish(t0 + 50_000)
+        c.endFinish(t0 + 50_000)
+        assertTrue(c.finishingRuns.value.isEmpty())
+    }
+
+    @Test
     fun `an old runs Finish does not stop the next runs strap being picked`() = runTest {
         val central = FakeCentral(inRangeAnswer = listOf(polar))
         val c = controller(backgroundScope, central)

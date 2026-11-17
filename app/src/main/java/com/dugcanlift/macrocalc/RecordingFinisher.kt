@@ -114,11 +114,16 @@ object RecordingFinisher {
         onFailed: (String) -> Unit,
         scope: CoroutineScope = tracker.finishScope,
         history: HeartRateHistory = HealthConnectManager.History(context),
-    ): Job = scope.launch {
-        try {
-            finish(context, tracker, repository, history)?.let(onSaved)
-        } catch (e: Exception) {
-            RunFinishCopy.messageFor(e)?.let(onFailed)
+    ): Job {
+        // The application context only: this runs for up to the Health Connect wait plus the save, so
+        // it must not hold the Activity that tapped Finish.
+        val app = context.applicationContext
+        return scope.launch {
+            try {
+                finish(app, tracker, repository, history)?.let(onSaved)
+            } catch (e: Exception) {
+                RunFinishCopy.messageFor(e)?.let(onFailed)
+            }
         }
     }
 }
