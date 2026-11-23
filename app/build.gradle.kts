@@ -118,7 +118,7 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.2.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     testImplementation("org.json:json:20260814")
-    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("org.robolectric:robolectric:4.18.1")
     testImplementation("androidx.test:core:1.7.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     implementation(libs.androidx.activity.compose)
