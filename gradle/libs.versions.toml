@@ -13,7 +13,7 @@ healthConnect = "1.1.0"
 # Not used directly: pins what Health Connect pulls in. See app/build.gradle.kts constraints.
 guava = "33.8.0-android"
 json = "20260814"
-robolectric = "4.17"
+robolectric = "4.18.1"
 androidxTestCore = "1.7.0"
 kotlinxCoroutinesTest = "1.11.0"
 
